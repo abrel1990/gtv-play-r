@@ -88,17 +88,16 @@ public class MainActivity extends AppCompatActivity {
 
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
 
-        // ✅ BOTONES: llaman a las funciones del HTML
         btnPrev.setOnClickListener(v -> {
-            myWebView.evaluateJavascript("javascript:if(typeof prevFn === 'function') prevFn();", null);
+            myWebView.evaluateJavascript("javascript:window.prevFn();", null);
             mostrarControles();
         });
         btnNext.setOnClickListener(v -> {
-            myWebView.evaluateJavascript("javascript:if(typeof nextFn === 'function') nextFn();", null);
+            myWebView.evaluateJavascript("javascript:window.nextFn();", null);
             mostrarControles();
         });
         btnClose.setOnClickListener(v -> {
-            myWebView.evaluateJavascript("javascript:if(typeof stop === 'function') stop();", null);
+            myWebView.evaluateJavascript("javascript:window.stop();", null);
             cerrarPlayer();
         });
         btnRotate.setOnClickListener(v -> {
@@ -118,7 +117,7 @@ public class MainActivity extends AppCompatActivity {
         public void reproducir(String url, String nombre, String numero, String logo) {
             runOnUiThread(() -> {
                 playerContainer.setVisibility(View.VISIBLE);
-                myWebView.setVisibility(View.GONE);
+                myWebView.setVisibility(View.INVISIBLE);
                 nombreCanal.setText(nombre);
                 numeroCanal.setText(numero);
                 if (logo != null && !logo.isEmpty()) {
@@ -162,7 +161,7 @@ public class MainActivity extends AppCompatActivity {
         btnNext.setVisibility(View.GONE);
         btnClose.setVisibility(View.GONE);
         btnRotate.setVisibility(View.GONE);
-        myWebView.evaluateJavascript("javascript:if(typeof volverDelExo === 'function') volverDelExo();", null);
+        myWebView.evaluateJavascript("javascript:window.volverDelExo();", null);
     }
 
     private void rotarExoPlayer() {
