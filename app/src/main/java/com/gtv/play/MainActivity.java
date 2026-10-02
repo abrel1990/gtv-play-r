@@ -20,7 +20,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.media3.common.MediaItem;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -51,7 +50,7 @@ public class MainActivity extends AppCompatActivity {
     private final ArrayList<Canal> canales = new ArrayList<>();
     private int indiceActual = -1;
 
-    private int rotacion = 0;
+    private boolean rotado = false;
     private int wOriginal = 0, hOriginal = 0;
     private boolean controlesVisibles = false;
     private boolean enExoPlayer = false;
@@ -85,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
         btnRotate = findViewById(R.id.btn_rotate);
         btnShield = findViewById(R.id.btn_shield);
 
-        rotacion = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getInt("rotacion", 0);
+        rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
         exoPlayer = new ExoPlayer.Builder(this).build();
         playerView.setPlayer(exoPlayer);
@@ -100,16 +99,15 @@ public class MainActivity extends AppCompatActivity {
         ocultarBarrasSistema();
     }
 
+    // ============================================================
+    // NAVEGACIÓN
+    // ============================================================
+
     private void navegar(int delta) {
-        Log.e(TAG, "navegar delta=" + delta + " canales=" + canales.size() + " idx=" + indiceActual);
-        if (canales.isEmpty()) {
-            Toast.makeText(this, "Lista vacía aún", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (canales.isEmpty()) return;
         int n = canales.size();
         indiceActual = ((indiceActual + delta) % n + n) % n;
         Canal c = canales.get(indiceActual);
-        Log.e(TAG, "navegar -> idx=" + indiceActual + " url=" + c.url);
 
         if (c.url.startsWith("http://")) {
             reproducirEnExo(c);
@@ -145,31 +143,41 @@ public class MainActivity extends AppCompatActivity {
         aplicarRotacion();
     }
 
+    // ============================================================
+    // ROTACIÓN (2 estados: normal / 90°)
+    // ============================================================
+
     private void rotar() {
-        Log.e(TAG, "rotar() llamado, rotacion actual=" + rotacion);
-        rotacion = (rotacion + 90) % 360;
+        rotado = !rotado;
         getSharedPreferences("gtv_prefs", MODE_PRIVATE)
-            .edit().putInt("rotacion", rotacion).apply();
+            .edit().putBoolean("rotado", rotado).apply();
         aplicarRotacion();
-        Toast.makeText(this, "Rotación: " + rotacion + "°", Toast.LENGTH_SHORT).show();
     }
 
     private void aplicarRotacion() {
-        if (wOriginal == 0) return;
-        if (rotWrapper.getWidth() == 0 || rotWrapper.getHeight() == 0) return;
+        if (wOriginal == 0 || hOriginal == 0) return;
+
+        // Pivote en el centro del rot_wrapper
         rotWrapper.setPivotX(rotWrapper.getWidth() / 2f);
         rotWrapper.setPivotY(rotWrapper.getHeight() / 2f);
-        rotWrapper.setRotation(rotacion);
-        ViewGroup.LayoutParams lp = rotWrapper.getLayoutParams();
-        if (rotacion == 90 || rotacion == 270) {
-            lp.width = hOriginal;
-            lp.height = wOriginal;
+
+        if (rotado) {
+            rotWrapper.setRotation(90);
+            // El contenido rotado 90° queda "acostado".
+            // Escalamos para que llene la pantalla.
+            float escala = (float) Math.max(wOriginal, hOriginal) / Math.min(wOriginal, hOriginal);
+            rotWrapper.setScaleX(escala);
+            rotWrapper.setScaleY(escala);
         } else {
-            lp.width = wOriginal;
-            lp.height = hOriginal;
+            rotWrapper.setRotation(0);
+            rotWrapper.setScaleX(1f);
+            rotWrapper.setScaleY(1f);
         }
-        rotWrapper.setLayoutParams(lp);
     }
+
+    // ============================================================
+    // WEBVIEW + PUENTE
+    // ============================================================
 
     @SuppressLint("SetJavaScriptEnabled")
     private void configurarWebView() {
@@ -202,36 +210,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void configurarBotones() {
-        // DESACTIVAMOS el click del shield por ahora para que no interfiera.
-        // Solo va a mostrar controles cuando el usuario toque la pantalla.
-        btnShield.setOnClickListener(v -> {
-            Log.e(TAG, "SHIELD TOUCH");
-            mostrarControles();
-        });
-
-        btnNext.setOnClickListener(v -> {
-            Log.e(TAG, "### NEXT TOUCH ###");
-            Toast.makeText(this, "NEXT", Toast.LENGTH_SHORT).show();
-            navegar(+1);
-            mostrarControles();
-        });
-        btnPrev.setOnClickListener(v -> {
-            Log.e(TAG, "### PREV TOUCH ###");
-            Toast.makeText(this, "PREV", Toast.LENGTH_SHORT).show();
-            navegar(-1);
-            mostrarControles();
-        });
-        btnClose.setOnClickListener(v -> {
-            Log.e(TAG, "### CLOSE TOUCH ###");
-            Toast.makeText(this, "CLOSE", Toast.LENGTH_SHORT).show();
-            cerrarExoPlayer();
-        });
-        btnRotate.setOnClickListener(v -> {
-            Log.e(TAG, "### ROTATE TOUCH ###");
-            Toast.makeText(this, "ROTATE", Toast.LENGTH_SHORT).show();
-            rotar();
-            mostrarControles();
-        });
+        btnShield.setOnClickListener(v -> mostrarControles());
+        btnNext.setOnClickListener(v -> { navegar(+1); mostrarControles(); });
+        btnPrev.setOnClickListener(v -> { navegar(-1); mostrarControles(); });
+        btnClose.setOnClickListener(v -> cerrarExoPlayer());
+        btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
     }
 
     public class WebAppInterface {
@@ -250,7 +233,6 @@ public class MainActivity extends AppCompatActivity {
                             o.optString("logo", "")
                         ));
                     }
-                    Log.e(TAG, "setLista OK: " + canales.size() + " canales");
                 } catch (Exception e) {
                     Log.e(TAG, "setLista ERROR: " + e.getMessage());
                 }
@@ -259,10 +241,7 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void sincronizarIndice(final int i) {
-            runOnUiThread(() -> {
-                indiceActual = i;
-                Log.e(TAG, "sincronizarIndice: " + i);
-            });
+            runOnUiThread(() -> indiceActual = i);
         }
 
         @JavascriptInterface
@@ -320,6 +299,10 @@ public class MainActivity extends AppCompatActivity {
             "javascript:if(typeof window.volverDelExo==='function')window.volverDelExo();", null));
     }
 
+    // ============================================================
+    // CONTROLES
+    // ============================================================
+
     private void ocultarControlesNativos() {
         controlesVisibles = false;
         infoCanal.setVisibility(View.GONE);
@@ -342,6 +325,10 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(ocultarControlesRunnable, 5000);
     }
 
+    // ============================================================
+    // D-PAD: solo izquierda y derecha, sin CENTER/ENTER/MENU
+    // ============================================================
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (playerContainer.getVisibility() == View.VISIBLE) {
@@ -351,11 +338,6 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                     navegar(-1);
-                    return true;
-                case KeyEvent.KEYCODE_DPAD_CENTER:
-                case KeyEvent.KEYCODE_ENTER:
-                case KeyEvent.KEYCODE_MENU:
-                    mostrarControles();
                     return true;
             }
         }
@@ -368,6 +350,10 @@ public class MainActivity extends AppCompatActivity {
         if (myWebView.canGoBack()) { myWebView.goBack(); return; }
         super.onBackPressed();
     }
+
+    // ============================================================
+    // CICLO DE VIDA
+    // ============================================================
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
