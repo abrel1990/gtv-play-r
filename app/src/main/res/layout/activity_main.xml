@@ -6,13 +6,11 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- WebView (para canales HTTPS) -->
     <WebView
         android:id="@+id/webview"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Contenedor de ExoPlayer (para canales HTTP) -->
     <FrameLayout
         android:id="@+id/player_container"
         android:layout_width="match_parent"
@@ -28,7 +26,6 @@
             app:resize_mode="fit"
             android:keepScreenOn="true" />
 
-        <!-- Logo + Nombre + Número de canal (arriba) -->
         <LinearLayout
             android:id="@+id/info_canal"
             android:layout_width="wrap_content"
@@ -67,7 +64,6 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- Botón anterior -->
         <Button
             android:id="@+id/btn_prev"
             android:layout_width="60dp"
@@ -81,7 +77,6 @@
             android:visibility="gone"
             android:focusable="true" />
 
-        <!-- Botón siguiente -->
         <Button
             android:id="@+id/btn_next"
             android:layout_width="60dp"
@@ -95,7 +90,6 @@
             android:visibility="gone"
             android:focusable="true" />
 
-        <!-- Botón cerrar (abajo derecha) -->
         <Button
             android:id="@+id/btn_close"
             android:layout_width="56dp"
@@ -110,7 +104,6 @@
             android:visibility="gone"
             android:focusable="true" />
 
-        <!-- Botón rotar (arriba del cerrar) -->
         <Button
             android:id="@+id/btn_rotate"
             android:layout_width="56dp"
@@ -125,7 +118,6 @@
             android:visibility="gone"
             android:focusable="true" />
 
-        <!-- Botón central (para mostrar/ocultar controles) -->
         <Button
             android:id="@+id/btn_shield"
             android:layout_width="match_parent"
