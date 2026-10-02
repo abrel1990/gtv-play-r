@@ -18,7 +18,6 @@
         android:visibility="gone"
         android:background="#000000">
 
-        <!-- SHIELD PRIMERO: queda abajo, no tapa los botones -->
         <View
             android:id="@+id/btn_shield"
             android:layout_width="match_parent"
@@ -27,7 +26,6 @@
             android:clickable="true"
             android:focusable="false" />
 
-        <!-- WRAPPER: contiene TODO y rota entero -->
         <FrameLayout
             android:id="@+id/rot_wrapper"
             android:layout_width="match_parent"
@@ -45,7 +43,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top|center_horizontal"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="60dp"
                 android:background="#CC000000"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
@@ -83,7 +81,7 @@
                 android:layout_width="70dp"
                 android:layout_height="90dp"
                 android:layout_gravity="start|center_vertical"
-                android:layout_marginStart="20dp"
+                android:layout_marginStart="60dp"
                 android:background="#CC000000"
                 android:text="❮"
                 android:textColor="#FFD700"
@@ -97,7 +95,7 @@
                 android:layout_width="70dp"
                 android:layout_height="90dp"
                 android:layout_gravity="end|center_vertical"
-                android:layout_marginEnd="20dp"
+                android:layout_marginEnd="60dp"
                 android:background="#CC000000"
                 android:text="❯"
                 android:textColor="#FFD700"
@@ -111,8 +109,8 @@
                 android:layout_width="60dp"
                 android:layout_height="60dp"
                 android:layout_gravity="bottom|end"
-                android:layout_marginEnd="16dp"
-                android:layout_marginBottom="16dp"
+                android:layout_marginEnd="60dp"
+                android:layout_marginBottom="60dp"
                 android:background="#CCAA0000"
                 android:text="✕"
                 android:textColor="#FFFFFF"
@@ -126,8 +124,8 @@
                 android:layout_width="60dp"
                 android:layout_height="60dp"
                 android:layout_gravity="bottom|end"
-                android:layout_marginEnd="16dp"
-                android:layout_marginBottom="88dp"
+                android:layout_marginEnd="60dp"
+                android:layout_marginBottom="140dp"
                 android:background="#CC000000"
                 android:text="⟳"
                 android:textColor="#FFD700"
