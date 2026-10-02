@@ -18,7 +18,16 @@
         android:visibility="gone"
         android:background="#000000">
 
-        <!-- Contenedor que se rota entero: video + controles -->
+        <!-- SHIELD PRIMERO: queda abajo, no tapa los botones -->
+        <View
+            android:id="@+id/btn_shield"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#00000000"
+            android:clickable="true"
+            android:focusable="false" />
+
+        <!-- WRAPPER: contiene TODO y rota entero -->
         <FrameLayout
             android:id="@+id/rot_wrapper"
             android:layout_width="match_parent"
@@ -130,15 +139,6 @@
                 android:clickable="true"
                 android:focusable="true" />
         </FrameLayout>
-
-        <!-- Shield FUERA del rot_wrapper: así no rota y sigue recibiendo toques en toda la pantalla -->
-        <View
-            android:id="@+id/btn_shield"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="#00000000"
-            android:clickable="true"
-            android:focusable="false" />
     </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
