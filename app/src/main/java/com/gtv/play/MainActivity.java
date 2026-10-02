@@ -23,7 +23,11 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
 import com.bumptech.glide.Glide;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
@@ -41,8 +45,16 @@ public class MainActivity extends AppCompatActivity {
     private boolean rotated = false;
     private boolean controlesVisibles = false;
     private boolean enExoPlayer = false;
+    private int canalActual = 0;
+    private List<Canal> listaCanales = new ArrayList<>();
     private Handler handler = new Handler();
     private Runnable ocultarControlesRunnable;
+
+    public static class Canal {
+        public String name;
+        public String url;
+        public String logo;
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -63,7 +75,6 @@ public class MainActivity extends AppCompatActivity {
         btnRotate = findViewById(R.id.btn_rotate);
         btnShield = findViewById(R.id.btn_shield);
 
-        // Leer rotación guardada
         rotated = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotated", false);
 
         exoPlayer = new ExoPlayer.Builder(this).build();
@@ -110,47 +121,100 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void configurarBotones() {
-        btnPrev.setOnClickListener(v -> {
-            myWebView.evaluateJavascript("javascript:if(typeof window.prevFn === 'function') window.prevFn();", null);
-            mostrarControles();
-        });
-
-        btnNext.setOnClickListener(v -> {
-            myWebView.evaluateJavascript("javascript:if(typeof window.nextFn === 'function') window.nextFn();", null);
-            mostrarControles();
-        });
-
-        btnClose.setOnClickListener(v -> {
-            myWebView.evaluateJavascript("javascript:if(typeof window.stop === 'function') window.stop();", null);
-            cerrarExoPlayer();
-        });
-
+        btnPrev.setOnClickListener(v -> cambiarCanal(-1));
+        btnNext.setOnClickListener(v -> cambiarCanal(1));
+        btnClose.setOnClickListener(v -> cerrarExoPlayer());
         btnRotate.setOnClickListener(v -> {
             rotated = !rotated;
             getSharedPreferences("gtv_prefs", MODE_PRIVATE).edit().putBoolean("rotated", rotated).apply();
-            // Avisar al HTML para que cambie su estado
-            myWebView.evaluateJavascript("javascript:if(typeof window.rotarDesdeAndroid === 'function') window.rotarDesdeAndroid(" + rotated + ");", null);
             aplicarRotacion();
             mostrarControles();
         });
-
         btnShield.setOnClickListener(v -> toggleControles());
+    }
+
+    private void cambiarCanal(int direccion) {
+        if (listaCanales.isEmpty()) return;
+        int nuevoIndice = canalActual + direccion;
+        if (nuevoIndice < 0) nuevoIndice = listaCanales.size() - 1;
+        if (nuevoIndice >= listaCanales.size()) nuevoIndice = 0;
+        canalActual = nuevoIndice;
+        Canal canal = listaCanales.get(canalActual);
+        String url = canal.url;
+
+        if (url.startsWith("http://")) {
+            // Es HTTP → reproducir con ExoPlayer
+            nombreCanal.setText(canal.name);
+            numeroCanal.setText((canalActual + 1) + "/" + listaCanales.size());
+            if (canal.logo != null && !canal.logo.isEmpty()) {
+                Glide.with(MainActivity.this).load(canal.logo).into(logoCanal);
+            }
+            enExoPlayer = true;
+            playerContainer.setVisibility(View.VISIBLE);
+            myWebView.setVisibility(View.INVISIBLE);
+            MediaItem mediaItem = MediaItem.fromUri(url);
+            exoPlayer.setMediaItem(mediaItem);
+            exoPlayer.prepare();
+            exoPlayer.play();
+            mostrarControles();
+            aplicarRotacion();
+        } else {
+            // NO es HTTP → decirle al HTML que reproduzca el canal
+            mostrarWebView();
+            myWebView.evaluateJavascript("javascript:if(typeof window.playDesdeAndroid === 'function') window.playDesdeAndroid(" + canalActual + ");", null);
+        }
     }
 
     private void aplicarRotacion() {
         if (rotated) {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-            // Rotar los controles del ExoPlayer
-            playerContainer.setRotation(90);
-            infoCanal.setRotation(0);
+            playerView.setRotation(90);
         } else {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
-            playerContainer.setRotation(0);
-            infoCanal.setRotation(0);
+            playerView.setRotation(0);
         }
     }
 
+    private void mostrarWebView() {
+        enExoPlayer = false;
+        if (exoPlayer != null) {
+            try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
+        }
+        playerContainer.setVisibility(View.GONE);
+        myWebView.setVisibility(View.VISIBLE);
+        infoCanal.setVisibility(View.GONE);
+        btnPrev.setVisibility(View.GONE);
+        btnNext.setVisibility(View.GONE);
+        btnClose.setVisibility(View.GONE);
+        btnRotate.setVisibility(View.GONE);
+        controlesVisibles = false;
+        aplicarRotacion();
+    }
+
     public class WebAppInterface {
+
+        @JavascriptInterface
+        public void setLista(String jsonLista) {
+            try {
+                listaCanales.clear();
+                JSONArray arr = new JSONArray(jsonLista);
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject obj = arr.getJSONObject(i);
+                    Canal c = new Canal();
+                    c.name = obj.optString("name", "Canal");
+                    c.url = obj.optString("url", "");
+                    c.logo = obj.optString("logo", "");
+                    listaCanales.add(c);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public void setCanalActual(int indice) {
+            canalActual = indice;
+        }
 
         @JavascriptInterface
         public void reproducir(String url, String nombre, String numero, String logo) {
@@ -174,21 +238,7 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void mostrarWebView() {
-            runOnUiThread(() -> {
-                enExoPlayer = false;
-                if (exoPlayer != null) {
-                    try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
-                }
-                playerContainer.setVisibility(View.GONE);
-                myWebView.setVisibility(View.VISIBLE);
-                infoCanal.setVisibility(View.GONE);
-                btnPrev.setVisibility(View.GONE);
-                btnNext.setVisibility(View.GONE);
-                btnClose.setVisibility(View.GONE);
-                btnRotate.setVisibility(View.GONE);
-                controlesVisibles = false;
-                aplicarRotacion();
-            });
+            runOnUiThread(() -> mostrarWebView());
         }
 
         @JavascriptInterface
@@ -283,7 +333,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         if (enExoPlayer) {
-            myWebView.evaluateJavascript("javascript:if(typeof window.stop === 'function') window.stop();", null);
             cerrarExoPlayer();
             return;
         }
