@@ -87,11 +87,9 @@ public class MainActivity extends AppCompatActivity {
 
         exoPlayer = new ExoPlayer.Builder(this).build();
 
-        // CLAVE: enganchar ExoPlayer al TextureView (esto permite rotar el video)
         videoTexture.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
                 exoPlayer.setVideoTextureView(videoTexture);
-                Log.e(TAG, "TextureView listo: " + w + "x" + h);
             }
             @Override public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) {}
             @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) { return true; }
@@ -107,10 +105,6 @@ public class MainActivity extends AppCompatActivity {
 
         ocultarBarrasSistema();
     }
-
-    // ============================================================
-    // NAVEGACIÓN
-    // ============================================================
 
     private void navegar(int delta) {
         if (canales.isEmpty()) return;
@@ -149,14 +143,8 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.play();
 
         mostrarControles();
-
-        // Aplicar rotación guardada
         playerContainer.post(this::aplicarRotacion);
     }
-
-    // ============================================================
-    // ROTACIÓN (2 estados: normal / 90°)
-    // ============================================================
 
     private void rotar() {
         rotado = !rotado;
@@ -173,22 +161,14 @@ public class MainActivity extends AppCompatActivity {
 
         if (rotado) {
             rotWrapper.setRotation(90);
-            float escala = (float) Math.max(rotWrapper.getWidth(), rotWrapper.getHeight())
-                         / Math.min(rotWrapper.getWidth(), rotWrapper.getHeight());
-            rotWrapper.setScaleX(escala);
-            rotWrapper.setScaleY(escala);
-            Log.e(TAG, "Rotado 90°, escala=" + escala);
+            rotWrapper.setScaleX(1.2f);
+            rotWrapper.setScaleY(1.2f);
         } else {
             rotWrapper.setRotation(0);
             rotWrapper.setScaleX(1f);
             rotWrapper.setScaleY(1f);
-            Log.e(TAG, "Rotación 0°");
         }
     }
-
-    // ============================================================
-    // WEBVIEW + PUENTE
-    // ============================================================
 
     @SuppressLint("SetJavaScriptEnabled")
     private void configurarWebView() {
@@ -216,7 +196,6 @@ public class MainActivity extends AppCompatActivity {
 
         myWebView.setWebViewClient(new WebViewClient());
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
-
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
     }
 
@@ -244,7 +223,6 @@ public class MainActivity extends AppCompatActivity {
                             o.optString("logo", "")
                         ));
                     }
-                    Log.e(TAG, "setLista OK: " + canales.size() + " canales");
                 } catch (Exception e) {
                     Log.e(TAG, "setLista ERROR: " + e.getMessage());
                 }
@@ -311,10 +289,6 @@ public class MainActivity extends AppCompatActivity {
             "javascript:if(typeof window.volverDelExo==='function')window.volverDelExo();", null));
     }
 
-    // ============================================================
-    // CONTROLES
-    // ============================================================
-
     private void ocultarControlesNativos() {
         controlesVisibles = false;
         infoCanal.setVisibility(View.GONE);
@@ -336,10 +310,6 @@ public class MainActivity extends AppCompatActivity {
         ocultarControlesRunnable = this::ocultarControlesNativos;
         handler.postDelayed(ocultarControlesRunnable, 5000);
     }
-
-    // ============================================================
-    // D-PAD (izquierda/derecha). CENTER/ENTER/MENU no hacen nada.
-    // ============================================================
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
@@ -366,16 +336,10 @@ public class MainActivity extends AppCompatActivity {
         super.onBackPressed();
     }
 
-    // ============================================================
-    // CICLO DE VIDA
-    // ============================================================
-
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {
-            ocultarBarrasSistema();
-        }
+        if (hasFocus) ocultarBarrasSistema();
     }
 
     @Override
