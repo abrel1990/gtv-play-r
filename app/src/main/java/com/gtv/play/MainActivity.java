@@ -1,10 +1,10 @@
 package com.gtv.play;
 
 import android.annotation.SuppressLint;
-import android.content.pm.ActivityInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -27,7 +27,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
@@ -36,24 +35,29 @@ public class MainActivity extends AppCompatActivity {
     private ExoPlayer exoPlayer;
     private PlayerView playerView;
     private FrameLayout playerContainer;
+    private FrameLayout rotWrapper;
     private LinearLayout infoCanal;
     private ImageView logoCanal;
     private TextView nombreCanal;
     private TextView numeroCanal;
     private Button btnPrev, btnNext, btnClose, btnRotate, btnShield;
 
-    private boolean rotated = false;
+    // Lista SOLO en memoria. Nunca se guarda en disco.
+    private final ArrayList<Canal> canales = new ArrayList<>();
+    private int indiceActual = -1;
+
+    private int rotacion = 0; // 0, 90, 180, 270
+    private int wOriginal = 0, hOriginal = 0;
     private boolean controlesVisibles = false;
     private boolean enExoPlayer = false;
-    private int canalActual = 0;
-    private List<Canal> listaCanales = new ArrayList<>();
-    private Handler handler = new Handler();
+    private final Handler handler = new Handler();
     private Runnable ocultarControlesRunnable;
 
-    public static class Canal {
-        public String name;
-        public String url;
-        public String logo;
+    static class Canal {
+        final String url, nombre, logo;
+        Canal(String url, String nombre, String logo) {
+            this.url = url; this.nombre = nombre; this.logo = logo;
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -65,6 +69,7 @@ public class MainActivity extends AppCompatActivity {
         myWebView = findViewById(R.id.webview);
         playerView = findViewById(R.id.player_view);
         playerContainer = findViewById(R.id.player_container);
+        rotWrapper = findViewById(R.id.rot_wrapper);
         infoCanal = findViewById(R.id.info_canal);
         logoCanal = findViewById(R.id.logo_canal);
         nombreCanal = findViewById(R.id.nombre_canal);
@@ -75,7 +80,7 @@ public class MainActivity extends AppCompatActivity {
         btnRotate = findViewById(R.id.btn_rotate);
         btnShield = findViewById(R.id.btn_shield);
 
-        rotated = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotated", false);
+        rotacion = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getInt("rotacion", 0);
 
         exoPlayer = new ExoPlayer.Builder(this).build();
         playerView.setPlayer(exoPlayer);
@@ -85,34 +90,110 @@ public class MainActivity extends AppCompatActivity {
 
         Map<String, String> extraHeaders = new HashMap<>();
         extraHeaders.put("X-GTV-Origin", "gtv_app_2026_secreto_xyz789");
-
         myWebView.loadUrl("https://gtv-portero.abrel03.workers.dev/", extraHeaders);
 
         ocultarBarrasSistema();
     }
 
+    // ============================================================
+    // NAVEGACIÓN NATIVA (ya no depende del WebView oculto)
+    // ============================================================
+
+    private void navegar(int delta) {
+        if (canales.isEmpty()) return;
+        int n = canales.size();
+        indiceActual = ((indiceActual + delta) % n + n) % n;
+        Canal c = canales.get(indiceActual);
+
+        if (c.url.startsWith("http://")) {
+            reproducirEnExo(c);
+        } else {
+            // HTTPS → WebView visible otra vez, y recién ahí hablamos con JS
+            enExoPlayer = false;
+            try { exoPlayer.pause(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
+            playerContainer.setVisibility(View.GONE);
+            ocultarControlesNativos();
+            myWebView.setVisibility(View.VISIBLE);
+            final int idx = indiceActual;
+            myWebView.post(() -> myWebView.evaluateJavascript(
+                "javascript:if(typeof window.irACanal==='function')window.irACanal(" + idx + ");", null));
+        }
+    }
+
+    private void reproducirEnExo(Canal c) {
+        enExoPlayer = true;
+        myWebView.setVisibility(View.VISIBLE); // VISIBLE pero tapado por player_container
+        playerContainer.setVisibility(View.VISIBLE);
+        playerContainer.bringToFront();
+
+        nombreCanal.setText(c.nombre);
+        numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+        if (c.logo != null && !c.logo.isEmpty()) {
+            Glide.with(this).load(c.logo).into(logoCanal);
+        }
+
+        exoPlayer.setMediaItem(MediaItem.fromUri(c.url));
+        exoPlayer.prepare();
+        exoPlayer.play();
+
+        mostrarControles();
+        aplicarRotacion();
+    }
+
+    // ============================================================
+    // ROTACIÓN (contenedor, no PlayerView)
+    // ============================================================
+
+    private void rotar() {
+        rotacion = (rotacion + 90) % 360;
+        getSharedPreferences("gtv_prefs", MODE_PRIVATE)
+            .edit().putInt("rotacion", rotacion).apply();
+        aplicarRotacion();
+    }
+
+    private void aplicarRotacion() {
+        if (wOriginal == 0) return;
+        rotWrapper.setPivotX(wOriginal / 2f);
+        rotWrapper.setPivotY(hOriginal / 2f);
+        rotWrapper.setRotation(rotacion);
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) rotWrapper.getLayoutParams();
+        if (rotacion == 90 || rotacion == 270) {
+            lp.width = hOriginal;
+            lp.height = wOriginal;
+        } else {
+            lp.width = wOriginal;
+            lp.height = hOriginal;
+        }
+        rotWrapper.setLayoutParams(lp);
+    }
+
+    // ============================================================
+    // WebView + puente
+    // ============================================================
+
+    @SuppressLint("SetJavaScriptEnabled")
     private void configurarWebView() {
-        WebSettings webSettings = myWebView.getSettings();
-        webSettings.setJavaScriptEnabled(true);
-        webSettings.setDomStorageEnabled(true);
-        webSettings.setAllowFileAccess(false);
-        webSettings.setAllowContentAccess(false);
-        webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        webSettings.setMediaPlaybackRequiresUserGesture(false);
-        webSettings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        webSettings.setLoadWithOverviewMode(true);
-        webSettings.setUseWideViewPort(true);
-        webSettings.setDatabaseEnabled(true);
-        webSettings.setSupportZoom(false);
-        webSettings.setBuiltInZoomControls(false);
-        webSettings.setDisplayZoomControls(false);
-        webSettings.setSaveFormData(false);
-        webSettings.setGeolocationEnabled(false);
-        webSettings.setTextZoom(100);
-        webSettings.setAllowUniversalAccessFromFileURLs(false);
-        webSettings.setAllowFileAccessFromFileURLs(false);
-        webSettings.setJavaScriptCanOpenWindowsAutomatically(false);
-        webSettings.setSupportMultipleWindows(false);
+        WebSettings s = myWebView.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(false);
+        s.setAllowContentAccess(false);
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        s.setMediaPlaybackRequiresUserGesture(false);
+        s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        s.setLoadWithOverviewMode(true);
+        s.setUseWideViewPort(true);
+        s.setDatabaseEnabled(true);
+        s.setSupportZoom(false);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
+        s.setSaveFormData(false);
+        s.setGeolocationEnabled(false);
+        s.setTextZoom(100);
+        s.setAllowUniversalAccessFromFileURLs(false);
+        s.setAllowFileAccessFromFileURLs(false);
+        s.setJavaScriptCanOpenWindowsAutomatically(false);
+        s.setSupportMultipleWindows(false);
 
         myWebView.setWebViewClient(new WebViewClient());
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
@@ -121,124 +202,71 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void configurarBotones() {
-        btnPrev.setOnClickListener(v -> cambiarCanal(-1));
-        btnNext.setOnClickListener(v -> cambiarCanal(1));
+        btnNext.setOnClickListener(v -> { navegar(+1); mostrarControles(); });
+        btnPrev.setOnClickListener(v -> { navegar(-1); mostrarControles(); });
         btnClose.setOnClickListener(v -> cerrarExoPlayer());
-        btnRotate.setOnClickListener(v -> {
-            rotated = !rotated;
-            getSharedPreferences("gtv_prefs", MODE_PRIVATE).edit().putBoolean("rotated", rotated).apply();
-            aplicarRotacion();
-            mostrarControles();
-        });
-        btnShield.setOnClickListener(v -> toggleControles());
-    }
-
-    private void cambiarCanal(int direccion) {
-        if (listaCanales.isEmpty()) return;
-        int nuevoIndice = canalActual + direccion;
-        if (nuevoIndice < 0) nuevoIndice = listaCanales.size() - 1;
-        if (nuevoIndice >= listaCanales.size()) nuevoIndice = 0;
-        canalActual = nuevoIndice;
-        Canal canal = listaCanales.get(canalActual);
-        String url = canal.url;
-
-        if (url.startsWith("http://")) {
-            // Es HTTP → reproducir con ExoPlayer
-            nombreCanal.setText(canal.name);
-            numeroCanal.setText((canalActual + 1) + "/" + listaCanales.size());
-            if (canal.logo != null && !canal.logo.isEmpty()) {
-                Glide.with(MainActivity.this).load(canal.logo).into(logoCanal);
-            }
-            enExoPlayer = true;
-            playerContainer.setVisibility(View.VISIBLE);
-            myWebView.setVisibility(View.INVISIBLE);
-            MediaItem mediaItem = MediaItem.fromUri(url);
-            exoPlayer.setMediaItem(mediaItem);
-            exoPlayer.prepare();
-            exoPlayer.play();
-            mostrarControles();
-            aplicarRotacion();
-        } else {
-            // NO es HTTP → decirle al HTML que reproduzca el canal
-            mostrarWebView();
-            myWebView.evaluateJavascript("javascript:if(typeof window.playDesdeAndroid === 'function') window.playDesdeAndroid(" + canalActual + ");", null);
-        }
-    }
-
-    private void aplicarRotacion() {
-        if (rotated) {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-            playerView.setRotation(90);
-        } else {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
-            playerView.setRotation(0);
-        }
-    }
-
-    private void mostrarWebView() {
-        enExoPlayer = false;
-        if (exoPlayer != null) {
-            try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
-        }
-        playerContainer.setVisibility(View.GONE);
-        myWebView.setVisibility(View.VISIBLE);
-        infoCanal.setVisibility(View.GONE);
-        btnPrev.setVisibility(View.GONE);
-        btnNext.setVisibility(View.GONE);
-        btnClose.setVisibility(View.GONE);
-        btnRotate.setVisibility(View.GONE);
-        controlesVisibles = false;
-        aplicarRotacion();
+        btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
+        btnShield.setOnClickListener(v -> mostrarControles());
     }
 
     public class WebAppInterface {
 
+        // El HTML nos pasa la lista una vez, al cargar. Solo en memoria.
         @JavascriptInterface
-        public void setLista(String jsonLista) {
-            try {
-                listaCanales.clear();
-                JSONArray arr = new JSONArray(jsonLista);
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONObject obj = arr.getJSONObject(i);
-                    Canal c = new Canal();
-                    c.name = obj.optString("name", "Canal");
-                    c.url = obj.optString("url", "");
-                    c.logo = obj.optString("logo", "");
-                    listaCanales.add(c);
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        @JavascriptInterface
-        public void setCanalActual(int indice) {
-            canalActual = indice;
-        }
-
-        @JavascriptInterface
-        public void reproducir(String url, String nombre, String numero, String logo) {
+        public void setLista(final String json) {
             runOnUiThread(() -> {
-                enExoPlayer = true;
-                playerContainer.setVisibility(View.VISIBLE);
-                myWebView.setVisibility(View.INVISIBLE);
-                nombreCanal.setText(nombre);
-                numeroCanal.setText(numero);
-                if (logo != null && !logo.isEmpty()) {
-                    Glide.with(MainActivity.this).load(logo).into(logoCanal);
+                try {
+                    JSONArray arr = new JSONArray(json);
+                    canales.clear();
+                    for (int i = 0; i < arr.length(); i++) {
+                        JSONObject o = arr.getJSONObject(i);
+                        canales.add(new Canal(
+                            o.getString("url"),
+                            o.optString("nombre", "Canal " + (i + 1)),
+                            o.optString("logo", "")
+                        ));
+                    }
+                } catch (Exception e) {
+                    // lista inválida: seguimos sin crash
                 }
-                MediaItem mediaItem = MediaItem.fromUri(url);
-                exoPlayer.setMediaItem(mediaItem);
-                exoPlayer.prepare();
-                exoPlayer.play();
-                mostrarControles();
-                aplicarRotacion();
             });
         }
 
+        // El HTML avisa en cada cambio de canal → índices sincronizados
+        @JavascriptInterface
+        public void sincronizarIndice(final int i) {
+            runOnUiThread(() -> indiceActual = i);
+        }
+
+        // El HTML llama acá cuando quiere abrir un canal HTTP en Exo
+        @JavascriptInterface
+        public void reproducir(String url, String nombre, String numero, String logo) {
+            runOnUiThread(() -> {
+                int idx = -1;
+                for (int i = 0; i < canales.size(); i++) {
+                    if (canales.get(i).url.equals(url)) { idx = i; break; }
+                }
+                if (idx >= 0) {
+                    indiceActual = idx;
+                    reproducirEnExo(canales.get(idx));
+                } else {
+                    // No está en la lista (por ej. canal agregado al vuelo)
+                    Canal c = new Canal(url, nombre, logo);
+                    reproducirEnExo(c);
+                }
+            });
+        }
+
+        // El HTML avisa que quiere volver a WebView
         @JavascriptInterface
         public void mostrarWebView() {
-            runOnUiThread(() -> mostrarWebView());
+            runOnUiThread(() -> {
+                enExoPlayer = false;
+                try { exoPlayer.pause(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
+                playerContainer.setVisibility(View.GONE);
+                myWebView.setVisibility(View.VISIBLE);
+                ocultarControlesNativos();
+            });
         }
 
         @JavascriptInterface
@@ -260,51 +288,103 @@ public class MainActivity extends AppCompatActivity {
 
     private void cerrarExoPlayer() {
         enExoPlayer = false;
-        if (exoPlayer != null) {
-            try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
-        }
+        try { exoPlayer.pause(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
         playerContainer.setVisibility(View.GONE);
+        ocultarControlesNativos();
         myWebView.setVisibility(View.VISIBLE);
+        myWebView.post(() -> myWebView.evaluateJavascript(
+            "javascript:if(typeof window.volverDelExo==='function')window.volverDelExo();", null));
+    }
+
+    // ============================================================
+    // Controles
+    // ============================================================
+
+    private void ocultarControlesNativos() {
         controlesVisibles = false;
         infoCanal.setVisibility(View.GONE);
         btnPrev.setVisibility(View.GONE);
         btnNext.setVisibility(View.GONE);
         btnClose.setVisibility(View.GONE);
         btnRotate.setVisibility(View.GONE);
-        myWebView.evaluateJavascript("javascript:if(typeof window.volverDelExo === 'function') window.volverDelExo();", null);
     }
 
     private void mostrarControles() {
+        if (!enExoPlayer) return;
         controlesVisibles = true;
         infoCanal.setVisibility(View.VISIBLE);
         btnPrev.setVisibility(View.VISIBLE);
         btnNext.setVisibility(View.VISIBLE);
         btnClose.setVisibility(View.VISIBLE);
         btnRotate.setVisibility(View.VISIBLE);
-
         if (ocultarControlesRunnable != null) handler.removeCallbacks(ocultarControlesRunnable);
-        ocultarControlesRunnable = () -> {
-            infoCanal.setVisibility(View.GONE);
-            btnPrev.setVisibility(View.GONE);
-            btnNext.setVisibility(View.GONE);
-            btnClose.setVisibility(View.GONE);
-            btnRotate.setVisibility(View.GONE);
-            controlesVisibles = false;
-        };
+        ocultarControlesRunnable = this::ocultarControlesNativos;
         handler.postDelayed(ocultarControlesRunnable, 3000);
     }
 
-    private void toggleControles() {
-        if (controlesVisibles) {
-            if (ocultarControlesRunnable != null) handler.removeCallbacks(ocultarControlesRunnable);
-            infoCanal.setVisibility(View.GONE);
-            btnPrev.setVisibility(View.GONE);
-            btnNext.setVisibility(View.GONE);
-            btnClose.setVisibility(View.GONE);
-            btnRotate.setVisibility(View.GONE);
-            controlesVisibles = false;
-        } else {
-            mostrarControles();
+    // ============================================================
+    // D-Pad
+    // ============================================================
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (playerContainer.getVisibility() == View.VISIBLE) {
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    navegar(+1);
+                    return true;
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                    navegar(-1);
+                    return true;
+                case KeyEvent.KEYCODE_DPAD_CENTER:
+                case KeyEvent.KEYCODE_ENTER:
+                case KeyEvent.KEYCODE_MENU:
+                    mostrarControles();
+                    return true;
+            }
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (enExoPlayer) { cerrarExoPlayer(); return; }
+        if (myWebView.canGoBack()) { myWebView.goBack(); return; }
+        super.onBackPressed();
+    }
+
+    // ============================================================
+    // Ciclo de vida
+    // ============================================================
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            ocultarBarrasSistema();
+            if (wOriginal == 0 && rotWrapper.getWidth() > 0) {
+                wOriginal = rotWrapper.getWidth();
+                hOriginal = rotWrapper.getHeight();
+                aplicarRotacion();
+            }
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Solo pausamos. release() va en onDestroy().
+        if (exoPlayer != null) {
+            try { exoPlayer.pause(); } catch (Exception e) {}
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (exoPlayer != null) {
+            try { exoPlayer.release(); } catch (Exception e) {}
+            exoPlayer = null;
         }
     }
 
@@ -312,10 +392,10 @@ public class MainActivity extends AppCompatActivity {
     private void ocultarBarrasSistema() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
-            WindowInsetsController controller = getWindow().getInsetsController();
-            if (controller != null) {
-                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            WindowInsetsController c = getWindow().getInsetsController();
+            if (c != null) {
+                c.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             }
         } else {
             getWindow().getDecorView().setSystemUiVisibility(
@@ -324,39 +404,8 @@ public class MainActivity extends AppCompatActivity {
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_FULLSCREEN
-            );
+                | View.SYSTEM_UI_FLAG_FULLSCREEN);
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (enExoPlayer) {
-            cerrarExoPlayer();
-            return;
-        }
-        if (myWebView.canGoBack()) {
-            myWebView.goBack();
-        } else {
-            super.onBackPressed();
-        }
-    }
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {
-            ocultarBarrasSistema();
-        }
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (exoPlayer != null) {
-            try { exoPlayer.release(); } catch (Exception e) {}
-            exoPlayer = null;
-        }
     }
 }
