@@ -88,11 +88,23 @@ public class MainActivity extends AppCompatActivity {
 
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
 
-        // Botones
-        btnPrev.setOnClickListener(v -> { myWebView.evaluateJavascript("nextFn && prevFn ? prevFn() : null", null); mostrarControles(); });
-        btnNext.setOnClickListener(v -> { myWebView.evaluateJavascript("nextFn && nextFn() ? nextFn() : null", null); mostrarControles(); });
-        btnClose.setOnClickListener(v -> cerrarPlayer());
-        btnRotate.setOnClickListener(v -> rotarExoPlayer());
+        // ✅ BOTONES: llaman a las funciones del HTML
+        btnPrev.setOnClickListener(v -> {
+            myWebView.evaluateJavascript("javascript:if(typeof prevFn === 'function') prevFn();", null);
+            mostrarControles();
+        });
+        btnNext.setOnClickListener(v -> {
+            myWebView.evaluateJavascript("javascript:if(typeof nextFn === 'function') nextFn();", null);
+            mostrarControles();
+        });
+        btnClose.setOnClickListener(v -> {
+            myWebView.evaluateJavascript("javascript:if(typeof stop === 'function') stop();", null);
+            cerrarPlayer();
+        });
+        btnRotate.setOnClickListener(v -> {
+            rotarExoPlayer();
+            mostrarControles();
+        });
         btnShield.setOnClickListener(v -> toggleControles());
 
         Map<String, String> extraHeaders = new HashMap<>();
@@ -150,8 +162,7 @@ public class MainActivity extends AppCompatActivity {
         btnNext.setVisibility(View.GONE);
         btnClose.setVisibility(View.GONE);
         btnRotate.setVisibility(View.GONE);
-        // Avisar al HTML que cerramos
-        myWebView.evaluateJavascript("if(typeof volverDelExo === 'function') volverDelExo();", null);
+        myWebView.evaluateJavascript("javascript:if(typeof volverDelExo === 'function') volverDelExo();", null);
     }
 
     private void rotarExoPlayer() {
@@ -161,7 +172,6 @@ public class MainActivity extends AppCompatActivity {
         } else {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         }
-        mostrarControles();
     }
 
     private void mostrarControles() {
