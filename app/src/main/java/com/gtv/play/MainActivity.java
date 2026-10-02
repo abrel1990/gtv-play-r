@@ -2,8 +2,6 @@ package com.gtv.play;
 
 import android.annotation.SuppressLint;
 import android.os.Bundle;
-import android.webkit.ConsoleMessage;
-import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -21,34 +19,38 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Activar depuración WebView (para ver errores desde Chrome en la PC)
-        WebView.setWebContentsDebuggingEnabled(true);
+        // NO activamos la depuración WebView (más seguro)
 
         myWebView = findViewById(R.id.webview);
 
         WebSettings webSettings = myWebView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
-        webSettings.setAllowFileAccess(true);
-        webSettings.setAllowContentAccess(true);
-        webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        webSettings.setAllowFileAccess(false);           // 🔒 Más seguro
+        webSettings.setAllowContentAccess(false);        // 🔒 Más seguro
+        webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE); // Solo HTTP si es necesario
         webSettings.setMediaPlaybackRequiresUserGesture(false);
         webSettings.setCacheMode(WebSettings.LOAD_DEFAULT);
         webSettings.setLoadWithOverviewMode(true);
         webSettings.setUseWideViewPort(true);
+        webSettings.setDatabaseEnabled(true);
+        webSettings.setSupportZoom(false);
+        webSettings.setBuiltInZoomControls(false);
+        webSettings.setDisplayZoomControls(false);
+        webSettings.setSaveFormData(false);
+        webSettings.setGeolocationEnabled(false);        // 🔒 No necesita ubicación
+        webSettings.setTextZoom(100);
 
-        // Mostrar errores de JavaScript en pantalla
-        myWebView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
-                android.util.Log.d("GTV-Console", consoleMessage.message() + " -- From line "
-                        + consoleMessage.lineNumber() + " of "
-                        + consoleMessage.sourceId());
-                return true;
-            }
-        });
+        // Bloquear acceso a archivos locales
+        webSettings.setAllowUniversalAccessFromFileURLs(false);
+        webSettings.setAllowFileAccessFromFileURLs(false);
+
+        // 🔒 Bloquear ventanas emergentes (popups)
+        webSettings.setJavaScriptCanOpenWindowsAutomatically(false);
+        webSettings.setSupportMultipleWindows(false);
 
         myWebView.setWebViewClient(new WebViewClient());
+        myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
 
         Map<String, String> extraHeaders = new HashMap<>();
         extraHeaders.put("X-GTV-Origin", "gtv_app_2026_secreto_xyz789");
