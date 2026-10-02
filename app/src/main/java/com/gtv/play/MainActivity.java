@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowInsets;
@@ -18,6 +19,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.media3.common.MediaItem;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -31,6 +33,8 @@ import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final String TAG = "GTV_DEBUG";
+
     private WebView myWebView;
     private ExoPlayer exoPlayer;
     private PlayerView playerView;
@@ -40,13 +44,13 @@ public class MainActivity extends AppCompatActivity {
     private ImageView logoCanal;
     private TextView nombreCanal;
     private TextView numeroCanal;
-    private Button btnPrev, btnNext, btnClose, btnRotate, btnShield;
+    private Button btnPrev, btnNext, btnClose, btnRotate;
+    private View btnShield;
 
-    // Lista SOLO en memoria. Nunca se guarda en disco.
     private final ArrayList<Canal> canales = new ArrayList<>();
     private int indiceActual = -1;
 
-    private int rotacion = 0; // 0, 90, 180, 270
+    private int rotacion = 0;
     private int wOriginal = 0, hOriginal = 0;
     private boolean controlesVisibles = false;
     private boolean enExoPlayer = false;
@@ -95,20 +99,20 @@ public class MainActivity extends AppCompatActivity {
         ocultarBarrasSistema();
     }
 
-    // ============================================================
-    // NAVEGACIÓN NATIVA (ya no depende del WebView oculto)
-    // ============================================================
-
     private void navegar(int delta) {
-        if (canales.isEmpty()) return;
+        Log.e(TAG, "navegar delta=" + delta + " canales=" + canales.size() + " idx=" + indiceActual);
+        if (canales.isEmpty()) {
+            Toast.makeText(this, "Lista vacía aún", Toast.LENGTH_SHORT).show();
+            return;
+        }
         int n = canales.size();
         indiceActual = ((indiceActual + delta) % n + n) % n;
         Canal c = canales.get(indiceActual);
+        Log.e(TAG, "navegar -> idx=" + indiceActual + " url=" + c.url);
 
         if (c.url.startsWith("http://")) {
             reproducirEnExo(c);
         } else {
-            // HTTPS → WebView visible otra vez, y recién ahí hablamos con JS
             enExoPlayer = false;
             try { exoPlayer.pause(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
             playerContainer.setVisibility(View.GONE);
@@ -122,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void reproducirEnExo(Canal c) {
         enExoPlayer = true;
-        myWebView.setVisibility(View.VISIBLE); // VISIBLE pero tapado por player_container
+        myWebView.setVisibility(View.VISIBLE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
 
@@ -140,23 +144,22 @@ public class MainActivity extends AppCompatActivity {
         aplicarRotacion();
     }
 
-    // ============================================================
-    // ROTACIÓN (contenedor, no PlayerView)
-    // ============================================================
-
     private void rotar() {
+        Log.e(TAG, "rotar() llamado, rotacion actual=" + rotacion);
         rotacion = (rotacion + 90) % 360;
         getSharedPreferences("gtv_prefs", MODE_PRIVATE)
             .edit().putInt("rotacion", rotacion).apply();
         aplicarRotacion();
+        Toast.makeText(this, "Rotación: " + rotacion + "°", Toast.LENGTH_SHORT).show();
     }
 
     private void aplicarRotacion() {
         if (wOriginal == 0) return;
-        rotWrapper.setPivotX(wOriginal / 2f);
-        rotWrapper.setPivotY(hOriginal / 2f);
+        if (rotWrapper.getWidth() == 0 || rotWrapper.getHeight() == 0) return;
+        rotWrapper.setPivotX(rotWrapper.getWidth() / 2f);
+        rotWrapper.setPivotY(rotWrapper.getHeight() / 2f);
         rotWrapper.setRotation(rotacion);
-        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) rotWrapper.getLayoutParams();
+        ViewGroup.LayoutParams lp = rotWrapper.getLayoutParams();
         if (rotacion == 90 || rotacion == 270) {
             lp.width = hOriginal;
             lp.height = wOriginal;
@@ -166,10 +169,6 @@ public class MainActivity extends AppCompatActivity {
         }
         rotWrapper.setLayoutParams(lp);
     }
-
-    // ============================================================
-    // WebView + puente
-    // ============================================================
 
     @SuppressLint("SetJavaScriptEnabled")
     private void configurarWebView() {
@@ -202,16 +201,40 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void configurarBotones() {
-        btnNext.setOnClickListener(v -> { navegar(+1); mostrarControles(); });
-        btnPrev.setOnClickListener(v -> { navegar(-1); mostrarControles(); });
-        btnClose.setOnClickListener(v -> cerrarExoPlayer());
-        btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
-        btnShield.setOnClickListener(v -> mostrarControles());
+        // DESACTIVAMOS el click del shield por ahora para que no interfiera.
+        // Solo va a mostrar controles cuando el usuario toque la pantalla.
+        btnShield.setOnClickListener(v -> {
+            Log.e(TAG, "SHIELD TOUCH");
+            mostrarControles();
+        });
+
+        btnNext.setOnClickListener(v -> {
+            Log.e(TAG, "### NEXT TOUCH ###");
+            Toast.makeText(this, "NEXT", Toast.LENGTH_SHORT).show();
+            navegar(+1);
+            mostrarControles();
+        });
+        btnPrev.setOnClickListener(v -> {
+            Log.e(TAG, "### PREV TOUCH ###");
+            Toast.makeText(this, "PREV", Toast.LENGTH_SHORT).show();
+            navegar(-1);
+            mostrarControles();
+        });
+        btnClose.setOnClickListener(v -> {
+            Log.e(TAG, "### CLOSE TOUCH ###");
+            Toast.makeText(this, "CLOSE", Toast.LENGTH_SHORT).show();
+            cerrarExoPlayer();
+        });
+        btnRotate.setOnClickListener(v -> {
+            Log.e(TAG, "### ROTATE TOUCH ###");
+            Toast.makeText(this, "ROTATE", Toast.LENGTH_SHORT).show();
+            rotar();
+            mostrarControles();
+        });
     }
 
     public class WebAppInterface {
 
-        // El HTML nos pasa la lista una vez, al cargar. Solo en memoria.
         @JavascriptInterface
         public void setLista(final String json) {
             runOnUiThread(() -> {
@@ -226,19 +249,21 @@ public class MainActivity extends AppCompatActivity {
                             o.optString("logo", "")
                         ));
                     }
+                    Log.e(TAG, "setLista OK: " + canales.size() + " canales");
                 } catch (Exception e) {
-                    // lista inválida: seguimos sin crash
+                    Log.e(TAG, "setLista ERROR: " + e.getMessage());
                 }
             });
         }
 
-        // El HTML avisa en cada cambio de canal → índices sincronizados
         @JavascriptInterface
         public void sincronizarIndice(final int i) {
-            runOnUiThread(() -> indiceActual = i);
+            runOnUiThread(() -> {
+                indiceActual = i;
+                Log.e(TAG, "sincronizarIndice: " + i);
+            });
         }
 
-        // El HTML llama acá cuando quiere abrir un canal HTTP en Exo
         @JavascriptInterface
         public void reproducir(String url, String nombre, String numero, String logo) {
             runOnUiThread(() -> {
@@ -250,14 +275,12 @@ public class MainActivity extends AppCompatActivity {
                     indiceActual = idx;
                     reproducirEnExo(canales.get(idx));
                 } else {
-                    // No está en la lista (por ej. canal agregado al vuelo)
                     Canal c = new Canal(url, nombre, logo);
                     reproducirEnExo(c);
                 }
             });
         }
 
-        // El HTML avisa que quiere volver a WebView
         @JavascriptInterface
         public void mostrarWebView() {
             runOnUiThread(() -> {
@@ -296,10 +319,6 @@ public class MainActivity extends AppCompatActivity {
             "javascript:if(typeof window.volverDelExo==='function')window.volverDelExo();", null));
     }
 
-    // ============================================================
-    // Controles
-    // ============================================================
-
     private void ocultarControlesNativos() {
         controlesVisibles = false;
         infoCanal.setVisibility(View.GONE);
@@ -319,12 +338,8 @@ public class MainActivity extends AppCompatActivity {
         btnRotate.setVisibility(View.VISIBLE);
         if (ocultarControlesRunnable != null) handler.removeCallbacks(ocultarControlesRunnable);
         ocultarControlesRunnable = this::ocultarControlesNativos;
-        handler.postDelayed(ocultarControlesRunnable, 3000);
+        handler.postDelayed(ocultarControlesRunnable, 5000);
     }
-
-    // ============================================================
-    // D-Pad
-    // ============================================================
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
@@ -353,18 +368,14 @@ public class MainActivity extends AppCompatActivity {
         super.onBackPressed();
     }
 
-    // ============================================================
-    // Ciclo de vida
-    // ============================================================
-
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             ocultarBarrasSistema();
-            if (wOriginal == 0 && rotWrapper.getWidth() > 0) {
-                wOriginal = rotWrapper.getWidth();
-                hOriginal = rotWrapper.getHeight();
+            if (wOriginal == 0 && playerContainer.getWidth() > 0) {
+                wOriginal = playerContainer.getWidth();
+                hOriginal = playerContainer.getHeight();
                 aplicarRotacion();
             }
         }
@@ -373,7 +384,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        // Solo pausamos. release() va en onDestroy().
         if (exoPlayer != null) {
             try { exoPlayer.pause(); } catch (Exception e) {}
         }
