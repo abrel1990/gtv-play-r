@@ -2,9 +2,13 @@ package com.gtv.play;
 
 import android.annotation.SuppressLint;
 import android.content.pm.ActivityInfo;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -36,6 +40,7 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean rotated = false;
     private boolean controlesVisibles = false;
+    private boolean enExoPlayer = false;
     private Handler handler = new Handler();
     private Runnable ocultarControlesRunnable;
 
@@ -58,9 +63,24 @@ public class MainActivity extends AppCompatActivity {
         btnRotate = findViewById(R.id.btn_rotate);
         btnShield = findViewById(R.id.btn_shield);
 
+        // Leer rotación guardada
+        rotated = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotated", false);
+
         exoPlayer = new ExoPlayer.Builder(this).build();
         playerView.setPlayer(exoPlayer);
 
+        configurarWebView();
+        configurarBotones();
+
+        Map<String, String> extraHeaders = new HashMap<>();
+        extraHeaders.put("X-GTV-Origin", "gtv_app_2026_secreto_xyz789");
+
+        myWebView.loadUrl("https://gtv-portero.abrel03.workers.dev/", extraHeaders);
+
+        ocultarBarrasSistema();
+    }
+
+    private void configurarWebView() {
         WebSettings webSettings = myWebView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
@@ -87,35 +107,55 @@ public class MainActivity extends AppCompatActivity {
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
 
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
+    }
 
+    private void configurarBotones() {
         btnPrev.setOnClickListener(v -> {
-            myWebView.evaluateJavascript("javascript:window.prevFn();", null);
+            myWebView.evaluateJavascript("javascript:if(typeof window.prevFn === 'function') window.prevFn();", null);
             mostrarControles();
         });
+
         btnNext.setOnClickListener(v -> {
-            myWebView.evaluateJavascript("javascript:window.nextFn();", null);
+            myWebView.evaluateJavascript("javascript:if(typeof window.nextFn === 'function') window.nextFn();", null);
             mostrarControles();
         });
+
         btnClose.setOnClickListener(v -> {
-            myWebView.evaluateJavascript("javascript:window.stop();", null);
-            cerrarPlayer();
+            myWebView.evaluateJavascript("javascript:if(typeof window.stop === 'function') window.stop();", null);
+            cerrarExoPlayer();
         });
+
         btnRotate.setOnClickListener(v -> {
-            rotarExoPlayer();
+            rotated = !rotated;
+            getSharedPreferences("gtv_prefs", MODE_PRIVATE).edit().putBoolean("rotated", rotated).apply();
+            // Avisar al HTML para que cambie su estado
+            myWebView.evaluateJavascript("javascript:if(typeof window.rotarDesdeAndroid === 'function') window.rotarDesdeAndroid(" + rotated + ");", null);
+            aplicarRotacion();
             mostrarControles();
         });
+
         btnShield.setOnClickListener(v -> toggleControles());
+    }
 
-        Map<String, String> extraHeaders = new HashMap<>();
-        extraHeaders.put("X-GTV-Origin", "gtv_app_2026_secreto_xyz789");
-
-        myWebView.loadUrl("https://gtv-portero.abrel03.workers.dev/", extraHeaders);
+    private void aplicarRotacion() {
+        if (rotated) {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+            // Rotar los controles del ExoPlayer
+            playerContainer.setRotation(90);
+            infoCanal.setRotation(0);
+        } else {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            playerContainer.setRotation(0);
+            infoCanal.setRotation(0);
+        }
     }
 
     public class WebAppInterface {
+
         @JavascriptInterface
         public void reproducir(String url, String nombre, String numero, String logo) {
             runOnUiThread(() -> {
+                enExoPlayer = true;
                 playerContainer.setVisibility(View.VISIBLE);
                 myWebView.setVisibility(View.INVISIBLE);
                 nombreCanal.setText(nombre);
@@ -128,12 +168,32 @@ public class MainActivity extends AppCompatActivity {
                 exoPlayer.prepare();
                 exoPlayer.play();
                 mostrarControles();
+                aplicarRotacion();
+            });
+        }
+
+        @JavascriptInterface
+        public void mostrarWebView() {
+            runOnUiThread(() -> {
+                enExoPlayer = false;
+                if (exoPlayer != null) {
+                    try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
+                }
+                playerContainer.setVisibility(View.GONE);
+                myWebView.setVisibility(View.VISIBLE);
+                infoCanal.setVisibility(View.GONE);
+                btnPrev.setVisibility(View.GONE);
+                btnNext.setVisibility(View.GONE);
+                btnClose.setVisibility(View.GONE);
+                btnRotate.setVisibility(View.GONE);
+                controlesVisibles = false;
+                aplicarRotacion();
             });
         }
 
         @JavascriptInterface
         public void cerrarPlayer() {
-            runOnUiThread(() -> MainActivity.this.cerrarPlayer());
+            runOnUiThread(() -> cerrarExoPlayer());
         }
 
         @JavascriptInterface
@@ -148,10 +208,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void cerrarPlayer() {
+    private void cerrarExoPlayer() {
+        enExoPlayer = false;
         if (exoPlayer != null) {
-            exoPlayer.stop();
-            exoPlayer.clearMediaItems();
+            try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
         }
         playerContainer.setVisibility(View.GONE);
         myWebView.setVisibility(View.VISIBLE);
@@ -161,16 +221,7 @@ public class MainActivity extends AppCompatActivity {
         btnNext.setVisibility(View.GONE);
         btnClose.setVisibility(View.GONE);
         btnRotate.setVisibility(View.GONE);
-        myWebView.evaluateJavascript("javascript:window.volverDelExo();", null);
-    }
-
-    private void rotarExoPlayer() {
-        rotated = !rotated;
-        if (rotated) {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-        } else {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
-        }
+        myWebView.evaluateJavascript("javascript:if(typeof window.volverDelExo === 'function') window.volverDelExo();", null);
     }
 
     private void mostrarControles() {
@@ -207,10 +258,33 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @SuppressLint("WrongConstant")
+    private void ocultarBarrasSistema() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+            );
+        }
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
     @Override
     public void onBackPressed() {
-        if (playerContainer.getVisibility() == View.VISIBLE) {
-            cerrarPlayer();
+        if (enExoPlayer) {
+            myWebView.evaluateJavascript("javascript:if(typeof window.stop === 'function') window.stop();", null);
+            cerrarExoPlayer();
             return;
         }
         if (myWebView.canGoBack()) {
@@ -221,10 +295,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            ocultarBarrasSistema();
+        }
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
         if (exoPlayer != null) {
-            exoPlayer.release();
+            try { exoPlayer.release(); } catch (Exception e) {}
             exoPlayer = null;
         }
     }
