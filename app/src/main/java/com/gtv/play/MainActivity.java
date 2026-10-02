@@ -7,7 +7,6 @@ import android.os.Handler;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
@@ -99,10 +98,6 @@ public class MainActivity extends AppCompatActivity {
         ocultarBarrasSistema();
     }
 
-    // ============================================================
-    // NAVEGACIÓN
-    // ============================================================
-
     private void navegar(int delta) {
         if (canales.isEmpty()) return;
         int n = canales.size();
@@ -143,10 +138,6 @@ public class MainActivity extends AppCompatActivity {
         aplicarRotacion();
     }
 
-    // ============================================================
-    // ROTACIÓN (2 estados: normal / 90°)
-    // ============================================================
-
     private void rotar() {
         rotado = !rotado;
         getSharedPreferences("gtv_prefs", MODE_PRIVATE)
@@ -157,14 +148,11 @@ public class MainActivity extends AppCompatActivity {
     private void aplicarRotacion() {
         if (wOriginal == 0 || hOriginal == 0) return;
 
-        // Pivote en el centro del rot_wrapper
         rotWrapper.setPivotX(rotWrapper.getWidth() / 2f);
         rotWrapper.setPivotY(rotWrapper.getHeight() / 2f);
 
         if (rotado) {
             rotWrapper.setRotation(90);
-            // El contenido rotado 90° queda "acostado".
-            // Escalamos para que llene la pantalla.
             float escala = (float) Math.max(wOriginal, hOriginal) / Math.min(wOriginal, hOriginal);
             rotWrapper.setScaleX(escala);
             rotWrapper.setScaleY(escala);
@@ -174,10 +162,6 @@ public class MainActivity extends AppCompatActivity {
             rotWrapper.setScaleY(1f);
         }
     }
-
-    // ============================================================
-    // WEBVIEW + PUENTE
-    // ============================================================
 
     @SuppressLint("SetJavaScriptEnabled")
     private void configurarWebView() {
@@ -299,10 +283,6 @@ public class MainActivity extends AppCompatActivity {
             "javascript:if(typeof window.volverDelExo==='function')window.volverDelExo();", null));
     }
 
-    // ============================================================
-    // CONTROLES
-    // ============================================================
-
     private void ocultarControlesNativos() {
         controlesVisibles = false;
         infoCanal.setVisibility(View.GONE);
@@ -325,10 +305,6 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(ocultarControlesRunnable, 5000);
     }
 
-    // ============================================================
-    // D-PAD: solo izquierda y derecha, sin CENTER/ENTER/MENU
-    // ============================================================
-
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (playerContainer.getVisibility() == View.VISIBLE) {
@@ -338,6 +314,9 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                     navegar(-1);
+                    return true;
+                case KeyEvent.KEYCODE_DPAD_CENTER:
+                case KeyEvent.KEYCODE_ENTER:
                     return true;
             }
         }
@@ -350,10 +329,6 @@ public class MainActivity extends AppCompatActivity {
         if (myWebView.canGoBack()) { myWebView.goBack(); return; }
         super.onBackPressed();
     }
-
-    // ============================================================
-    // CICLO DE VIDA
-    // ============================================================
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
