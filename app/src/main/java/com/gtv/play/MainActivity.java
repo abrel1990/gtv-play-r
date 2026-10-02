@@ -1,4 +1,3 @@
-```java
 package com.gtv.play;
 
 import android.annotation.SuppressLint;
@@ -118,4 +117,3 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 }
-```
