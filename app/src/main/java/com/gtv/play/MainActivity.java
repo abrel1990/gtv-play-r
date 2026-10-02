@@ -1,11 +1,13 @@
 package com.gtv.play;
 
 import android.annotation.SuppressLint;
+import android.graphics.SurfaceTexture;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.TextureView;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -22,7 +24,6 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.media3.common.MediaItem;
 import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.ui.PlayerView;
 import com.bumptech.glide.Glide;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -36,7 +37,7 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView myWebView;
     private ExoPlayer exoPlayer;
-    private PlayerView playerView;
+    private TextureView videoTexture;
     private FrameLayout playerContainer;
     private FrameLayout rotWrapper;
     private LinearLayout infoCanal;
@@ -50,9 +51,8 @@ public class MainActivity extends AppCompatActivity {
     private int indiceActual = -1;
 
     private boolean rotado = false;
-    private int wOriginal = 0, hOriginal = 0;
-    private boolean controlesVisibles = false;
     private boolean enExoPlayer = false;
+    private boolean controlesVisibles = false;
     private final Handler handler = new Handler();
     private Runnable ocultarControlesRunnable;
 
@@ -70,7 +70,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         myWebView = findViewById(R.id.webview);
-        playerView = findViewById(R.id.player_view);
+        videoTexture = findViewById(R.id.video_texture);
         playerContainer = findViewById(R.id.player_container);
         rotWrapper = findViewById(R.id.rot_wrapper);
         infoCanal = findViewById(R.id.info_canal);
@@ -86,7 +86,17 @@ public class MainActivity extends AppCompatActivity {
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
         exoPlayer = new ExoPlayer.Builder(this).build();
-        playerView.setPlayer(exoPlayer);
+
+        // CLAVE: enganchar ExoPlayer al TextureView (esto permite rotar el video)
+        videoTexture.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            @Override public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
+                exoPlayer.setVideoTextureView(videoTexture);
+                Log.e(TAG, "TextureView listo: " + w + "x" + h);
+            }
+            @Override public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) {}
+            @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) { return true; }
+            @Override public void onSurfaceTextureUpdated(SurfaceTexture st) {}
+        });
 
         configurarWebView();
         configurarBotones();
@@ -97,6 +107,10 @@ public class MainActivity extends AppCompatActivity {
 
         ocultarBarrasSistema();
     }
+
+    // ============================================================
+    // NAVEGACIÓN
+    // ============================================================
 
     private void navegar(int delta) {
         if (canales.isEmpty()) return;
@@ -135,8 +149,14 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.play();
 
         mostrarControles();
-        aplicarRotacion();
+
+        // Aplicar rotación guardada
+        playerContainer.post(this::aplicarRotacion);
     }
+
+    // ============================================================
+    // ROTACIÓN (2 estados: normal / 90°)
+    // ============================================================
 
     private void rotar() {
         rotado = !rotado;
@@ -146,22 +166,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void aplicarRotacion() {
-        if (wOriginal == 0 || hOriginal == 0) return;
+        if (rotWrapper.getWidth() == 0 || rotWrapper.getHeight() == 0) return;
 
         rotWrapper.setPivotX(rotWrapper.getWidth() / 2f);
         rotWrapper.setPivotY(rotWrapper.getHeight() / 2f);
 
         if (rotado) {
             rotWrapper.setRotation(90);
-            float escala = (float) Math.max(wOriginal, hOriginal) / Math.min(wOriginal, hOriginal);
+            float escala = (float) Math.max(rotWrapper.getWidth(), rotWrapper.getHeight())
+                         / Math.min(rotWrapper.getWidth(), rotWrapper.getHeight());
             rotWrapper.setScaleX(escala);
             rotWrapper.setScaleY(escala);
+            Log.e(TAG, "Rotado 90°, escala=" + escala);
         } else {
             rotWrapper.setRotation(0);
             rotWrapper.setScaleX(1f);
             rotWrapper.setScaleY(1f);
+            Log.e(TAG, "Rotación 0°");
         }
     }
+
+    // ============================================================
+    // WEBVIEW + PUENTE
+    // ============================================================
 
     @SuppressLint("SetJavaScriptEnabled")
     private void configurarWebView() {
@@ -217,6 +244,7 @@ public class MainActivity extends AppCompatActivity {
                             o.optString("logo", "")
                         ));
                     }
+                    Log.e(TAG, "setLista OK: " + canales.size() + " canales");
                 } catch (Exception e) {
                     Log.e(TAG, "setLista ERROR: " + e.getMessage());
                 }
@@ -283,6 +311,10 @@ public class MainActivity extends AppCompatActivity {
             "javascript:if(typeof window.volverDelExo==='function')window.volverDelExo();", null));
     }
 
+    // ============================================================
+    // CONTROLES
+    // ============================================================
+
     private void ocultarControlesNativos() {
         controlesVisibles = false;
         infoCanal.setVisibility(View.GONE);
@@ -304,6 +336,10 @@ public class MainActivity extends AppCompatActivity {
         ocultarControlesRunnable = this::ocultarControlesNativos;
         handler.postDelayed(ocultarControlesRunnable, 5000);
     }
+
+    // ============================================================
+    // D-PAD (izquierda/derecha). CENTER/ENTER/MENU no hacen nada.
+    // ============================================================
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
@@ -330,16 +366,15 @@ public class MainActivity extends AppCompatActivity {
         super.onBackPressed();
     }
 
+    // ============================================================
+    // CICLO DE VIDA
+    // ============================================================
+
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             ocultarBarrasSistema();
-            if (wOriginal == 0 && playerContainer.getWidth() > 0) {
-                wOriginal = playerContainer.getWidth();
-                hOriginal = playerContainer.getHeight();
-                aplicarRotacion();
-            }
         }
     }
 
