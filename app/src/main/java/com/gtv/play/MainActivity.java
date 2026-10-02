@@ -2,6 +2,8 @@ package com.gtv.play;
 
 import android.annotation.SuppressLint;
 import android.os.Bundle;
+import android.webkit.ConsoleMessage;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -19,6 +21,9 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // Activar depuración WebView (para ver errores desde Chrome en la PC)
+        WebView.setWebContentsDebuggingEnabled(true);
+
         myWebView = findViewById(R.id.webview);
 
         WebSettings webSettings = myWebView.getSettings();
@@ -31,6 +36,17 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setCacheMode(WebSettings.LOAD_DEFAULT);
         webSettings.setLoadWithOverviewMode(true);
         webSettings.setUseWideViewPort(true);
+
+        // Mostrar errores de JavaScript en pantalla
+        myWebView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
+                android.util.Log.d("GTV-Console", consoleMessage.message() + " -- From line "
+                        + consoleMessage.lineNumber() + " of "
+                        + consoleMessage.sourceId());
+                return true;
+            }
+        });
 
         myWebView.setWebViewClient(new WebViewClient());
 
