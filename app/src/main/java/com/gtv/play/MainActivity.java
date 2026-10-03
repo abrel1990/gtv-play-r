@@ -25,7 +25,9 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.media3.common.MediaItem;
+import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
 import com.bumptech.glide.Glide;
 import org.json.JSONArray;
@@ -89,10 +91,19 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        exoPlayer = new ExoPlayer.Builder(this).build();
+        // ExoPlayer con redirecciones cross-protocol (para streams .ts que redirigen http→https)
+        DefaultHttpDataSource.Factory httpFactory =
+            new DefaultHttpDataSource.Factory()
+                .setAllowCrossProtocolRedirects(true);
+
+        DefaultMediaSourceFactory mediaSourceFactory =
+            new DefaultMediaSourceFactory(httpFactory);
+
+        exoPlayer = new ExoPlayer.Builder(this)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build();
 
         inyectarTextureView();
-
         playerView.setPlayer(exoPlayer);
 
         videoTexture.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
@@ -176,7 +187,11 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.play();
 
         mostrarControles();
-        playerContainer.post(this::aplicarRotacion);
+        // Aplicar rotación Y reposicionar botones al abrir el canal
+        playerContainer.post(() -> {
+            aplicarRotacion();
+            reposicionarBotones();
+        });
     }
 
     private void rotar() {
@@ -184,6 +199,7 @@ public class MainActivity extends AppCompatActivity {
         getSharedPreferences("gtv_prefs", MODE_PRIVATE)
             .edit().putBoolean("rotado", rotado).apply();
         aplicarRotacion();
+        reposicionarBotones();
     }
 
     private void aplicarRotacion() {
@@ -206,24 +222,36 @@ public class MainActivity extends AppCompatActivity {
 
         rotWrapper.requestLayout();
 
-        // Reposicionar el botón ⟳ según el estado
+        Log.e(TAG, "aplicarRotacion: rotado=" + rotado);
+    }
+
+    private void reposicionarBotones() {
         FrameLayout.LayoutParams lpRot = (FrameLayout.LayoutParams) btnRotate.getLayoutParams();
+        FrameLayout.LayoutParams lpClose = (FrameLayout.LayoutParams) btnClose.getLayoutParams();
+
         if (rotado) {
-            // Rotado: ⟳ arriba-derecha (lejos del ❯)
+            // Rotado: ⟳ arriba-derecha, ✕ abajo-derecha
             lpRot.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
             lpRot.topMargin = 40;
             lpRot.rightMargin = 40;
             lpRot.bottomMargin = 0;
+
+            lpClose.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+            lpClose.bottomMargin = 40;
+            lpClose.rightMargin = 40;
         } else {
-            // Normal: ⟳ abajo-derecha (como siempre)
+            // Normal: ⟳ arriba del ✕, ambos abajo-derecha (bien separados)
             lpRot.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
-            lpRot.bottomMargin = 110;
+            lpRot.bottomMargin = 160;   // ← subido de 110 a 160 para separarlo del ✕
             lpRot.rightMargin = 40;
             lpRot.topMargin = 0;
+
+            lpClose.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+            lpClose.bottomMargin = 40;
+            lpClose.rightMargin = 40;
         }
         btnRotate.setLayoutParams(lpRot);
-
-        Log.e(TAG, "aplicarRotacion: rotado=" + rotado);
+        btnClose.setLayoutParams(lpClose);
     }
 
     @SuppressLint("SetJavaScriptEnabled")
