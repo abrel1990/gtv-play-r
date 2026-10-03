@@ -91,13 +91,10 @@ public class MainActivity extends AppCompatActivity {
 
         exoPlayer = new ExoPlayer.Builder(this).build();
 
-        // 1) Inyectar TextureView dentro del exo_content_frame del PlayerView
         inyectarTextureView();
 
-        // 2) setPlayer() ANTES de setVideoTextureView()
         playerView.setPlayer(exoPlayer);
 
-        // 3) Conectar ExoPlayer a nuestro TextureView
         videoTexture.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
                 exoPlayer.setVideoTextureView(videoTexture);
@@ -119,7 +116,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void inyectarTextureView() {
-        // Encontrar el content frame interno de PlayerView
         View contentFrame = playerView.findViewById(androidx.media3.ui.R.id.exo_content_frame);
         if (!(contentFrame instanceof ViewGroup)) {
             Log.e(TAG, "exo_content_frame no encontrado o no es ViewGroup");
@@ -127,7 +123,6 @@ public class MainActivity extends AppCompatActivity {
         }
         ViewGroup cf = (ViewGroup) contentFrame;
 
-        // Remover solo SurfaceView (quirúrgico). No tocar subtitleView ni ImageView.
         for (int i = cf.getChildCount() - 1; i >= 0; i--) {
             View child = cf.getChildAt(i);
             if (child instanceof SurfaceView) {
@@ -135,7 +130,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Crear el TextureView y agregarlo en posición 0 (detrás de controles)
         videoTexture = new TextureView(this);
         videoTexture.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -144,10 +138,6 @@ public class MainActivity extends AppCompatActivity {
 
         Log.e(TAG, "TextureView inyectado en exo_content_frame");
     }
-
-    // ============================================================
-    // NAVEGACIÓN
-    // ============================================================
 
     private void navegar(int delta) {
         if (canales.isEmpty()) return;
@@ -189,10 +179,6 @@ public class MainActivity extends AppCompatActivity {
         playerContainer.post(this::aplicarRotacion);
     }
 
-    // ============================================================
-    // ROTACIÓN: swap de lp + requestLayout. SIN tocar el pivote.
-    // ============================================================
-
     private void rotar() {
         rotado = !rotado;
         getSharedPreferences("gtv_prefs", MODE_PRIVATE)
@@ -206,7 +192,6 @@ public class MainActivity extends AppCompatActivity {
         int w = playerContainer.getWidth();
         int h = playerContainer.getHeight();
 
-        // 1) Cambiar dimensiones del wrapper (swap si está rotado)
         ViewGroup.LayoutParams lp = rotWrapper.getLayoutParams();
         if (rotado) {
             lp.width = h;
@@ -217,20 +202,29 @@ public class MainActivity extends AppCompatActivity {
         }
         rotWrapper.setLayoutParams(lp);
 
-        // 2) Rotación (transform post-layout)
         rotWrapper.setRotation(rotado ? 90f : 0f);
 
-        // 3) Forzar re-measure del AspectRatioFrameLayout interno
         rotWrapper.requestLayout();
 
-        Log.e(TAG, "aplicarRotacion: rotado=" + rotado + " lp=" + lp.width + "x" + lp.height);
-        // NO tocamos el pivote: Android lo mantiene auto-centrado.
-        // NO usamos scale.
-    }
+        // Reposicionar el botón ⟳ según el estado
+        FrameLayout.LayoutParams lpRot = (FrameLayout.LayoutParams) btnRotate.getLayoutParams();
+        if (rotado) {
+            // Rotado: ⟳ arriba-derecha (lejos del ❯)
+            lpRot.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+            lpRot.topMargin = 40;
+            lpRot.rightMargin = 40;
+            lpRot.bottomMargin = 0;
+        } else {
+            // Normal: ⟳ abajo-derecha (como siempre)
+            lpRot.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+            lpRot.bottomMargin = 110;
+            lpRot.rightMargin = 40;
+            lpRot.topMargin = 0;
+        }
+        btnRotate.setLayoutParams(lpRot);
 
-    // ============================================================
-    // WEBVIEW + PUENTE
-    // ============================================================
+        Log.e(TAG, "aplicarRotacion: rotado=" + rotado);
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     private void configurarWebView() {
@@ -352,10 +346,6 @@ public class MainActivity extends AppCompatActivity {
             "javascript:if(typeof window.volverDelExo==='function')window.volverDelExo();", null));
     }
 
-    // ============================================================
-    // CONTROLES
-    // ============================================================
-
     private void ocultarControlesNativos() {
         controlesVisibles = false;
         infoCanal.setVisibility(View.GONE);
@@ -377,10 +367,6 @@ public class MainActivity extends AppCompatActivity {
         ocultarControlesRunnable = this::ocultarControlesNativos;
         handler.postDelayed(ocultarControlesRunnable, 5000);
     }
-
-    // ============================================================
-    // D-PAD
-    // ============================================================
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
