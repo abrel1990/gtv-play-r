@@ -5,6 +5,7 @@ import android.graphics.SurfaceTexture;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.SurfaceView;
@@ -62,6 +63,8 @@ public class MainActivity extends AppCompatActivity {
     private final Handler handler = new Handler();
     private Runnable ocultarControlesRunnable;
 
+    private String deviceIdCache = null;
+
     static class Canal {
         final String url, nombre, logo;
         Canal(String url, String nombre, String logo) {
@@ -91,7 +94,6 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        // ExoPlayer con redirecciones cross-protocol (para streams .ts que redirigen http→https)
         DefaultHttpDataSource.Factory httpFactory =
             new DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true);
@@ -124,6 +126,49 @@ public class MainActivity extends AppCompatActivity {
         myWebView.loadUrl("https://gtv-portero.abrel03.workers.dev/", extraHeaders);
 
         ocultarBarrasSistema();
+    }
+
+    // ============================================================
+    // DEVICE ID FIJO (basado en ANDROID_ID)
+    // Formato: GTV-XXXXXX
+    // Alfabeto sin 0 ni O (para no confundir)
+    // ============================================================
+
+    private String generarDeviceId() {
+        if (deviceIdCache != null) return deviceIdCache;
+
+        String androidId = null;
+        try {
+            androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+        } catch (Exception e) {
+            Log.e(TAG, "Error obteniendo ANDROID_ID: " + e.getMessage());
+        }
+
+        if (androidId == null || androidId.isEmpty()) {
+            androidId = "GTV_FALLBACK_" + Build.MODEL + "_" + Build.SERIAL;
+        }
+
+        final String ALFABETO = "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ";
+
+        long hash = 0;
+        for (int i = 0; i < androidId.length(); i++) {
+            hash = (hash * 31 + androidId.charAt(i)) & 0xFFFFFFFFL;
+        }
+        hash = hash ^ (hash >> 16);
+        hash = (hash * 0x45d9f3bL) & 0xFFFFFFFFL;
+
+        StringBuilder sb = new StringBuilder("GTV-");
+        long h = hash;
+        for (int i = 0; i < 6; i++) {
+            int idx = (int)(h % ALFABETO.length());
+            sb.append(ALFABETO.charAt(idx));
+            h = h / ALFABETO.length();
+            h = h ^ (h >> 3);
+        }
+
+        deviceIdCache = sb.toString();
+        Log.e(TAG, "deviceId generado: " + deviceIdCache);
+        return deviceIdCache;
     }
 
     private void inyectarTextureView() {
@@ -187,7 +232,6 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.play();
 
         mostrarControles();
-        // Aplicar rotación Y reposicionar botones al abrir el canal
         playerContainer.post(() -> {
             aplicarRotacion();
             reposicionarBotones();
@@ -230,7 +274,6 @@ public class MainActivity extends AppCompatActivity {
         FrameLayout.LayoutParams lpClose = (FrameLayout.LayoutParams) btnClose.getLayoutParams();
 
         if (rotado) {
-            // Rotado: ⟳ arriba-derecha, ✕ abajo-derecha
             lpRot.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
             lpRot.topMargin = 40;
             lpRot.rightMargin = 40;
@@ -240,9 +283,8 @@ public class MainActivity extends AppCompatActivity {
             lpClose.bottomMargin = 40;
             lpClose.rightMargin = 40;
         } else {
-            // Normal: ⟳ arriba del ✕, ambos abajo-derecha (bien separados)
             lpRot.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
-            lpRot.bottomMargin = 160;   // ← subido de 110 a 160 para separarlo del ✕
+            lpRot.bottomMargin = 160;
             lpRot.rightMargin = 40;
             lpRot.topMargin = 0;
 
@@ -292,6 +334,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public class WebAppInterface {
+
+        // EL HTML PIDE EL DEVICE ID FIJO
+        @JavascriptInterface
+        public String getDeviceId() {
+            return generarDeviceId();
+        }
 
         @JavascriptInterface
         public void setLista(final String json) {
