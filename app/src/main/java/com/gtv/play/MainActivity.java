@@ -1,7 +1,9 @@
 package com.gtv.play;
 
 import android.annotation.SuppressLint;
+import android.content.Intent;
 import android.graphics.SurfaceTexture;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -16,6 +18,7 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -131,7 +134,7 @@ public class MainActivity extends AppCompatActivity {
     // ============================================================
     // DEVICE ID FIJO (basado en ANDROID_ID)
     // Formato: GTV-XXXXXX
-    // Alfabeto sin 0 ni O (para no confundir)
+    // Alfabeto sin 0 ni O
     // ============================================================
 
     private String generarDeviceId() {
@@ -320,7 +323,39 @@ public class MainActivity extends AppCompatActivity {
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setSupportMultipleWindows(false);
 
-        myWebView.setWebViewClient(new WebViewClient());
+        // WebViewClient con soporte para esquemas externos (whatsapp://, tel:, mailto:, etc)
+        myWebView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                    } catch (Exception e) {
+                        Log.e(TAG, "No se pudo abrir: " + url);
+                    }
+                    return true;
+                }
+                return false;
+            }
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                    } catch (Exception e) {
+                        Log.e(TAG, "No se pudo abrir: " + url);
+                    }
+                    return true;
+                }
+                return false;
+            }
+        });
+
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
     }
@@ -335,7 +370,6 @@ public class MainActivity extends AppCompatActivity {
 
     public class WebAppInterface {
 
-        // EL HTML PIDE EL DEVICE ID FIJO
         @JavascriptInterface
         public String getDeviceId() {
             return generarDeviceId();
