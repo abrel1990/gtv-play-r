@@ -313,8 +313,6 @@ public class MainActivity extends AppCompatActivity {
         s.setUseWideViewPort(true);
         s.setDatabaseEnabled(true);
         s.setSupportZoom(false);
-        s.setBuiltInZoomControls(false);
-        s.setDisplayZoomControls(false);
         s.setSaveFormData(false);
         s.setGeolocationEnabled(false);
         s.setTextZoom(100);
