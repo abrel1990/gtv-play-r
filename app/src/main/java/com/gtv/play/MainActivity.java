@@ -129,13 +129,15 @@ public class MainActivity extends AppCompatActivity {
         myWebView.loadUrl("https://gtv-portero.abrel03.workers.dev/", extraHeaders);
 
         ocultarBarrasSistema();
-    }
 
-    // ============================================================
-    // DEVICE ID FIJO (basado en ANDROID_ID)
-    // Formato: GTV-XXXXXX
-    // Alfabeto sin 0 ni O
-    // ============================================================
+        // ★ LOG diagnóstico: qué versión de WebView usa la TV (para diagnóstico)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            android.content.pm.PackageInfo wi = WebView.getCurrentWebViewPackage();
+            if (wi != null) {
+                Log.e(TAG, "WebView: " + wi.packageName + " v" + wi.versionName);
+            }
+        }
+    }
 
     private String generarDeviceId() {
         if (deviceIdCache != null) return deviceIdCache;
@@ -207,11 +209,14 @@ public class MainActivity extends AppCompatActivity {
         if (c.url.startsWith("http://")) {
             reproducirEnExo(c);
         } else {
+            // ★ FIX: al volver a modo WebView, parar ExoPlayer y liberar decoders
             enExoPlayer = false;
-            try { exoPlayer.pause(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
+            try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
             playerContainer.setVisibility(View.GONE);
             ocultarControlesNativos();
             myWebView.setVisibility(View.VISIBLE);
+            myWebView.onResume();
+            myWebView.resumeTimers();
             final int idx = indiceActual;
             myWebView.post(() -> myWebView.evaluateJavascript(
                 "javascript:if(typeof window.irACanal==='function')window.irACanal(" + idx + ");", null));
@@ -220,6 +225,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void reproducirEnExo(Canal c) {
         enExoPlayer = true;
+
+        // ★ FIX: pausar el WebView mientras ExoPlayer reproduce — libera CPU y decoder en TV
+        myWebView.onPause();
+        myWebView.pauseTimers();
+
         myWebView.setVisibility(View.VISIBLE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
@@ -321,7 +331,14 @@ public class MainActivity extends AppCompatActivity {
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setSupportMultipleWindows(false);
 
-        // WebViewClient con soporte para esquemas externos (whatsapp://, tel:, mailto:, etc)
+        // ★ FIX: forzar aceleración por hardware del WebView (crítico en TV)
+        myWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
+        // ★ FIX: prioridad de renderizado alta para WebView (API 26+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        }
+
         myWebView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -420,9 +437,11 @@ public class MainActivity extends AppCompatActivity {
         public void mostrarWebView() {
             runOnUiThread(() -> {
                 enExoPlayer = false;
-                try { exoPlayer.pause(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
+                try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
                 playerContainer.setVisibility(View.GONE);
                 myWebView.setVisibility(View.VISIBLE);
+                myWebView.onResume();
+                myWebView.resumeTimers();
                 ocultarControlesNativos();
             });
         }
@@ -446,10 +465,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void cerrarExoPlayer() {
         enExoPlayer = false;
-        try { exoPlayer.pause(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
+        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
         playerContainer.setVisibility(View.GONE);
         ocultarControlesNativos();
         myWebView.setVisibility(View.VISIBLE);
+        myWebView.onResume();
+        myWebView.resumeTimers();
         myWebView.post(() -> myWebView.evaluateJavascript(
             "javascript:if(typeof window.volverDelExo==='function')window.volverDelExo();", null));
     }
@@ -507,6 +528,25 @@ public class MainActivity extends AppCompatActivity {
         if (hasFocus) ocultarBarrasSistema();
     }
 
+    // ★ FIX: ciclo de vida del WebView — pausar/reanudar según Activity
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (myWebView != null && !enExoPlayer) {
+            myWebView.onPause();
+            myWebView.pauseTimers();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (myWebView != null && !enExoPlayer) {
+            myWebView.onResume();
+            myWebView.resumeTimers();
+        }
+    }
+
     @Override
     protected void onStop() {
         super.onStop();
@@ -521,6 +561,15 @@ public class MainActivity extends AppCompatActivity {
         if (exoPlayer != null) {
             try { exoPlayer.release(); } catch (Exception e) {}
             exoPlayer = null;
+        }
+        // ★ FIX: liberar el WebView al destruir la Activity
+        if (myWebView != null) {
+            try {
+                myWebView.loadUrl("about:blank");
+                myWebView.stopLoading();
+                myWebView.destroy();
+                myWebView = null;
+            } catch (Exception e) {}
         }
     }
 
