@@ -16,6 +16,7 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true"
+        android:largeHeap="true"
         android:theme="@style/Theme.AppCompat.NoActionBar">
 
         <activity
@@ -33,7 +34,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="false"
-            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
             android:screenOrientation="unspecified"
             android:launchMode="singleTask" />
     </application>
