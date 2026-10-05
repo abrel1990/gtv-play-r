@@ -390,6 +390,32 @@ public class MainActivity extends AppCompatActivity {
             return generarDeviceId();
         }
 
+        // ★ NUEVO: devuelve el hash SHA-256 de la firma del APK
+        // Formato idéntico al que devuelve "keytool -list -v"
+        // Se usa para que el Worker valide que el APK es el oficial
+        @JavascriptInterface
+        public String getSignatureHash() {
+            try {
+                android.content.pm.PackageInfo info = getPackageManager().getPackageInfo(
+                    getPackageName(),
+                    android.content.pm.PackageManager.GET_SIGNATURES
+                );
+                android.content.pm.Signature[] firmas = info.signatures;
+                if (firmas == null || firmas.length == 0) return "";
+                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+                byte[] hash = md.digest(firmas[0].toByteArray());
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < hash.length; i++) {
+                    if (i > 0) sb.append(":");
+                    sb.append(String.format("%02X", hash[i]));
+                }
+                return sb.toString();
+            } catch (Exception e) {
+                Log.e(TAG, "getSignatureHash error: " + e.getMessage());
+                return "";
+            }
+        }
+
         @JavascriptInterface
         public void setLista(final String json) {
             runOnUiThread(() -> {
