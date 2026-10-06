@@ -130,7 +130,6 @@ public class MainActivity extends AppCompatActivity {
 
         ocultarBarrasSistema();
 
-        // ★ LOG diagnóstico: qué versión de WebView usa la TV (para diagnóstico)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             android.content.pm.PackageInfo wi = WebView.getCurrentWebViewPackage();
             if (wi != null) {
@@ -209,7 +208,6 @@ public class MainActivity extends AppCompatActivity {
         if (c.url.startsWith("http://")) {
             reproducirEnExo(c);
         } else {
-            // ★ FIX: al volver a modo WebView, parar ExoPlayer y liberar decoders
             enExoPlayer = false;
             try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
             playerContainer.setVisibility(View.GONE);
@@ -226,7 +224,6 @@ public class MainActivity extends AppCompatActivity {
     private void reproducirEnExo(Canal c) {
         enExoPlayer = true;
 
-        // ★ FIX: pausar el WebView mientras ExoPlayer reproduce — libera CPU y decoder en TV
         myWebView.onPause();
         myWebView.pauseTimers();
 
@@ -331,10 +328,8 @@ public class MainActivity extends AppCompatActivity {
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setSupportMultipleWindows(false);
 
-        // ★ FIX: forzar aceleración por hardware del WebView (crítico en TV)
         myWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
-        // ★ FIX: prioridad de renderizado alta para WebView (API 26+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         }
@@ -390,30 +385,52 @@ public class MainActivity extends AppCompatActivity {
             return generarDeviceId();
         }
 
-        // ★ NUEVO: devuelve el hash SHA-256 de la firma del APK
-        // Formato idéntico al que devuelve "keytool -list -v"
-        // Se usa para que el Worker valide que el APK es el oficial
+        // ★ FIRMA: devuelve el SHA-256 del certificado de firma del APK.
+        // Coincide con la huella que muestra "keytool -printcert -jarfile" y "keytool -list -v".
+        // Usa SigningInfo en Android 28+ y PackageInfo.signatures en versiones anteriores.
         @JavascriptInterface
         public String getSignatureHash() {
             try {
-                android.content.pm.PackageInfo info = getPackageManager().getPackageInfo(
-                    getPackageName(),
-                    android.content.pm.PackageManager.GET_SIGNATURES
-                );
-                android.content.pm.Signature[] firmas = info.signatures;
-                if (firmas == null || firmas.length == 0) return "";
-                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-                byte[] hash = md.digest(firmas[0].toByteArray());
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < hash.length; i++) {
-                    if (i > 0) sb.append(":");
-                    sb.append(String.format("%02X", hash[i]));
+                android.content.pm.PackageManager pm = getPackageManager();
+                android.content.pm.PackageInfo packageInfo;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    packageInfo = pm.getPackageInfo(
+                        getPackageName(),
+                        android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+                    );
+                    android.content.pm.SigningInfo signingInfo = packageInfo.signingInfo;
+                    if (signingInfo == null) return "";
+                    android.content.pm.Signature[] signatures;
+                    if (signingInfo.hasMultipleSigners()) {
+                        signatures = signingInfo.getApkContentsSigners();
+                    } else {
+                        signatures = signingInfo.getSigningCertificateHistory();
+                    }
+                    if (signatures == null || signatures.length == 0) return "";
+                    return calcularSHA256(signatures[0].toByteArray());
+                } else {
+                    packageInfo = pm.getPackageInfo(
+                        getPackageName(),
+                        android.content.pm.PackageManager.GET_SIGNATURES
+                    );
+                    if (packageInfo.signatures == null || packageInfo.signatures.length == 0) return "";
+                    return calcularSHA256(packageInfo.signatures[0].toByteArray());
                 }
-                return sb.toString();
             } catch (Exception e) {
                 Log.e(TAG, "getSignatureHash error: " + e.getMessage());
                 return "";
             }
+        }
+
+        private String calcularSHA256(byte[] data) throws Exception {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(data);
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < hash.length; i++) {
+                if (i > 0) sb.append(":");
+                sb.append(String.format("%02X", hash[i]));
+            }
+            return sb.toString();
         }
 
         @JavascriptInterface
@@ -554,7 +571,6 @@ public class MainActivity extends AppCompatActivity {
         if (hasFocus) ocultarBarrasSistema();
     }
 
-    // ★ FIX: ciclo de vida del WebView — pausar/reanudar según Activity
     @Override
     protected void onPause() {
         super.onPause();
@@ -588,7 +604,6 @@ public class MainActivity extends AppCompatActivity {
             try { exoPlayer.release(); } catch (Exception e) {}
             exoPlayer = null;
         }
-        // ★ FIX: liberar el WebView al destruir la Activity
         if (myWebView != null) {
             try {
                 myWebView.loadUrl("about:blank");
