@@ -64,21 +64,22 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top|center_horizontal"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="24dp"
                 android:background="@drawable/info_canal_bg"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingStart="5dp"
-                android:paddingEnd="10dp"
-                android:paddingTop="3dp"
-                android:paddingBottom="3dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="5dp"
+                android:paddingBottom="5dp"
                 android:visibility="gone">
 
                 <ImageView
                     android:id="@+id/logo_canal"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginEnd="8dp"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="10dp"
+                    android:padding="2dp"
                     android:scaleType="fitCenter" />
 
                 <TextView
@@ -87,17 +88,17 @@
                     android:layout_height="wrap_content"
                     android:text="Canal"
                     android:textColor="#FFD700"
-                    android:textSize="11sp"
+                    android:textSize="14sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/numero_canal"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
+                    android:layout_marginStart="10dp"
                     android:text="0/0"
                     android:textColor="#FFFFFF"
-                    android:textSize="9sp" />
+                    android:textSize="11sp" />
             </LinearLayout>
 
             <Button
