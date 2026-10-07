@@ -69,7 +69,6 @@ public class MainActivity extends AppCompatActivity {
     private final Handler handler = new Handler();
     private Runnable ocultarControlesRunnable;
 
-    // ★ NUEVO: para la animación de los 3 puntitos y el timeout
     private final Handler loaderHandler = new Handler();
     private int loaderPunto = 0;
     private Runnable loaderAnim;
@@ -121,13 +120,11 @@ public class MainActivity extends AppCompatActivity {
         inyectarTextureView();
         playerView.setPlayer(exoPlayer);
 
-        // ★ NUEVO: listener de ExoPlayer con soporte de error y estado
         exoPlayer.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int state) {
                 if (exoLoader == null) return;
                 if (state == Player.STATE_READY) {
-                    // Canal listo: ocultar loader y cancelar timeout
                     detenerLoaderAnim();
                     exoLoader.setVisibility(View.GONE);
                     if (timeoutCanalCaido != null) {
@@ -135,19 +132,16 @@ public class MainActivity extends AppCompatActivity {
                         timeoutCanalCaido = null;
                     }
                 } else if (state == Player.STATE_BUFFERING) {
-                    // Está cargando: mostrar loader con animación
                     mostrarLoaderSintonizando();
                 }
             }
 
             @Override
             public void onPlayerError(PlaybackException error) {
-                // ★ NUEVO: si el canal falla, mostrar "señal con problemas de origen"
                 if (exoLoader != null) {
                     detenerLoaderAnim();
-                    exoLoader.setText("⚠️ Señal con problemas de origen ajeno a GTVPLAY");
+                    exoLoader.setText("⚠️ Señal con problemas de origen ajenos a GTVPLAY");
                     exoLoader.setVisibility(View.VISIBLE);
-                    // Ocultar después de 5 segundos
                     handler.postDelayed(() -> {
                         if (exoLoader != null) {
                             exoLoader.setVisibility(View.GONE);
@@ -185,7 +179,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ★ NUEVO: animación de 3 puntitos
+    // ★ FIX: animación de puntitos sin cambiar el ancho del loader
     private void mostrarLoaderSintonizando() {
         if (exoLoader == null) return;
         exoLoader.setVisibility(View.VISIBLE);
@@ -193,18 +187,20 @@ public class MainActivity extends AppCompatActivity {
             loaderHandler.removeCallbacks(loaderAnim);
         }
         loaderPunto = 0;
+        final String base = "Sintonizando";
         loaderAnim = new Runnable() {
             @Override
             public void run() {
                 if (exoLoader == null || exoLoader.getVisibility() != View.VISIBLE) return;
-                String[] textos = {
-                    "Sintonizando.",
-                    "Sintonizando..",
-                    "Sintonizando..."
-                };
-                exoLoader.setText(textos[loaderPunto % 3]);
+                String texto;
+                int paso = loaderPunto % 4;
+                if (paso == 0) texto = base + "   ";
+                else if (paso == 1) texto = base + ".  ";
+                else if (paso == 2) texto = base + ".. ";
+                else texto = base + "...";
+                exoLoader.setText(texto);
                 loaderPunto++;
-                loaderHandler.postDelayed(this, 450);
+                loaderHandler.postDelayed(this, 400);
             }
         };
         loaderHandler.post(loaderAnim);
@@ -219,7 +215,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ★ NUEVO: programa el timeout de 15 segundos para canal caído
     private void programarTimeoutCanal() {
         if (timeoutCanalCaido != null) {
             handler.removeCallbacks(timeoutCanalCaido);
@@ -335,20 +330,17 @@ public class MainActivity extends AppCompatActivity {
             Glide.with(this).load(c.logo).into(logoCanal);
         }
 
-        // Stop + clear para evitar zapping trabado
         try {
             exoPlayer.stop();
             exoPlayer.clearMediaItems();
         } catch (Exception e) {}
 
-        // ★ NUEVO: mostrar loader animado con los puntitos
         mostrarLoaderSintonizando();
 
         exoPlayer.setMediaItem(MediaItem.fromUri(c.url));
         exoPlayer.prepare();
         exoPlayer.play();
 
-        // ★ NUEVO: programar el timeout de canal caído
         programarTimeoutCanal();
 
         mostrarControles();
