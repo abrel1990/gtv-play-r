@@ -223,7 +223,7 @@ public class MainActivity extends AppCompatActivity {
             if (exoPlayer != null && exoPlayer.getPlaybackState() != Player.STATE_READY) {
                 if (exoLoader != null) {
                     detenerLoaderAnim();
-                    exoLoader.setText("⚠️ Señal con problemas de origen");
+                    exoLoader.setText("⚠️ Señal con problemas de origen ajenos a GTVPLAY");
                     exoLoader.setVisibility(View.VISIBLE);
                 }
             }
