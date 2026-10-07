@@ -140,11 +140,17 @@ public class MainActivity extends AppCompatActivity {
             public void onPlayerError(PlaybackException error) {
                 if (exoLoader != null) {
                     detenerLoaderAnim();
+                    // ★ Cambiar a estilo de error (rojo + borde blanco)
+                    exoLoader.setBackgroundResource(R.drawable.loader_error_bg);
+                    exoLoader.setTextColor(0xFFE53935);
                     exoLoader.setText("⚠️ Señal con problemas de origen ajenos a GTVPLAY");
                     exoLoader.setVisibility(View.VISIBLE);
                     handler.postDelayed(() -> {
                         if (exoLoader != null) {
                             exoLoader.setVisibility(View.GONE);
+                            // ★ Restaurar estilo normal
+                            exoLoader.setBackgroundResource(R.drawable.loader_bg);
+                            exoLoader.setTextColor(0xFFFFD700);
                             exoLoader.setText("Sintonizando...");
                         }
                     }, 5000);
@@ -179,9 +185,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ★ FIX: animación de puntitos sin cambiar el ancho del loader
     private void mostrarLoaderSintonizando() {
         if (exoLoader == null) return;
+        // Restaurar estilo normal (por si venía de un error)
+        exoLoader.setBackgroundResource(R.drawable.loader_bg);
+        exoLoader.setTextColor(0xFFFFD700);
         exoLoader.setVisibility(View.VISIBLE);
         if (loaderAnim != null) {
             loaderHandler.removeCallbacks(loaderAnim);
@@ -211,6 +219,8 @@ public class MainActivity extends AppCompatActivity {
             loaderHandler.removeCallbacks(loaderAnim);
         }
         if (exoLoader != null) {
+            exoLoader.setBackgroundResource(R.drawable.loader_bg);
+            exoLoader.setTextColor(0xFFFFD700);
             exoLoader.setText("Sintonizando...");
         }
     }
@@ -223,6 +233,9 @@ public class MainActivity extends AppCompatActivity {
             if (exoPlayer != null && exoPlayer.getPlaybackState() != Player.STATE_READY) {
                 if (exoLoader != null) {
                     detenerLoaderAnim();
+                    // ★ Cambiar a estilo de error (rojo + borde blanco)
+                    exoLoader.setBackgroundResource(R.drawable.loader_error_bg);
+                    exoLoader.setTextColor(0xFFE53935);
                     exoLoader.setText("⚠️ Señal con problemas de origen ajenos a GTVPLAY");
                     exoLoader.setVisibility(View.VISIBLE);
                 }
@@ -292,13 +305,35 @@ public class MainActivity extends AppCompatActivity {
         Log.e(TAG, "TextureView inyectado en exo_content_frame");
     }
 
+    // ★ NUEVO: detecta si el canal va a ExoPlayer o a WebView
+    private boolean esCanalExoPlayer(String url) {
+        if (url == null) return false;
+        String u = url.toLowerCase();
+        if (u.contains(".m3u8")) return true;
+        if (u.contains(".mpd")) return true;
+        if (u.contains(".mp4") && u.startsWith("http")) return true;
+        if (u.startsWith("http")
+            && !u.contains("youtube.com")
+            && !u.contains("youtu.be")
+            && !u.contains("twitch.tv")
+            && !u.contains("kick.com")
+            && !u.contains("ok.ru")
+            && !u.contains("odnoklassniki.ru")
+            && !u.contains("dailymotion.com")
+            && !u.contains("tokyvideo.com")) {
+            return true;
+        }
+        return false;
+    }
+
+    // ★ FIX: navegar() sin flash — no ocultar playerContainer si va a ExoPlayer
     private void navegar(int delta) {
         if (canales.isEmpty()) return;
         int n = canales.size();
         indiceActual = ((indiceActual + delta) % n + n) % n;
         Canal c = canales.get(indiceActual);
 
-        if (c.url.startsWith("http://")) {
+        if (esCanalExoPlayer(c.url)) {
             reproducirEnExo(c);
         } else {
             enExoPlayer = false;
