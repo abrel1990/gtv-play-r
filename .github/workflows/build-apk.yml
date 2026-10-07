@@ -5,6 +5,9 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -55,8 +58,27 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
-      - name: Subir APK
+      - name: Renombrar APK
+        run: |
+          mkdir -p release_out
+          cp app/build/outputs/apk/release/*.apk release_out/gtv-play-v${{ steps.version.outputs.name }}.apk
+          ls -lh release_out/
+
+      - name: Subir APK como artifact
         uses: actions/upload-artifact@v4
         with:
           name: gtv-play-apk-v${{ steps.version.outputs.name }}
-          path: app/build/outputs/apk/release/*.apk
+          path: release_out/*.apk
+
+      - name: Crear GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.name }}
+          name: GTV Play v${{ steps.version.outputs.name }}
+          body: |
+            Compilación automática.
+            - VersionCode: ${{ steps.version.outputs.code }}
+            - VersionName: ${{ steps.version.outputs.name }}
+          files: release_out/gtv-play-v${{ steps.version.outputs.name }}.apk
+          draft: false
+          prerelease: false
