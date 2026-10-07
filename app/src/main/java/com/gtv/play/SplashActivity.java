@@ -14,8 +14,7 @@ public class SplashActivity extends AppCompatActivity {
         setContentView(R.layout.activity_splash);
 
         ImageView splashImage = findViewById(R.id.splash_image);
-        String splashUrl = "https://dl.dropboxusercontent.com/scl/fi/2ggwtfsj0izusrjch21hk/photo_2025-04-23_20-53-38.jpg?rlkey=ww7hdei2rlea2m1q5mr6gyu9b&st=2jbss54u&dl=1";
-
+        String splashUrl = "https://dl.dropboxusercontent.com/scl/fi/e2e6ee6hvr2aw6pxzc00f/AIRetouch_20261007_192754382.jpg?rlkey=5zpffdw3r8kfxu4hjdm5q27v0&st=6qat7i69&dl=1";
         Glide.with(this)
             .load(splashUrl)
             .into(splashImage);
