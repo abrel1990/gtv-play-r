@@ -1,8 +1,15 @@
 package com.gtv.play;
 
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.graphics.SurfaceTexture;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -27,7 +34,9 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
@@ -38,6 +47,11 @@ import androidx.media3.ui.PlayerView;
 import com.bumptech.glide.Glide;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -76,6 +90,12 @@ public class MainActivity extends AppCompatActivity {
     private Runnable timeoutCanalCaido;
 
     private String deviceIdCache = null;
+
+    // ★ Constantes para el sistema de actualización
+    private static final String UPDATE_PREFS = "gtv_update";
+    private static final String UPDATE_TRIES_PREFIX = "gtv_update_tries_";
+    private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version";
+    private static final int MAX_SKIPS = 3;
 
     static class Canal {
         final String url, nombre, logo;
@@ -173,9 +193,209 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(TAG, "WebView: " + wi.packageName + " v" + wi.versionName);
             }
         }
+
+        // ★ Chequear actualización después de 3 segundos
+        handler.postDelayed(this::checkForUpdates, 3000);
     }
 
-    // Muestra el loader "Sintonizando..."
+    // ============================================================
+    // SISTEMA DE ACTUALIZACIONES AUTOMÁTICAS
+    // ============================================================
+
+    private void checkForUpdates() {
+        if (!hayInternet()) {
+            Log.e(TAG, "Sin internet, no chequeo update");
+            return;
+        }
+        new Thread(() -> {
+            try {
+                URL url = new URL(VERSION_URL);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+                conn.setRequestProperty("X-GTV-Origin", "gtv_app_2026_secreto_xyz789");
+                int code = conn.getResponseCode();
+                if (code != 200) {
+                    Log.e(TAG, "Update check HTTP " + code);
+                    return;
+                }
+                InputStream is = conn.getInputStream();
+                java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(is));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                br.close();
+                is.close();
+
+                JSONObject json = new JSONObject(sb.toString());
+                String remoteVersion = json.optString("versionName", "");
+                String apkUrl = json.optString("apkUrl", "");
+
+                String currentVersion = getCurrentVersionName();
+                if (remoteVersion.isEmpty() || apkUrl.isEmpty()) return;
+                if (remoteVersion.equals(currentVersion)) {
+                    Log.e(TAG, "App al día: " + currentVersion);
+                    return;
+                }
+
+                Log.e(TAG, "Update disponible: " + currentVersion + " → " + remoteVersion);
+                final String remoteVer = remoteVersion;
+                final String urlApk = apkUrl;
+                runOnUiThread(() -> mostrarDialogoUpdate(remoteVer, urlApk));
+            } catch (Exception e) {
+                Log.e(TAG, "Error chequeando update: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private boolean hayInternet() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo ni = cm.getActiveNetworkInfo();
+            return ni != null && ni.isConnected();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private String getCurrentVersionName() {
+        try {
+            PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+            return pi.versionName;
+        } catch (Exception e) {
+            return "0";
+        }
+    }
+
+    private int getSkipsForVersion(String version) {
+        SharedPreferences prefs = getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE);
+        return prefs.getInt(UPDATE_TRIES_PREFIX + version, 0);
+    }
+
+    private void incrementSkipsForVersion(String version) {
+        SharedPreferences prefs = getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE);
+        int actual = prefs.getInt(UPDATE_TRIES_PREFIX + version, 0);
+        prefs.edit().putInt(UPDATE_TRIES_PREFIX + version, actual + 1).apply();
+    }
+
+    private void mostrarDialogoUpdate(String remoteVersion, String apkUrl) {
+        int skips = getSkipsForVersion(remoteVersion);
+        boolean obligatorio = skips >= MAX_SKIPS;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(obligatorio ? "⚠️ Actualización obligatoria" : "🎉 Nueva versión disponible");
+        builder.setMessage(
+            "Versión actual: " + getCurrentVersionName() + "\n" +
+            "Nueva versión: " + remoteVersion + "\n\n" +
+            (obligatorio
+                ? "Es necesario actualizar para seguir usando la app."
+                : "Podés actualizar ahora o más tarde.\nTe quedan " + (MAX_SKIPS - skips) +
+                  " oportunidades antes de que sea obligatorio.")
+        );
+        builder.setCancelable(!obligatorio);
+
+        builder.setPositiveButton("Actualizar ahora", (dialog, which) -> {
+            dialog.dismiss();
+            descargarEInstalar(apkUrl);
+        });
+
+        if (!obligatorio) {
+            builder.setNegativeButton("Más tarde", (dialog, which) -> {
+                incrementSkipsForVersion(remoteVersion);
+                dialog.dismiss();
+            });
+        }
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+    }
+
+    private void descargarEInstalar(String apkUrl) {
+        final ProgressDialog progress = new ProgressDialog(this);
+        progress.setTitle("Descargando actualización");
+        progress.setMessage("Descargando... 0%");
+        progress.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        progress.setCancelable(false);
+        progress.setMax(100);
+        progress.show();
+
+        new Thread(() -> {
+            try {
+                // Descargar a la caché interna de la app
+                File cacheDir = getCacheDir();
+                final File apkFile = new File(cacheDir, "update.apk");
+                if (apkFile.exists()) apkFile.delete();
+
+                URL url = new URL(apkUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(15000);
+                conn.setRequestProperty("X-GTV-Origin", "gtv_app_2026_secreto_xyz789");
+                conn.connect();
+
+                int fileLength = conn.getContentLength();
+                InputStream is = conn.getInputStream();
+                FileOutputStream fos = new FileOutputStream(apkFile);
+                byte[] buffer = new byte[8192];
+                long total = 0;
+                int count;
+                while ((count = is.read(buffer)) != -1) {
+                    total += count;
+                    if (fileLength > 0) {
+                        final int pct = (int) (total * 100 / fileLength);
+                        runOnUiThread(() -> {
+                            progress.setMessage("Descargando... " + pct + "%");
+                            progress.setProgress(pct);
+                        });
+                    }
+                    fos.write(buffer, 0, count);
+                }
+                fos.flush();
+                fos.close();
+                is.close();
+
+                runOnUiThread(() -> {
+                    progress.dismiss();
+                    instalarApk(apkFile);
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "Error descargando APK: " + e.getMessage());
+                runOnUiThread(() -> {
+                    progress.dismiss();
+                    Toast.makeText(MainActivity.this,
+                        "Error al descargar: " + e.getMessage(),
+                        Toast.LENGTH_LONG).show();
+                });
+            }
+        }).start();
+    }
+
+    private void instalarApk(File apkFile) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Uri apkUri = FileProvider.getUriForFile(
+                this,
+                getPackageName() + ".fileprovider",
+                apkFile
+            );
+            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            startActivity(intent);
+            Log.e(TAG, "Instalador abierto");
+        } catch (Exception e) {
+            Log.e(TAG, "Error abriendo instalador: " + e.getMessage());
+            Toast.makeText(this,
+                "Error al abrir instalador: " + e.getMessage(),
+                Toast.LENGTH_LONG).show();
+        }
+    }
+
+    // ============================================================
+    // LOADERS (Sintonizando y Error)
+    // ============================================================
+
     private void mostrarLoaderSintonizando() {
         if (exoLoader == null) return;
         if (exoLoaderError != null) exoLoaderError.setVisibility(View.GONE);
@@ -203,13 +423,11 @@ public class MainActivity extends AppCompatActivity {
         loaderHandler.post(loaderAnim);
     }
 
-    // Muestra el loader "Señal con problemas"
     private void mostrarLoaderError() {
         if (exoLoader != null) exoLoader.setVisibility(View.GONE);
         if (exoLoaderError != null) exoLoaderError.setVisibility(View.VISIBLE);
     }
 
-    // Oculta los dos loaders
     private void ocultarLoaders() {
         if (exoLoader != null) {
             exoLoader.setVisibility(View.GONE);
@@ -236,6 +454,10 @@ public class MainActivity extends AppCompatActivity {
         };
         handler.postDelayed(timeoutCanalCaido, 15000);
     }
+
+    // ============================================================
+    // DEVICE ID
+    // ============================================================
 
     private String generarDeviceId() {
         if (deviceIdCache != null) return deviceIdCache;
@@ -273,6 +495,10 @@ public class MainActivity extends AppCompatActivity {
         Log.e(TAG, "deviceId generado: " + deviceIdCache);
         return deviceIdCache;
     }
+
+    // ============================================================
+    // REPRODUCTOR
+    // ============================================================
 
     private void inyectarTextureView() {
         View contentFrame = playerView.findViewById(androidx.media3.ui.R.id.exo_content_frame);
@@ -747,6 +973,14 @@ public class MainActivity extends AppCompatActivity {
             handler.removeCallbacks(timeoutCanalCaido);
             timeoutCanalCaido = null;
         }
+        // ★ Borrar el APK de actualización si quedó
+        try {
+            File apkFile = new File(getCacheDir(), "update.apk");
+            if (apkFile.exists()) {
+                apkFile.delete();
+                Log.e(TAG, "APK de actualización borrado de la caché");
+            }
+        } catch (Exception e) {}
         if (exoPlayer != null) {
             try { exoPlayer.release(); } catch (Exception e) {}
             exoPlayer = null;
