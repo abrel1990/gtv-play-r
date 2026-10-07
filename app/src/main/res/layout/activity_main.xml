@@ -77,10 +77,6 @@
                 android:textColor="#E53935"
                 android:textSize="12sp"
                 android:textStyle="bold"
-                android:shadowColor="#FFFFFF"
-                android:shadowDx="0"
-                android:shadowDy="0"
-                android:shadowRadius="2.5"
                 android:visibility="gone" />
 
             <LinearLayout
