@@ -279,35 +279,68 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit().putInt(UPDATE_TRIES_PREFIX + version, actual + 1).apply();
     }
 
-    private void mostrarDialogoUpdate(String remoteVersion, String apkUrl) {
+      private void mostrarDialogoUpdate(String remoteVersion, String apkUrl) {
         int skips = getSkipsForVersion(remoteVersion);
         boolean obligatorio = skips >= MAX_SKIPS;
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle(obligatorio ? "⚠️ Actualización obligatoria" : "🎉 Nueva versión disponible");
-        builder.setMessage(
-            "Versión actual: " + getCurrentVersionName() + "\n" +
-            "Nueva versión: " + remoteVersion + "\n\n" +
-            (obligatorio
-                ? "Es necesario actualizar para seguir usando la app."
-                : "Podés actualizar ahora o más tarde.\nTe quedan " + (MAX_SKIPS - skips) +
-                  " oportunidades antes de que sea obligatorio.")
-        );
-        builder.setCancelable(!obligatorio);
+        // Inflar el layout custom
+        android.view.LayoutInflater inflater = getLayoutInflater();
+        View dialogView = inflater.inflate(R.layout.dialog_update, null);
 
-        builder.setPositiveButton("Actualizar ahora", (dialog, which) -> {
+        // Referencias a las vistas
+        TextView dialogTitle = dialogView.findViewById(R.id.dialogTitle);
+        TextView dialogSubtitle = dialogView.findViewById(R.id.dialogSubtitle);
+        TextView dialogVersionActual = dialogView.findViewById(R.id.dialogVersionActual);
+        TextView dialogVersionNueva = dialogView.findViewById(R.id.dialogVersionNueva);
+        TextView dialogMensaje = dialogView.findViewById(R.id.dialogMensaje);
+        Button btnActualizar = dialogView.findViewById(R.id.dialogBtnActualizar);
+        Button btnMasTarde = dialogView.findViewById(R.id.dialogBtnMasTarde);
+
+        // Configurar textos
+        if (obligatorio) {
+            dialogTitle.setText("⚠️ Actualización obligatoria");
+            dialogTitle.setTextColor(0xFFE53935);
+            dialogSubtitle.setText("Es necesario actualizar GTV Play");
+            dialogMensaje.setText("Es necesario actualizar para seguir usando la app.");
+        } else {
+            dialogTitle.setText("🎉 Nueva versión disponible");
+            dialogSubtitle.setText("Actualización de GTV Play");
+            dialogMensaje.setText(
+                "Podés actualizar ahora o más tarde.\n" +
+                "Te quedan " + (MAX_SKIPS - skips) + " oportunidades antes de que sea obligatorio."
+            );
+        }
+
+        dialogVersionActual.setText("Versión actual:  " + getCurrentVersionName());
+        dialogVersionNueva.setText("Nueva versión:  " + remoteVersion);
+
+        // Crear el diálogo
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setView(dialogView);
+        builder.setCancelable(!obligatorio);
+        AlertDialog dialog = builder.create();
+
+        // Fondo transparente para que se vean los bordes redondeados propios
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        // Botón Actualizar ahora
+        btnActualizar.setOnClickListener(v -> {
             dialog.dismiss();
             descargarEInstalar(apkUrl);
         });
 
-        if (!obligatorio) {
-            builder.setNegativeButton("Más tarde", (dialog, which) -> {
+        // Botón Más tarde (solo si no es obligatorio)
+        if (obligatorio) {
+            btnMasTarde.setVisibility(View.GONE);
+        } else {
+            btnMasTarde.setOnClickListener(v -> {
                 incrementSkipsForVersion(remoteVersion);
                 dialog.dismiss();
             });
         }
 
-        AlertDialog dialog = builder.create();
         dialog.show();
     }
 
