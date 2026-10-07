@@ -17,6 +17,7 @@ import android.os.Handler;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.LayoutInflater;
 import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
@@ -91,7 +92,6 @@ public class MainActivity extends AppCompatActivity {
 
     private String deviceIdCache = null;
 
-    // ★ Constantes para el sistema de actualización
     private static final String UPDATE_PREFS = "gtv_update";
     private static final String UPDATE_TRIES_PREFIX = "gtv_update_tries_";
     private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version";
@@ -194,7 +194,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // ★ Chequear actualización después de 3 segundos
         handler.postDelayed(this::checkForUpdates, 3000);
     }
 
@@ -279,15 +278,13 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit().putInt(UPDATE_TRIES_PREFIX + version, actual + 1).apply();
     }
 
-      private void mostrarDialogoUpdate(String remoteVersion, String apkUrl) {
+    private void mostrarDialogoUpdate(String remoteVersion, String apkUrl) {
         int skips = getSkipsForVersion(remoteVersion);
         boolean obligatorio = skips >= MAX_SKIPS;
 
-        // Inflar el layout custom
-        android.view.LayoutInflater inflater = getLayoutInflater();
+        LayoutInflater inflater = getLayoutInflater();
         View dialogView = inflater.inflate(R.layout.dialog_update, null);
 
-        // Referencias a las vistas
         TextView dialogTitle = dialogView.findViewById(R.id.dialogTitle);
         TextView dialogSubtitle = dialogView.findViewById(R.id.dialogSubtitle);
         TextView dialogVersionActual = dialogView.findViewById(R.id.dialogVersionActual);
@@ -296,7 +293,6 @@ public class MainActivity extends AppCompatActivity {
         Button btnActualizar = dialogView.findViewById(R.id.dialogBtnActualizar);
         Button btnMasTarde = dialogView.findViewById(R.id.dialogBtnMasTarde);
 
-        // Configurar textos
         if (obligatorio) {
             dialogTitle.setText("⚠️ Actualización obligatoria");
             dialogTitle.setTextColor(0xFFE53935);
@@ -314,24 +310,20 @@ public class MainActivity extends AppCompatActivity {
         dialogVersionActual.setText("Versión actual:  " + getCurrentVersionName());
         dialogVersionNueva.setText("Nueva versión:  " + remoteVersion);
 
-        // Crear el diálogo
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setView(dialogView);
         builder.setCancelable(!obligatorio);
         AlertDialog dialog = builder.create();
 
-        // Fondo transparente para que se vean los bordes redondeados propios
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
 
-        // Botón Actualizar ahora
         btnActualizar.setOnClickListener(v -> {
             dialog.dismiss();
             descargarEInstalar(apkUrl);
         });
 
-        // Botón Más tarde (solo si no es obligatorio)
         if (obligatorio) {
             btnMasTarde.setVisibility(View.GONE);
         } else {
@@ -342,6 +334,22 @@ public class MainActivity extends AppCompatActivity {
         }
 
         dialog.show();
+
+        if (dialog.getWindow() != null) {
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            int dialogWidth = (int)(screenWidth * 0.7);
+            dialog.getWindow().setLayout(dialogWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+
+        btnActualizar.post(() -> {
+            btnActualizar.requestFocus();
+            btnActualizar.setFocusable(true);
+            btnActualizar.setFocusableInTouchMode(true);
+        });
+        if (!obligatorio) {
+            btnMasTarde.setFocusable(true);
+            btnMasTarde.setFocusableInTouchMode(true);
+        }
     }
 
     private void descargarEInstalar(String apkUrl) {
@@ -355,7 +363,6 @@ public class MainActivity extends AppCompatActivity {
 
         new Thread(() -> {
             try {
-                // Descargar a la caché interna de la app
                 File cacheDir = getCacheDir();
                 final File apkFile = new File(cacheDir, "update.apk");
                 if (apkFile.exists()) apkFile.delete();
@@ -1006,7 +1013,6 @@ public class MainActivity extends AppCompatActivity {
             handler.removeCallbacks(timeoutCanalCaido);
             timeoutCanalCaido = null;
         }
-        // ★ Borrar el APK de actualización si quedó
         try {
             File apkFile = new File(getCacheDir(), "update.apk");
             if (apkFile.exists()) {
