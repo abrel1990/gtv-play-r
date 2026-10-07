@@ -337,7 +337,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (dialog.getWindow() != null) {
             int screenWidth = getResources().getDisplayMetrics().widthPixels;
-            int dialogWidth = (int)(screenWidth * 0.7);
+            int dialogWidth = (int)(screenWidth * 0.55);
             dialog.getWindow().setLayout(dialogWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
 
