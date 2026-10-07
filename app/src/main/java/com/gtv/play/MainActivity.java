@@ -402,7 +402,7 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
-    private void abrirCanalDesdeWatchNext(String url, String nombre, String logo) {
+      private void abrirCanalDesdeWatchNext(String url, String nombre, String logo) {
         int idx = -1;
         for (int i = 0; i < canales.size(); i++) {
             if (canales.get(i).url.equals(url)) { idx = i; break; }
@@ -415,9 +415,7 @@ public class MainActivity extends AppCompatActivity {
                 reproducirEnExo(c);
             } else {
                 // Va por WebView
-                if (window != null) {
-                    try { window.getDecorView().post(() -> irACanalWebView(idx)); } catch (Exception e) {}
-                }
+                irACanalWebView(idx);
             }
         } else {
             // No está en la lista, lo reproducimos directo
