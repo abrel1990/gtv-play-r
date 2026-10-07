@@ -3,10 +3,12 @@ package com.gtv.play;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
+import android.database.Cursor;
 import android.graphics.SurfaceTexture;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -45,6 +47,8 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
+import androidx.tvprovider.media.tv.TvContractCompat;
+import androidx.tvprovider.media.tv.WatchNextProgram;
 import com.bumptech.glide.Glide;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -91,6 +95,12 @@ public class MainActivity extends AppCompatActivity {
     private Runnable timeoutCanalCaido;
 
     private String deviceIdCache = null;
+
+    // Watch Next
+    private static final String WATCH_NEXT_CHANNEL_NAME = "GTV Play Recientes";
+    private long watchNextChannelId = -1;
+    private final ArrayList<String> historialCanales = new ArrayList<>();
+    private static final int MAX_HISTORIAL = 10;
 
     private static final String UPDATE_PREFS = "gtv_update";
     private static final String UPDATE_TRIES_PREFIX = "gtv_update_tries_";
@@ -195,6 +205,237 @@ public class MainActivity extends AppCompatActivity {
         }
 
         handler.postDelayed(this::checkForUpdates, 3000);
+
+        // Watch Next: crear el canal si es Android TV
+        handler.postDelayed(this::inicializarWatchNext, 1500);
+    }
+
+    // ============================================================
+    // WATCH NEXT (Android TV)
+    // ============================================================
+
+    private boolean esTV() {
+        return getPackageManager().hasSystemFeature("android.software.leanback");
+    }
+
+    private void inicializarWatchNext() {
+        if (!esTV()) {
+            Log.e(TAG, "Watch Next: dispositivo no es TV, se ignora");
+            return;
+        }
+        try {
+            watchNextChannelId = obtenerOCrearCanalWatchNext();
+            if (watchNextChannelId != -1) {
+                Log.e(TAG, "Watch Next: canal listo con id=" + watchNextChannelId);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Watch Next: error inicializando: " + e.getMessage());
+        }
+    }
+
+    private long obtenerOCrearCanalWatchNext() {
+        try {
+            // Buscar si ya existe el canal
+            Cursor cursor = getContentResolver().query(
+                TvContractCompat.Channels.CONTENT_URI,
+                new String[]{
+                    TvContractCompat.Channels._ID,
+                    TvContractCompat.Channels.COLUMN_DISPLAY_NAME
+                },
+                null, null, null
+            );
+            if (cursor != null) {
+                while (cursor.moveToNext()) {
+                    long id = cursor.getLong(0);
+                    String nombre = cursor.getString(1);
+                    if (WATCH_NEXT_CHANNEL_NAME.equals(nombre)) {
+                        cursor.close();
+                        return id;
+                    }
+                }
+                cursor.close();
+            }
+
+            // No existe, lo creamos
+            android.content.ContentValues values = new android.content.ContentValues();
+            values.put(TvContractCompat.Channels.COLUMN_DISPLAY_NAME, WATCH_NEXT_CHANNEL_NAME);
+            values.put(TvContractCompat.Channels.COLUMN_DESCRIPTION, "Últimos canales que viste en GTV Play");
+            values.put(TvContractCompat.Channels.COLUMN_TYPE, TvContractCompat.Channels.TYPE_PREVIEW);
+            values.put(TvContractCompat.Channels.COLUMN_BROWSABLE, 0);
+            values.put(TvContractCompat.Channels.COLUMN_SEARCHABLE, 0);
+            values.put(TvContractCompat.Channels.COLUMN_APP_LINK_INTENT_URI,
+                "gtvplay://play?url=");
+
+            Uri channelUri = getContentResolver().insert(
+                TvContractCompat.Channels.CONTENT_URI, values);
+
+            if (channelUri == null) return -1;
+
+            long channelId = ContentUris.parseId(channelUri);
+
+            // Solicitar que el canal sea visible
+            try {
+                TvContractCompat.requestChannelBrowsable(this, channelId);
+            } catch (Exception e) {
+                Log.e(TAG, "Watch Next: error pidiendo browsable: " + e.getMessage());
+            }
+
+            Log.e(TAG, "Watch Next: canal creado con id=" + channelId);
+            return channelId;
+        } catch (Exception e) {
+            Log.e(TAG, "Watch Next: error en obtenerOCrearCanal: " + e.getMessage());
+            return -1;
+        }
+    }
+
+    private void agregarAlWatchNext(Canal canal) {
+        if (!esTV() || watchNextChannelId == -1) return;
+        if (canal == null || canal.url == null) return;
+
+        try {
+            // Si ya existe un programa con la misma URL, lo borramos para reinsertar
+            try {
+                Cursor cursor = getContentResolver().query(
+                    TvContractCompat.PreviewPrograms.CONTENT_URI,
+                    new String[]{
+                        TvContractCompat.PreviewPrograms._ID,
+                        TvContractCompat.PreviewPrograms.COLUMN_INTENT_URI
+                    },
+                    null, null, null
+                );
+                if (cursor != null) {
+                    while (cursor.moveToNext()) {
+                        long id = cursor.getLong(0);
+                        String intentUri = cursor.getString(1);
+                        if (intentUri != null && intentUri.contains(Uri.encode(canal.url))) {
+                            getContentResolver().delete(
+                                TvContractCompat.PreviewPrograms.CONTENT_URI.buildUpon()
+                                    .appendPath(String.valueOf(id)).build(),
+                                null, null
+                            );
+                        }
+                    }
+                    cursor.close();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Watch Next: error buscando duplicados: " + e.getMessage());
+            }
+
+            String intentUri = "gtvplay://play?url=" + Uri.encode(canal.url)
+                + "&nombre=" + Uri.encode(canal.nombre != null ? canal.nombre : "")
+                + "&logo=" + Uri.encode(canal.logo != null ? canal.logo : "");
+
+            WatchNextProgram.Builder builder = new WatchNextProgram.Builder();
+            builder.setType(TvContractCompat.WatchNextPrograms.TYPE_CLIP);
+            builder.setWatchNextType(TvContractCompat.WatchNextPrograms.WATCH_NEXT_TYPE_CONTINUE);
+            builder.setLastEngagementTimeUtcMillis(System.currentTimeMillis());
+            builder.setTitle(canal.nombre != null ? canal.nombre : "Canal");
+            builder.setDescription("GTV Play");
+            builder.setIntentUri(Uri.parse(intentUri));
+            if (canal.logo != null && !canal.logo.isEmpty()) {
+                builder.setPosterArtUri(Uri.parse(canal.logo));
+            }
+            builder.setInternalProviderId(canal.url);
+
+            WatchNextProgram programa = builder.build();
+            getContentResolver().insert(
+                TvContractCompat.WatchNextPrograms.CONTENT_URI,
+                programa.toContentValues()
+            );
+
+            Log.e(TAG, "Watch Next: agregado " + canal.nombre);
+        } catch (Exception e) {
+            Log.e(TAG, "Watch Next: error agregando: " + e.getMessage());
+        }
+    }
+
+    // Llamar a esto cada vez que el usuario cambia de canal
+    private void actualizarWatchNext() {
+        if (!esTV() || canales.isEmpty()) return;
+        if (indiceActual < 0 || indiceActual >= canales.size()) return;
+
+        Canal c = canales.get(indiceActual);
+        if (c == null) return;
+
+        // Evitar duplicados en el historial
+        historialCanales.remove(c.url);
+        historialCanales.add(0, c.url);
+        while (historialCanales.size() > MAX_HISTORIAL) {
+            historialCanales.remove(historialCanales.size() - 1);
+        }
+
+        agregarAlWatchNext(c);
+    }
+
+    // ============================================================
+    // MANEJO DEL INTENT QUE VIENE DEL WATCH NEXT
+    // ============================================================
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        manejarIntentEntrante(intent);
+    }
+
+    private void manejarIntentEntrante(Intent intent) {
+        if (intent == null || intent.getData() == null) return;
+        Uri data = intent.getData();
+        if (!"gtvplay".equals(data.getScheme())) return;
+
+        String url = data.getQueryParameter("url");
+        String nombre = data.getQueryParameter("nombre");
+        String logo = data.getQueryParameter("logo");
+
+        if (url == null || url.isEmpty()) return;
+
+        Log.e(TAG, "Watch Next: recibido canal " + nombre + " url=" + url);
+
+        // Esperar a que la lista de canales esté cargada
+        new Handler().postDelayed(() -> {
+            if (canales.isEmpty()) {
+                Log.e(TAG, "Watch Next: canales no cargados aún, reintentando");
+                new Handler().postDelayed(() -> abrirCanalDesdeWatchNext(url, nombre, logo), 3000);
+                return;
+            }
+            abrirCanalDesdeWatchNext(url, nombre, logo);
+        }, 2000);
+    }
+
+    private void abrirCanalDesdeWatchNext(String url, String nombre, String logo) {
+        int idx = -1;
+        for (int i = 0; i < canales.size(); i++) {
+            if (canales.get(i).url.equals(url)) { idx = i; break; }
+        }
+
+        if (idx >= 0) {
+            indiceActual = idx;
+            Canal c = canales.get(idx);
+            if (esCanalExoPlayer(c.url)) {
+                reproducirEnExo(c);
+            } else {
+                // Va por WebView
+                if (window != null) {
+                    try { window.getDecorView().post(() -> irACanalWebView(idx)); } catch (Exception e) {}
+                }
+            }
+        } else {
+            // No está en la lista, lo reproducimos directo
+            Canal c = new Canal(url, nombre != null ? nombre : "Canal", logo != null ? logo : "");
+            if (esCanalExoPlayer(url)) {
+                indiceActual = -1;
+                reproducirEnExo(c);
+            }
+        }
+    }
+
+    private void irACanalWebView(final int idx) {
+        runOnUiThread(() -> {
+            if (myWebView != null) {
+                myWebView.evaluateJavascript(
+                    "javascript:if(typeof window.irACanal==='function')window.irACanal(" + idx + ");", null);
+            }
+        });
     }
 
     // ============================================================
@@ -342,10 +583,8 @@ public class MainActivity extends AppCompatActivity {
 
             int dialogWidth;
             if (esTV) {
-                // TV: 55% del ancho (horizontal)
                 dialogWidth = (int)(screenWidth * 0.55);
             } else {
-                // Celular: 90% del ancho, pero máximo 340dp para que no se vea gigante
                 dialogWidth = (int)(screenWidth * 0.90);
                 int maxAnchoPx = (int)(340 * getResources().getDisplayMetrics().density);
                 if (dialogWidth > maxAnchoPx) {
@@ -648,6 +887,9 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.play();
 
         programarTimeoutCanal();
+
+        // Watch Next: registrar el canal como "visto"
+        handler.postDelayed(this::actualizarWatchNext, 5000);
 
         mostrarControles();
         playerContainer.post(() -> {
