@@ -41,6 +41,7 @@
                 app:resize_mode="fit"
                 android:keepScreenOn="true" />
 
+            <!-- Sintonizando (letra amarilla, SIN halo) -->
             <TextView
                 android:id="@+id/exo_loader"
                 android:layout_width="wrap_content"
@@ -57,6 +58,29 @@
                 android:textColor="#FFD700"
                 android:textSize="12sp"
                 android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Señal con problemas (letra roja CON halo blanco) -->
+            <TextView
+                android:id="@+id/exo_loader_error"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@drawable/loader_bg"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:minWidth="130dp"
+                android:gravity="center"
+                android:text="⚠️ Señal con problemas de origen ajenos a GTVPLAY"
+                android:textColor="#E53935"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:shadowColor="#FFFFFF"
+                android:shadowDx="0"
+                android:shadowDy="0"
+                android:shadowRadius="2.5"
                 android:visibility="gone" />
 
             <LinearLayout
