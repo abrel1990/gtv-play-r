@@ -29,6 +29,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.Player;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
@@ -54,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private ImageView logoCanal;
     private TextView nombreCanal;
     private TextView numeroCanal;
+    private TextView exoLoader;
     private Button btnPrev, btnNext, btnClose, btnRotate;
     private View btnShield;
 
@@ -94,6 +96,8 @@ public class MainActivity extends AppCompatActivity {
         btnClose = findViewById(R.id.btn_close);
         btnRotate = findViewById(R.id.btn_rotate);
         btnShield = findViewById(R.id.btn_shield);
+        // ★ NUEVO: loader nativo para ExoPlayer
+        exoLoader = findViewById(R.id.exo_loader);
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
@@ -110,6 +114,19 @@ public class MainActivity extends AppCompatActivity {
 
         inyectarTextureView();
         playerView.setPlayer(exoPlayer);
+
+        // ★ NUEVO: listener para mostrar/ocultar el loader según estado
+        exoPlayer.addListener(new Player.Listener() {
+            @Override
+            public void onPlaybackStateChanged(int state) {
+                if (exoLoader == null) return;
+                if (state == Player.STATE_READY) {
+                    exoLoader.setVisibility(View.GONE);
+                } else if (state == Player.STATE_BUFFERING) {
+                    exoLoader.setVisibility(View.VISIBLE);
+                }
+            }
+        });
 
         videoTexture.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
@@ -236,6 +253,15 @@ public class MainActivity extends AppCompatActivity {
         if (c.logo != null && !c.logo.isEmpty()) {
             Glide.with(this).load(c.logo).into(logoCanal);
         }
+
+        // ★ FIX: stop + clear antes de cargar nuevo, para evitar zapping trabado
+        try {
+            exoPlayer.stop();
+            exoPlayer.clearMediaItems();
+        } catch (Exception e) {}
+
+        // Mostrar el loader "Sintonizando..."
+        if (exoLoader != null) exoLoader.setVisibility(View.VISIBLE);
 
         exoPlayer.setMediaItem(MediaItem.fromUri(c.url));
         exoPlayer.prepare();
@@ -385,9 +411,6 @@ public class MainActivity extends AppCompatActivity {
             return generarDeviceId();
         }
 
-        // ★ FIRMA: devuelve el SHA-256 del certificado de firma del APK.
-        // Coincide con la huella que muestra "keytool -printcert -jarfile" y "keytool -list -v".
-        // Usa SigningInfo en Android 28+ y PackageInfo.signatures en versiones anteriores.
         @JavascriptInterface
         public String getSignatureHash() {
             try {
@@ -441,9 +464,10 @@ public class MainActivity extends AppCompatActivity {
                     canales.clear();
                     for (int i = 0; i < arr.length(); i++) {
                         JSONObject o = arr.getJSONObject(i);
+                        String nombre = o.optString("nombre", o.optString("name", "Canal " + (i + 1)));
                         canales.add(new Canal(
                             o.getString("url"),
-                            o.optString("nombre", "Canal " + (i + 1)),
+                            nombre,
                             o.optString("logo", "")
                         ));
                     }
@@ -457,6 +481,16 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface
         public void sincronizarIndice(final int i) {
             runOnUiThread(() -> indiceActual = i);
+        }
+
+        @JavascriptInterface
+        public void detener() {
+            runOnUiThread(() -> {
+                try {
+                    exoPlayer.stop();
+                    exoPlayer.clearMediaItems();
+                } catch (Exception e) {}
+            });
         }
 
         @JavascriptInterface
