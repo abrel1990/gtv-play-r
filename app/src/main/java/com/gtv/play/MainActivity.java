@@ -57,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView nombreCanal;
     private TextView numeroCanal;
     private TextView exoLoader;
+    private TextView exoLoaderError;
     private Button btnPrev, btnNext, btnClose, btnRotate;
     private View btnShield;
 
@@ -103,6 +104,7 @@ public class MainActivity extends AppCompatActivity {
         btnRotate = findViewById(R.id.btn_rotate);
         btnShield = findViewById(R.id.btn_shield);
         exoLoader = findViewById(R.id.exo_loader);
+        exoLoaderError = findViewById(R.id.exo_loader_error);
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
@@ -126,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
                 if (exoLoader == null) return;
                 if (state == Player.STATE_READY) {
                     detenerLoaderAnim();
-                    exoLoader.setVisibility(View.GONE);
+                    ocultarLoaders();
                     if (timeoutCanalCaido != null) {
                         handler.removeCallbacks(timeoutCanalCaido);
                         timeoutCanalCaido = null;
@@ -138,23 +140,11 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onPlayerError(PlaybackException error) {
-                if (exoLoader != null) {
-                    detenerLoaderAnim();
-                    // ★ Cambiar a estilo de error (rojo + borde blanco)
-                    exoLoader.setBackgroundResource(R.drawable.loader_error_bg);
-                    exoLoader.setTextColor(0xFFE53935);
-                    exoLoader.setText("⚠️ Señal con problemas de origen ajenos a GTVPLAY");
-                    exoLoader.setVisibility(View.VISIBLE);
-                    handler.postDelayed(() -> {
-                        if (exoLoader != null) {
-                            exoLoader.setVisibility(View.GONE);
-                            // ★ Restaurar estilo normal
-                            exoLoader.setBackgroundResource(R.drawable.loader_bg);
-                            exoLoader.setTextColor(0xFFFFD700);
-                            exoLoader.setText("Sintonizando...");
-                        }
-                    }, 5000);
-                }
+                detenerLoaderAnim();
+                mostrarLoaderError();
+                handler.postDelayed(() -> {
+                    ocultarLoaders();
+                }, 5000);
             }
         });
 
@@ -185,11 +175,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Muestra el loader "Sintonizando..."
     private void mostrarLoaderSintonizando() {
         if (exoLoader == null) return;
-        // Restaurar estilo normal (por si venía de un error)
-        exoLoader.setBackgroundResource(R.drawable.loader_bg);
-        exoLoader.setTextColor(0xFFFFD700);
+        if (exoLoaderError != null) exoLoaderError.setVisibility(View.GONE);
         exoLoader.setVisibility(View.VISIBLE);
         if (loaderAnim != null) {
             loaderHandler.removeCallbacks(loaderAnim);
@@ -214,14 +203,24 @@ public class MainActivity extends AppCompatActivity {
         loaderHandler.post(loaderAnim);
     }
 
+    // Muestra el loader "Señal con problemas"
+    private void mostrarLoaderError() {
+        if (exoLoader != null) exoLoader.setVisibility(View.GONE);
+        if (exoLoaderError != null) exoLoaderError.setVisibility(View.VISIBLE);
+    }
+
+    // Oculta los dos loaders
+    private void ocultarLoaders() {
+        if (exoLoader != null) {
+            exoLoader.setVisibility(View.GONE);
+            exoLoader.setText("Sintonizando...");
+        }
+        if (exoLoaderError != null) exoLoaderError.setVisibility(View.GONE);
+    }
+
     private void detenerLoaderAnim() {
         if (loaderAnim != null) {
             loaderHandler.removeCallbacks(loaderAnim);
-        }
-        if (exoLoader != null) {
-            exoLoader.setBackgroundResource(R.drawable.loader_bg);
-            exoLoader.setTextColor(0xFFFFD700);
-            exoLoader.setText("Sintonizando...");
         }
     }
 
@@ -231,14 +230,8 @@ public class MainActivity extends AppCompatActivity {
         }
         timeoutCanalCaido = () -> {
             if (exoPlayer != null && exoPlayer.getPlaybackState() != Player.STATE_READY) {
-                if (exoLoader != null) {
-                    detenerLoaderAnim();
-                    // ★ Cambiar a estilo de error (rojo + borde blanco)
-                    exoLoader.setBackgroundResource(R.drawable.loader_error_bg);
-                    exoLoader.setTextColor(0xFFE53935);
-                    exoLoader.setText("⚠️ Señal con problemas de origen ajenos a GTVPLAY");
-                    exoLoader.setVisibility(View.VISIBLE);
-                }
+                detenerLoaderAnim();
+                mostrarLoaderError();
             }
         };
         handler.postDelayed(timeoutCanalCaido, 15000);
@@ -305,7 +298,6 @@ public class MainActivity extends AppCompatActivity {
         Log.e(TAG, "TextureView inyectado en exo_content_frame");
     }
 
-    // ★ NUEVO: detecta si el canal va a ExoPlayer o a WebView
     private boolean esCanalExoPlayer(String url) {
         if (url == null) return false;
         String u = url.toLowerCase();
@@ -326,7 +318,6 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    // ★ FIX: navegar() sin flash — no ocultar playerContainer si va a ExoPlayer
     private void navegar(int delta) {
         if (canales.isEmpty()) return;
         int n = canales.size();
@@ -657,6 +648,7 @@ public class MainActivity extends AppCompatActivity {
         playerContainer.setVisibility(View.GONE);
         ocultarControlesNativos();
         detenerLoaderAnim();
+        ocultarLoaders();
         if (timeoutCanalCaido != null) {
             handler.removeCallbacks(timeoutCanalCaido);
             timeoutCanalCaido = null;
