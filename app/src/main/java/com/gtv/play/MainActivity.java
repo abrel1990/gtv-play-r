@@ -337,7 +337,21 @@ public class MainActivity extends AppCompatActivity {
 
         if (dialog.getWindow() != null) {
             int screenWidth = getResources().getDisplayMetrics().widthPixels;
-            int dialogWidth = (int)(screenWidth * 0.55);
+            int screenHeight = getResources().getDisplayMetrics().heightPixels;
+            boolean esTV = screenWidth > screenHeight;
+
+            int dialogWidth;
+            if (esTV) {
+                // TV: 55% del ancho (horizontal)
+                dialogWidth = (int)(screenWidth * 0.55);
+            } else {
+                // Celular: 90% del ancho, pero máximo 340dp para que no se vea gigante
+                dialogWidth = (int)(screenWidth * 0.90);
+                int maxAnchoPx = (int)(340 * getResources().getDisplayMetrics().density);
+                if (dialogWidth > maxAnchoPx) {
+                    dialogWidth = maxAnchoPx;
+                }
+            }
             dialog.getWindow().setLayout(dialogWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
 
