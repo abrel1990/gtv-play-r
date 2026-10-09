@@ -235,7 +235,6 @@ public class MainActivity extends AppCompatActivity {
 
     private long obtenerOCrearCanalWatchNext() {
         try {
-            // Buscar si ya existe el canal
             Cursor cursor = getContentResolver().query(
                 TvContractCompat.Channels.CONTENT_URI,
                 new String[]{
@@ -256,7 +255,6 @@ public class MainActivity extends AppCompatActivity {
                 cursor.close();
             }
 
-            // No existe, lo creamos
             android.content.ContentValues values = new android.content.ContentValues();
             values.put(TvContractCompat.Channels.COLUMN_DISPLAY_NAME, WATCH_NEXT_CHANNEL_NAME);
             values.put(TvContractCompat.Channels.COLUMN_DESCRIPTION, "Últimos canales que viste en GTV Play");
@@ -273,7 +271,6 @@ public class MainActivity extends AppCompatActivity {
 
             long channelId = ContentUris.parseId(channelUri);
 
-            // Solicitar que el canal sea visible
             try {
                 TvContractCompat.requestChannelBrowsable(this, channelId);
             } catch (Exception e) {
@@ -293,7 +290,6 @@ public class MainActivity extends AppCompatActivity {
         if (canal == null || canal.url == null) return;
 
         try {
-            // Si ya existe un programa con la misma URL, lo borramos para reinsertar
             try {
                 Cursor cursor = getContentResolver().query(
                     TvContractCompat.PreviewPrograms.CONTENT_URI,
@@ -349,7 +345,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Llamar a esto cada vez que el usuario cambia de canal
     private void actualizarWatchNext() {
         if (!esTV() || canales.isEmpty()) return;
         if (indiceActual < 0 || indiceActual >= canales.size()) return;
@@ -357,7 +352,6 @@ public class MainActivity extends AppCompatActivity {
         Canal c = canales.get(indiceActual);
         if (c == null) return;
 
-        // Evitar duplicados en el historial
         historialCanales.remove(c.url);
         historialCanales.add(0, c.url);
         while (historialCanales.size() > MAX_HISTORIAL) {
@@ -391,7 +385,6 @@ public class MainActivity extends AppCompatActivity {
 
         Log.e(TAG, "Watch Next: recibido canal " + nombre + " url=" + url);
 
-        // Esperar a que la lista de canales esté cargada
         new Handler().postDelayed(() -> {
             if (canales.isEmpty()) {
                 Log.e(TAG, "Watch Next: canales no cargados aún, reintentando");
@@ -402,7 +395,7 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
-      private void abrirCanalDesdeWatchNext(String url, String nombre, String logo) {
+    private void abrirCanalDesdeWatchNext(String url, String nombre, String logo) {
         int idx = -1;
         for (int i = 0; i < canales.size(); i++) {
             if (canales.get(i).url.equals(url)) { idx = i; break; }
@@ -414,11 +407,9 @@ public class MainActivity extends AppCompatActivity {
             if (esCanalExoPlayer(c.url)) {
                 reproducirEnExo(c);
             } else {
-                // Va por WebView
                 irACanalWebView(idx);
             }
         } else {
-            // No está en la lista, lo reproducimos directo
             Canal c = new Canal(url, nombre != null ? nombre : "Canal", logo != null ? logo : "");
             if (esCanalExoPlayer(url)) {
                 indiceActual = -1;
@@ -844,26 +835,20 @@ public class MainActivity extends AppCompatActivity {
         if (esCanalExoPlayer(c.url)) {
             reproducirEnExo(c);
         } else {
-            enExoPlayer = false;
-            try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
-            playerContainer.setVisibility(View.GONE);
-            ocultarControlesNativos();
-            myWebView.setVisibility(View.VISIBLE);
-            myWebView.onResume();
-            myWebView.resumeTimers();
-            final int idx = indiceActual;
-            myWebView.post(() -> myWebView.evaluateJavascript(
-                "javascript:if(typeof window.irACanal==='function')window.irACanal(" + idx + ");", null));
+            // ✅ FIX: patrón unificado de "volver al WebView"
+            volverAlWebViewConJS("javascript:if(typeof window.irACanal==='function')window.irACanal(" + indiceActual + ");");
         }
     }
 
     private void reproducirEnExo(Canal c) {
         enExoPlayer = true;
 
+        // ✅ FIX: pausar Y OCULTAR el WebView (antes quedaba VISIBLE detrás del Exo,
+        // eso causaba la pantalla negra y el "rebote" al reproductor web al salir).
         myWebView.onPause();
         myWebView.pauseTimers();
+        myWebView.setVisibility(View.GONE);
 
-        myWebView.setVisibility(View.VISIBLE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
 
@@ -886,7 +871,6 @@ public class MainActivity extends AppCompatActivity {
 
         programarTimeoutCanal();
 
-        // Watch Next: registrar el canal como "visto"
         handler.postDelayed(this::actualizarWatchNext, 5000);
 
         mostrarControles();
@@ -976,7 +960,9 @@ public class MainActivity extends AppCompatActivity {
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setSupportMultipleWindows(false);
 
-        myWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        // ✅ FIX: eliminado myWebView.setLayerType(LAYER_TYPE_HARDWARE, null)
+        // Esa línea rompía el compositor al alternar WebView ↔ PlayerView y causaba
+        // pantallas negras intermitentes. El manifest ya tiene hardwareAccelerated="true".
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
@@ -1162,9 +1148,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void cerrarExoPlayer() {
+    // ✅ NUEVO: helper unificado para volver al WebView y ejecutar JS con delay
+    // (da tiempo al WebView a "despertar" antes de inyectar JavaScript)
+    private void volverAlWebViewConJS(String js) {
         enExoPlayer = false;
-        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
+        try {
+            exoPlayer.stop();
+            exoPlayer.clearMediaItems();
+        } catch (Exception e) {}
+
         playerContainer.setVisibility(View.GONE);
         ocultarControlesNativos();
         detenerLoaderAnim();
@@ -1173,11 +1165,30 @@ public class MainActivity extends AppCompatActivity {
             handler.removeCallbacks(timeoutCanalCaido);
             timeoutCanalCaido = null;
         }
+
         myWebView.setVisibility(View.VISIBLE);
         myWebView.onResume();
         myWebView.resumeTimers();
-        myWebView.post(() -> myWebView.evaluateJavascript(
-            "javascript:if(typeof window.volverDelExo==='function')window.volverDelExo();", null));
+
+        myWebView.postDelayed(() -> {
+            try {
+                if (js != null && !js.isEmpty()) {
+                    myWebView.evaluateJavascript(js, null);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "volverAlWebViewConJS error: " + e.getMessage());
+            }
+        }, 100);
+
+        Log.e(TAG, "volverAlWebViewConJS → webView.vis=" + myWebView.getVisibility());
+    }
+
+    private void cerrarExoPlayer() {
+        // ✅ FIX: usar el helper unificado con postDelayed(100) para darle tiempo
+        // al WebView de reanudar su render antes de inyectar el JS.
+        volverAlWebViewConJS(
+            "javascript:window.volverDelExo&&window.volverDelExo();"
+        );
     }
 
     private void ocultarControlesNativos() {
