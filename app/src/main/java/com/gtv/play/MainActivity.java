@@ -1232,12 +1232,33 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onBackPressed() {
-        if (enExoPlayer) { cerrarExoPlayer(); return; }
-        if (myWebView.canGoBack()) { myWebView.goBack(); return; }
-        super.onBackPressed();
+public void onBackPressed() {
+    // ✅ FIX TV: si estamos en Exo, cerrar directo
+    if (enExoPlayer) {
+        cerrarExoPlayer();
+        return;
     }
-
+    // ✅ FIX TV: si estamos en el player WEB (Kick/YouTube/etc.),
+    // avisarle al JS para que salga LIMPIAMENTE sin goBack().
+    if (myWebView != null) {
+        myWebView.evaluateJavascript(
+            "(function(){try{return (window.estoyEnPlayer&&window.estoyEnPlayer())?'PLAYER':'NO';}catch(e){return 'NO';}})()",
+            value -> {
+                if (value != null && value.contains("PLAYER")) {
+                    myWebView.evaluateJavascript(
+                        "javascript:(function(){try{if(window.stop)window.stop();}catch(e){}})()",
+                        null);
+                } else if (myWebView.canGoBack()) {
+                    myWebView.goBack();
+                } else {
+                    finish();
+                }
+            }
+        );
+        return;
+    }
+    super.onBackPressed();
+}
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
