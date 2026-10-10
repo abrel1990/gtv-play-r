@@ -1184,12 +1184,48 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void cerrarExoPlayer() {
-        // ✅ FIX: usar el helper unificado con postDelayed(100) para darle tiempo
-        // al WebView de reanudar su render antes de inyectar el JS.
-        volverAlWebViewConJS(
-            "javascript:window.volverDelExo&&window.volverDelExo();"
+    // ✅ FIX ZAPPING: consultar al JS si estamos en medio del zapping.
+    // Si sí, cerrar el Exo pero NO llamar a volverDelExo()
+    // (el JS ya va a mostrar el nuevo canal sin pasar por la lista).
+    if (myWebView != null) {
+        myWebView.evaluateJavascript(
+            "(function(){try{return window._zappingEnCurso?'SI':'NO';}catch(e){return 'NO';}})()",
+            value -> {
+                boolean esZapping = value != null && value.contains("SI");
+                ejecutarCierreExo(esZapping);
+            }
         );
+        return;
     }
+    ejecutarCierreExo(false);
+}
+
+// ✅ NUEVO: helper que hace el cierre real del Exo
+private void ejecutarCierreExo(boolean esZapping) {
+    enExoPlayer = false;
+    try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
+    playerContainer.setVisibility(View.GONE);
+    ocultarControlesNativos();
+    detenerLoaderAnim();
+    ocultarLoaders();
+    if (timeoutCanalCaido != null) {
+        handler.removeCallbacks(timeoutCanalCaido);
+        timeoutCanalCaido = null;
+    }
+    myWebView.setVisibility(View.VISIBLE);
+    myWebView.onResume();
+    myWebView.resumeTimers();
+    // ✅ Solo llamar a volverDelExo si NO es zapping
+    if (!esZapping) {
+        myWebView.postDelayed(() -> {
+            try {
+                myWebView.evaluateJavascript(
+                    "javascript:window.volverDelExo&&window.volverDelExo();", null);
+            } catch (Exception e) {}
+        }, 32);
+    }
+    Log.e(TAG, "cerrarExoPlayer → esZapping=" + esZapping);
+}
 
     private void ocultarControlesNativos() {
         controlesVisibles = false;
