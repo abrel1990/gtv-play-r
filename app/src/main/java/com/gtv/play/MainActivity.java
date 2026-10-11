@@ -96,6 +96,9 @@ public class MainActivity extends AppCompatActivity {
 
     private String deviceIdCache = null;
 
+    // ✅ NUEVO: bandera para saber si el WebView ya está listo para recibir JS
+    private volatile boolean webViewListo = false;
+
     // Watch Next
     private static final String WATCH_NEXT_CHANNEL_NAME = "GTV Play Recientes";
     private long watchNextChannelId = -1;
@@ -138,9 +141,14 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
+        // ✅ NUEVO: User-Agent tipo VLC para servidores IPTV exquisitos
+        // Sigue siendo ExoPlayer, solo se disfraza en el header HTTP
         DefaultHttpDataSource.Factory httpFactory =
             new DefaultHttpDataSource.Factory()
-                .setAllowCrossProtocolRedirects(true);
+                .setAllowCrossProtocolRedirects(true)
+                .setUserAgent("VLC/3.0.20 LibVLC/3.0.20")
+                .setConnectTimeoutMs(15000)
+                .setReadTimeoutMs(15000);
 
         DefaultMediaSourceFactory mediaSourceFactory =
             new DefaultMediaSourceFactory(httpFactory);
@@ -163,6 +171,8 @@ public class MainActivity extends AppCompatActivity {
                         handler.removeCallbacks(timeoutCanalCaido);
                         timeoutCanalCaido = null;
                     }
+                    // ✅ NUEVO: avisar al WebView que Exo ya está pintando
+                    avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 } else if (state == Player.STATE_BUFFERING) {
                     mostrarLoaderSintonizando();
                 }
@@ -172,6 +182,8 @@ public class MainActivity extends AppCompatActivity {
             public void onPlayerError(PlaybackException error) {
                 detenerLoaderAnim();
                 mostrarLoaderError();
+                // ✅ NUEVO: avisar al WebView que hubo un error nativo
+                avisarAlWebView("window.gtv&&window.gtv.onNativoError&&window.gtv.onNativoError();");
                 handler.postDelayed(() -> {
                     ocultarLoaders();
                 }, 5000);
@@ -205,9 +217,19 @@ public class MainActivity extends AppCompatActivity {
         }
 
         handler.postDelayed(this::checkForUpdates, 3000);
-
-        // Watch Next: crear el canal si es Android TV
         handler.postDelayed(this::inicializarWatchNext, 1500);
+    }
+
+    // ============================================================
+    // ✅ NUEVO: helper centralizado para hablar con el WebView
+    // ============================================================
+    private void avisarAlWebView(String js) {
+        if (myWebView == null || !webViewListo) return;
+        myWebView.post(() -> {
+            try {
+                myWebView.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
+            } catch (Exception e) {}
+        });
     }
 
     // ============================================================
@@ -362,7 +384,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ============================================================
-    // MANEJO DEL INTENT QUE VIENE DEL WATCH NEXT
+    // INTENT ENTRANTE DEL WATCH NEXT
     // ============================================================
 
     @Override
@@ -428,7 +450,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ============================================================
-    // SISTEMA DE ACTUALIZACIONES AUTOMÁTICAS
+    // ACTUALIZACIONES AUTOMÁTICAS
     // ============================================================
 
     private void checkForUpdates() {
@@ -675,7 +697,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ============================================================
-    // LOADERS (Sintonizando y Error)
+    // LOADERS
     // ============================================================
 
     private void mostrarLoaderSintonizando() {
@@ -732,6 +754,7 @@ public class MainActivity extends AppCompatActivity {
             if (exoPlayer != null && exoPlayer.getPlaybackState() != Player.STATE_READY) {
                 detenerLoaderAnim();
                 mostrarLoaderError();
+                avisarAlWebView("window.gtv&&window.gtv.onNativoError&&window.gtv.onNativoError();");
             }
         };
         handler.postDelayed(timeoutCanalCaido, 15000);
@@ -806,12 +829,29 @@ public class MainActivity extends AppCompatActivity {
         Log.e(TAG, "TextureView inyectado en exo_content_frame");
     }
 
+    // ✅ MEJORADO: detección más amplia de lo que Exo puede reproducir
+    // Sigue siendo la misma lógica, solo con más patrones HLS y más embeds bloqueados
     private boolean esCanalExoPlayer(String url) {
         if (url == null) return false;
         String u = url.toLowerCase();
+
+        // 1. Extensiones explícitas que Exo reproduce nativo
         if (u.contains(".m3u8")) return true;
-        if (u.contains(".mpd")) return true;
+        if (u.contains(".mpd"))   return true;
         if (u.contains(".mp4") && u.startsWith("http")) return true;
+        if (u.contains(".ts")  && u.startsWith("http")) return true;
+        if (u.contains(".webm") && u.startsWith("http")) return true;
+
+        // 2. Patrones típicos de HLS sin extensión clara
+        if (u.startsWith("http")) {
+            if (u.contains("/hls/"))   return true;
+            if (u.contains("/live/") && !u.contains("youtube")) return true;
+            if (u.contains("type=hls") || u.contains("format=hls")) return true;
+            if (u.contains("type=m3u8") || u.contains("format=m3u8")) return true;
+            if (u.contains(".m3u8?"))  return true;
+        }
+
+        // 3. HTTP genérico que NO es embed conocido → intentar con Exo
         if (u.startsWith("http")
             && !u.contains("youtube.com")
             && !u.contains("youtu.be")
@@ -820,7 +860,11 @@ public class MainActivity extends AppCompatActivity {
             && !u.contains("ok.ru")
             && !u.contains("odnoklassniki.ru")
             && !u.contains("dailymotion.com")
-            && !u.contains("tokyvideo.com")) {
+            && !u.contains("tokyvideo.com")
+            && !u.contains("facebook.com")
+            && !u.contains("instagram.com")
+            && !u.contains("tiktok.com")
+            && !u.contains("vimeo.com")) {
             return true;
         }
         return false;
@@ -835,7 +879,6 @@ public class MainActivity extends AppCompatActivity {
         if (esCanalExoPlayer(c.url)) {
             reproducirEnExo(c);
         } else {
-            // ✅ FIX: patrón unificado de "volver al WebView"
             volverAlWebViewConJS("javascript:if(typeof window.irACanal==='function')window.irACanal(" + indiceActual + ");");
         }
     }
@@ -843,8 +886,6 @@ public class MainActivity extends AppCompatActivity {
     private void reproducirEnExo(Canal c) {
         enExoPlayer = true;
 
-        // ✅ FIX: pausar Y OCULTAR el WebView (antes quedaba VISIBLE detrás del Exo,
-        // eso causaba la pantalla negra y el "rebote" al reproductor web al salir).
         myWebView.onPause();
         myWebView.pauseTimers();
         myWebView.setVisibility(View.GONE);
@@ -870,6 +911,9 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.play();
 
         programarTimeoutCanal();
+
+        // ✅ NUEVO: avisar al WebView que se entró al modo nativo
+        avisarAlWebView("window.gtv&&window.gtv.onNativoIniciado&&window.gtv.onNativoIniciado();");
 
         handler.postDelayed(this::actualizarWatchNext, 5000);
 
@@ -960,15 +1004,19 @@ public class MainActivity extends AppCompatActivity {
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setSupportMultipleWindows(false);
 
-        // ✅ FIX: eliminado myWebView.setLayerType(LAYER_TYPE_HARDWARE, null)
-        // Esa línea rompía el compositor al alternar WebView ↔ PlayerView y causaba
-        // pantallas negras intermitentes. El manifest ya tiene hardwareAccelerated="true".
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         }
 
         myWebView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                // ✅ NUEVO: marcar el WebView como listo para recibir JS
+                webViewListo = true;
+                Log.e(TAG, "WebView listo: " + url);
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
@@ -1118,6 +1166,13 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
+        // ✅ NUEVO: le dice al JS si esta URL debe ir a Exo o al WebView
+        // Así el JS y el Java usan la MISMA regla (una sola fuente de verdad)
+        @JavascriptInterface
+        public boolean esExoPlayer(String url) {
+            return esCanalExoPlayer(url);
+        }
+
         @JavascriptInterface
         public void mostrarWebView() {
             runOnUiThread(() -> {
@@ -1148,8 +1203,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ✅ NUEVO: helper unificado para volver al WebView y ejecutar JS con delay
-    // (da tiempo al WebView a "despertar" antes de inyectar JavaScript)
     private void volverAlWebViewConJS(String js) {
         enExoPlayer = false;
         try {
@@ -1173,7 +1226,7 @@ public class MainActivity extends AppCompatActivity {
         myWebView.postDelayed(() -> {
             try {
                 if (js != null && !js.isEmpty()) {
-                    myWebView.evaluateJavascript(js, null);
+                    myWebView.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
                 }
             } catch (Exception e) {
                 Log.e(TAG, "volverAlWebViewConJS error: " + e.getMessage());
@@ -1184,48 +1237,43 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void cerrarExoPlayer() {
-    // ✅ FIX ZAPPING: consultar al JS si estamos en medio del zapping.
-    // Si sí, cerrar el Exo pero NO llamar a volverDelExo()
-    // (el JS ya va a mostrar el nuevo canal sin pasar por la lista).
-    if (myWebView != null) {
-        myWebView.evaluateJavascript(
-            "(function(){try{return window._zappingEnCurso?'SI':'NO';}catch(e){return 'NO';}})()",
-            value -> {
-                boolean esZapping = value != null && value.contains("SI");
-                ejecutarCierreExo(esZapping);
-            }
-        );
-        return;
+        if (myWebView != null) {
+            myWebView.evaluateJavascript(
+                "(function(){try{return window._zappingEnCurso?'SI':'NO';}catch(e){return 'NO';}})()",
+                value -> {
+                    boolean esZapping = value != null && value.contains("SI");
+                    ejecutarCierreExo(esZapping);
+                }
+            );
+            return;
+        }
+        ejecutarCierreExo(false);
     }
-    ejecutarCierreExo(false);
-}
 
-// ✅ NUEVO: helper que hace el cierre real del Exo
-private void ejecutarCierreExo(boolean esZapping) {
-    enExoPlayer = false;
-    try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
-    playerContainer.setVisibility(View.GONE);
-    ocultarControlesNativos();
-    detenerLoaderAnim();
-    ocultarLoaders();
-    if (timeoutCanalCaido != null) {
-        handler.removeCallbacks(timeoutCanalCaido);
-        timeoutCanalCaido = null;
+    private void ejecutarCierreExo(boolean esZapping) {
+        enExoPlayer = false;
+        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception e) {}
+        playerContainer.setVisibility(View.GONE);
+        ocultarControlesNativos();
+        detenerLoaderAnim();
+        ocultarLoaders();
+        if (timeoutCanalCaido != null) {
+            handler.removeCallbacks(timeoutCanalCaido);
+            timeoutCanalCaido = null;
+        }
+        myWebView.setVisibility(View.VISIBLE);
+        myWebView.onResume();
+        myWebView.resumeTimers();
+        if (!esZapping) {
+            myWebView.postDelayed(() -> {
+                try {
+                    myWebView.evaluateJavascript(
+                        "javascript:window.volverDelExo&&window.volverDelExo();", null);
+                } catch (Exception e) {}
+            }, 32);
+        }
+        Log.e(TAG, "cerrarExoPlayer → esZapping=" + esZapping);
     }
-    myWebView.setVisibility(View.VISIBLE);
-    myWebView.onResume();
-    myWebView.resumeTimers();
-    // ✅ Solo llamar a volverDelExo si NO es zapping
-    if (!esZapping) {
-        myWebView.postDelayed(() -> {
-            try {
-                myWebView.evaluateJavascript(
-                    "javascript:window.volverDelExo&&window.volverDelExo();", null);
-            } catch (Exception e) {}
-        }, 32);
-    }
-    Log.e(TAG, "cerrarExoPlayer → esZapping=" + esZapping);
-}
 
     private void ocultarControlesNativos() {
         controlesVisibles = false;
@@ -1268,33 +1316,32 @@ private void ejecutarCierreExo(boolean esZapping) {
     }
 
     @Override
-public void onBackPressed() {
-    // ✅ FIX TV: si estamos en Exo, cerrar directo
-    if (enExoPlayer) {
-        cerrarExoPlayer();
-        return;
-    }
-    // ✅ FIX TV: si estamos en el player WEB (Kick/YouTube/etc.),
-    // avisarle al JS para que salga LIMPIAMENTE sin goBack().
-    if (myWebView != null) {
-        myWebView.evaluateJavascript(
-            "(function(){try{return (window.estoyEnPlayer&&window.estoyEnPlayer())?'PLAYER':'NO';}catch(e){return 'NO';}})()",
-            value -> {
-                if (value != null && value.contains("PLAYER")) {
-                    myWebView.evaluateJavascript(
-                        "javascript:(function(){try{if(window.stop)window.stop();}catch(e){}})()",
-                        null);
-                } else if (myWebView.canGoBack()) {
-                    myWebView.goBack();
-                } else {
-                    finish();
+    public void onBackPressed() {
+        if (enExoPlayer) {
+            cerrarExoPlayer();
+            return;
+        }
+        if (myWebView != null) {
+            myWebView.evaluateJavascript(
+                "(function(){try{return (window.estoyEnPlayer&&window.estoyEnPlayer())?'PLAYER':'NO';}catch(e){return 'NO';}})()",
+                value -> {
+                    if (value != null && value.contains("PLAYER")) {
+                        // ✅ MEJORADO: usar gtvStop si existe, sino fallback a stop
+                        myWebView.evaluateJavascript(
+                            "javascript:(function(){try{if(window.gtvStop)window.gtvStop();else if(window.stop)window.stop();}catch(e){}})()",
+                            null);
+                    } else if (myWebView.canGoBack()) {
+                        myWebView.goBack();
+                    } else {
+                        finish();
+                    }
                 }
-            }
-        );
-        return;
+            );
+            return;
+        }
+        super.onBackPressed();
     }
-    super.onBackPressed();
-}
+
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
