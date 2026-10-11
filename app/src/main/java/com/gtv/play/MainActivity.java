@@ -141,17 +141,21 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        // ✅ NUEVO: User-Agent tipo VLC para servidores IPTV exquisitos
-        // Sigue siendo ExoPlayer, solo se disfraza en el header HTTP
-        DefaultHttpDataSource.Factory httpFactory =
-            new DefaultHttpDataSource.Factory()
-                .setAllowCrossProtocolRedirects(true)
-                .setUserAgent("VLC/3.0.20 LibVLC/3.0.20")
-                .setConnectTimeoutMs(15000)
-                .setReadTimeoutMs(15000);
+        // ✅ FIX: headers para CDN que requieren Referer/Origin
+Map<String, String> headers = new HashMap<>();
+headers.put("Referer", "https://cdn1.cef-technology.com/");
+headers.put("Origin", "https://cdn1.cef-technology.com");
 
-        DefaultMediaSourceFactory mediaSourceFactory =
-            new DefaultMediaSourceFactory(httpFactory);
+DefaultHttpDataSource.Factory httpFactory =
+    new DefaultHttpDataSource.Factory()
+        .setAllowCrossProtocolRedirects(true)
+        .setUserAgent("VLC/3.0.20 LibVLC/3.0.20")
+        .setConnectTimeoutMs(15000)
+        .setReadTimeoutMs(15000)
+        .setDefaultRequestProperties(headers);
+
+DefaultMediaSourceFactory mediaSourceFactory =
+    new DefaultMediaSourceFactory(httpFactory);
 
         exoPlayer = new ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
