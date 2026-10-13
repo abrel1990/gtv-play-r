@@ -44,7 +44,6 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.datasource.DefaultHttpDataSource;
-import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.PlayerView;
@@ -99,9 +98,6 @@ public class MainActivity extends AppCompatActivity {
 
     private volatile boolean webViewListo = false;
 
-    // ✅ NUEVO: contador de reintentos por canal (para retry automático)
-    private final HashMap<Integer, Integer> errorRetries = new HashMap<>();
-
     // Watch Next
     private static final String WATCH_NEXT_CHANNEL_NAME = "GTV Play Recientes";
     private long watchNextChannelId = -1;
@@ -113,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version";
     private static final int MAX_SKIPS = 3;
 
-    // User-Agent Android Mobile (como MX Player)
+    // ✅ User-Agent Android Mobile (como MX Player). Es lo que el CDN espera ver.
     private static final String UA_NAVEGADOR = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 
     static class Canal {
@@ -153,43 +149,26 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        // Headers MÍNIMOS (como MX Player). Solo User-Agent.
+        // ============================================================
+        // ✅ Headers MÍNIMOS (como MX Player). Solo User-Agent.
+        // Los headers "extra" (Accept-Language, Connection, etc.) hacían
+        // que el CDN nos detecte como cliente raro y bloquee.
+        // ============================================================
         Map<String, String> headersBase = new HashMap<>();
         headersBase.put("User-Agent", UA_NAVEGADOR);
 
         DefaultHttpDataSource.Factory httpFactoryBase =
             new DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(12000)
-                .setReadTimeoutMs(12000)
+                .setConnectTimeoutMs(15000)
+                .setReadTimeoutMs(15000)
                 .setDefaultRequestProperties(headersBase);
 
         DefaultMediaSourceFactory mediaSourceFactoryBase =
             new DefaultMediaSourceFactory(httpFactoryBase);
 
-        // ============================================================
-        // ✅ LoadControl SEGURO: carga más rápida + estable + retome rápido
-        // ============================================================
-        DefaultLoadControl loadControl =
-            new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(
-                    15000,   // minBufferMs: buffer mínimo acumulado (15s)
-                    60000,   // maxBufferMs: buffer máximo (60s = MUY estable)
-                    2000,    // bufferForPlaybackMs: para EMPEZAR (2s, antes era 2.5s)
-                    2500     // bufferForPlaybackAfterRebufferMs: para REANUDAR tras corte (2.5s)
-                )
-                .setBackBuffer(
-                    30000,   // backBufferDurationMs: guarda 30s atrás
-                    false    // retainBackBufferFromKeyframe
-                )
-                .setTargetBufferBytes(
-                    50 * 1024 * 1024  // 50MB máximo (evita crashes en TVs viejas)
-                )
-                .build();
-
         exoPlayer = new ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactoryBase)
-            .setLoadControl(loadControl)
             .build();
 
         inyectarTextureView();
@@ -206,10 +185,6 @@ public class MainActivity extends AppCompatActivity {
                         handler.removeCallbacks(timeoutCanalCaido);
                         timeoutCanalCaido = null;
                     }
-                    // Resetear contador de reintentos: si anduvo, no hay que reintentar
-                    if (indiceActual >= 0) {
-                        errorRetries.remove(indiceActual);
-                    }
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 } else if (state == Player.STATE_BUFFERING) {
                     mostrarLoaderSintonizando();
@@ -218,36 +193,11 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onPlayerError(PlaybackException error) {
-                Log.e(TAG, "ExoPlayer error: " + error.getMessage());
-
-                // ✅ Retry automático: hasta 2 intentos antes de mostrar error
-                if (enExoPlayer && indiceActual >= 0 && indiceActual < canales.size()) {
-                    int retries = errorRetries.getOrDefault(indiceActual, 0);
-                    if (retries < 2) {
-                        errorRetries.put(indiceActual, retries + 1);
-                        Log.e(TAG, "Retry " + (retries + 1) + "/2 del canal " + canales.get(indiceActual).nombre);
-                        handler.postDelayed(() -> {
-                            if (!enExoPlayer) return;
-                            try {
-                                exoPlayer.stop();
-                                exoPlayer.clearMediaItems();
-                                exoPlayer.setMediaSource(construirMediaSource(canales.get(indiceActual)));
-                                exoPlayer.prepare();
-                                exoPlayer.setPlayWhenReady(true);
-                            } catch (Exception e) {
-                                Log.e(TAG, "Retry fallido: " + e.getMessage());
-                                mostrarLoaderError();
-                            }
-                        }, 1200);
-                        return;
-                    }
-                    errorRetries.remove(indiceActual);
-                }
-
-                // Si ya reintentó 2 veces → mostrar error y limpiar
                 detenerLoaderAnim();
                 mostrarLoaderError();
+                Log.e(TAG, "ExoPlayer error: " + error.getMessage());
                 avisarAlWebView("window.gtv&&window.gtv.onNativoError&&window.gtv.onNativoError();");
+                // Reset defensivo: limpiar estado sucio tras error
                 try {
                     exoPlayer.stop();
                     exoPlayer.clearMediaItems();
@@ -292,24 +242,31 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(this::inicializarWatchNext, 1500);
     }
 
-    // Construye el MediaSource con headers MÍNIMOS + Referer por canal si aplica
+    // ============================================================
+    // Construye el MediaSource con headers MÍNIMOS (como MX Player).
+    // Solo aplica Referer si el canal tiene tvg-referer explícito.
+    // ============================================================
     private androidx.media3.exoplayer.source.MediaSource construirMediaSource(Canal c) {
         Map<String, String> headers = new HashMap<>();
+        // ✅ Solo User-Agent. Nada más.
         headers.put("User-Agent", UA_NAVEGADOR);
 
+        // ✅ Referer SOLO si el canal tiene tvg-referer explícito
         if (c.referer != null && !c.referer.isEmpty()) {
             headers.put("Referer", c.referer);
             try {
                 java.net.URL u = new java.net.URL(c.referer);
                 headers.put("Origin", u.getProtocol() + "://" + u.getHost());
-            } catch (Exception e) {}
+            } catch (Exception e) {
+                // Referer no es URL válida, no ponemos Origin
+            }
             Log.e(TAG, "Referer aplicado a " + c.nombre + ": " + c.referer);
         }
 
         DefaultHttpDataSource.Factory factory = new DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(12000)
-            .setReadTimeoutMs(12000)
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(15000)
             .setDefaultRequestProperties(headers);
 
         return new DefaultMediaSourceFactory(factory)
@@ -475,6 +432,10 @@ public class MainActivity extends AppCompatActivity {
 
         agregarAlWatchNext(c);
     }
+
+    // ============================================================
+    // INTENT ENTRANTE DEL WATCH NEXT
+    // ============================================================
 
     @Override
     protected void onNewIntent(Intent intent) {
@@ -970,9 +931,6 @@ public class MainActivity extends AppCompatActivity {
     private void reproducirEnExo(Canal c) {
         enExoPlayer = true;
 
-        // Resetear contador de reintentos al cambiar de canal
-        errorRetries.remove(indiceActual);
-
         myWebView.onPause();
         myWebView.pauseTimers();
         myWebView.setVisibility(View.GONE);
@@ -986,6 +944,7 @@ public class MainActivity extends AppCompatActivity {
             Glide.with(this).load(c.logo).into(logoCanal);
         }
 
+        // Reset completo antes de reproducir
         try {
             exoPlayer.stop();
             exoPlayer.clearMediaItems();
@@ -1005,6 +964,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, "Error al preparar canal " + c.nombre + ": " + e.getMessage());
             mostrarLoaderError();
+            // Retry automático
             handler.postDelayed(() -> {
                 if (enExoPlayer) {
                     try {
@@ -1540,6 +1500,7 @@ public class MainActivity extends AppCompatActivity {
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_FULLSCREEN);
         }
+        // ✅ FLAG_KEEP_SCREEN_ON (importante: con FLAG_)
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 }
