@@ -46,6 +46,7 @@ import androidx.media3.common.Player;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.ui.PlayerView;
 import androidx.tvprovider.media.tv.TvContractCompat;
 import androidx.tvprovider.media.tv.WatchNextProgram;
@@ -96,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
 
     private String deviceIdCache = null;
 
-    // ✅ NUEVO: bandera para saber si el WebView ya está listo para recibir JS
+    // Bandera para saber si el WebView ya cargó y puede recibir JS
     private volatile boolean webViewListo = false;
 
     // Watch Next
@@ -110,10 +111,19 @@ public class MainActivity extends AppCompatActivity {
     private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version";
     private static final int MAX_SKIPS = 3;
 
+    // User-Agent global (Chrome, más compatible que VLC con CDN modernos)
+    private static final String UA_NAVEGADOR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
     static class Canal {
-        final String url, nombre, logo;
+        final String url, nombre, logo, referer;
         Canal(String url, String nombre, String logo) {
-            this.url = url; this.nombre = nombre; this.logo = logo;
+            this(url, nombre, logo, "");
+        }
+        Canal(String url, String nombre, String logo, String referer) {
+            this.url = url;
+            this.nombre = nombre;
+            this.logo = logo;
+            this.referer = (referer != null) ? referer : "";
         }
     }
 
@@ -141,24 +151,29 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        // ✅ FIX: headers para CDN que requieren Referer/Origin
-Map<String, String> headers = new HashMap<>();
-headers.put("Referer", "https://cdn1.cef-technology.com/");
-headers.put("Origin", "https://cdn1.cef-technology.com");
+        // ============================================================
+        // ✅ DataSource BASE sin Referer hardcodeado.
+        // El Referer se aplica POR CANAL en construirMediaSource().
+        // Los canales sin tvg-referer usan este default y andan igual que antes.
+        // ============================================================
+        Map<String, String> headersBase = new HashMap<>();
+        headersBase.put("User-Agent", UA_NAVEGADOR);
+        headersBase.put("Accept", "*/*");
+        headersBase.put("Accept-Language", "es-AR,es;q=0.9,en;q=0.8");
+        headersBase.put("Connection", "keep-alive");
 
-DefaultHttpDataSource.Factory httpFactory =
-    new DefaultHttpDataSource.Factory()
-        .setAllowCrossProtocolRedirects(true)
-        .setUserAgent("VLC/3.0.20 LibVLC/3.0.20")
-        .setConnectTimeoutMs(15000)
-        .setReadTimeoutMs(15000)
-        .setDefaultRequestProperties(headers);
+        DefaultHttpDataSource.Factory httpFactoryBase =
+            new DefaultHttpDataSource.Factory()
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(15000)
+                .setReadTimeoutMs(15000)
+                .setDefaultRequestProperties(headersBase);
 
-DefaultMediaSourceFactory mediaSourceFactory =
-    new DefaultMediaSourceFactory(httpFactory);
+        DefaultMediaSourceFactory mediaSourceFactoryBase =
+            new DefaultMediaSourceFactory(httpFactoryBase);
 
         exoPlayer = new ExoPlayer.Builder(this)
-            .setMediaSourceFactory(mediaSourceFactory)
+            .setMediaSourceFactory(mediaSourceFactoryBase)
             .build();
 
         inyectarTextureView();
@@ -175,7 +190,6 @@ DefaultMediaSourceFactory mediaSourceFactory =
                         handler.removeCallbacks(timeoutCanalCaido);
                         timeoutCanalCaido = null;
                     }
-                    // ✅ NUEVO: avisar al WebView que Exo ya está pintando
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 } else if (state == Player.STATE_BUFFERING) {
                     mostrarLoaderSintonizando();
@@ -186,7 +200,7 @@ DefaultMediaSourceFactory mediaSourceFactory =
             public void onPlayerError(PlaybackException error) {
                 detenerLoaderAnim();
                 mostrarLoaderError();
-                // ✅ NUEVO: avisar al WebView que hubo un error nativo
+                Log.e(TAG, "ExoPlayer error: " + error.getMessage());
                 avisarAlWebView("window.gtv&&window.gtv.onNativoError&&window.gtv.onNativoError();");
                 handler.postDelayed(() -> {
                     ocultarLoaders();
@@ -225,8 +239,39 @@ DefaultMediaSourceFactory mediaSourceFactory =
     }
 
     // ============================================================
-    // ✅ NUEVO: helper centralizado para hablar con el WebView
+    // ✅ NUEVO: construye el MediaSource con el Referer específico del canal.
+    // Si el canal no tiene referer, se comporta igual que antes (no rompe nada).
     // ============================================================
+    private MediaSource construirMediaSource(Canal c) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("User-Agent", UA_NAVEGADOR);
+        headers.put("Accept", "*/*");
+        headers.put("Accept-Language", "es-AR,es;q=0.9,en;q=0.8");
+        headers.put("Connection", "keep-alive");
+
+        // Si el canal tiene Referer propio, lo agregamos + Origin del mismo host
+        if (c.referer != null && !c.referer.isEmpty()) {
+            headers.put("Referer", c.referer);
+            try {
+                java.net.URL u = new java.net.URL(c.referer);
+                headers.put("Origin", u.getProtocol() + "://" + u.getHost());
+            } catch (Exception e) {
+                // Referer no es URL válida, no ponemos Origin
+            }
+            Log.e(TAG, "Referer aplicado a " + c.nombre + ": " + c.referer);
+        }
+
+        DefaultHttpDataSource.Factory factory = new DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(15000)
+            .setDefaultRequestProperties(headers);
+
+        return new DefaultMediaSourceFactory(factory)
+            .createMediaSource(MediaItem.fromUri(c.url));
+    }
+
+    // Helper centralizado para hablar con el WebView
     private void avisarAlWebView(String js) {
         if (myWebView == null || !webViewListo) return;
         myWebView.post(() -> {
@@ -436,7 +481,8 @@ DefaultMediaSourceFactory mediaSourceFactory =
                 irACanalWebView(idx);
             }
         } else {
-            Canal c = new Canal(url, nombre != null ? nombre : "Canal", logo != null ? logo : "");
+            // Canal no está en la lista, lo creamos SIN referer
+            Canal c = new Canal(url, nombre != null ? nombre : "Canal", logo != null ? logo : "", "");
             if (esCanalExoPlayer(url)) {
                 indiceActual = -1;
                 reproducirEnExo(c);
@@ -833,20 +879,17 @@ DefaultMediaSourceFactory mediaSourceFactory =
         Log.e(TAG, "TextureView inyectado en exo_content_frame");
     }
 
-    // ✅ MEJORADO: detección más amplia de lo que Exo puede reproducir
-    // Sigue siendo la misma lógica, solo con más patrones HLS y más embeds bloqueados
+    // Detección ampliada de lo que Exo puede reproducir
     private boolean esCanalExoPlayer(String url) {
         if (url == null) return false;
         String u = url.toLowerCase();
 
-        // 1. Extensiones explícitas que Exo reproduce nativo
         if (u.contains(".m3u8")) return true;
         if (u.contains(".mpd"))   return true;
         if (u.contains(".mp4") && u.startsWith("http")) return true;
         if (u.contains(".ts")  && u.startsWith("http")) return true;
         if (u.contains(".webm") && u.startsWith("http")) return true;
 
-        // 2. Patrones típicos de HLS sin extensión clara
         if (u.startsWith("http")) {
             if (u.contains("/hls/"))   return true;
             if (u.contains("/live/") && !u.contains("youtube")) return true;
@@ -855,7 +898,6 @@ DefaultMediaSourceFactory mediaSourceFactory =
             if (u.contains(".m3u8?"))  return true;
         }
 
-        // 3. HTTP genérico que NO es embed conocido → intentar con Exo
         if (u.startsWith("http")
             && !u.contains("youtube.com")
             && !u.contains("youtu.be")
@@ -910,13 +952,13 @@ DefaultMediaSourceFactory mediaSourceFactory =
 
         mostrarLoaderSintonizando();
 
-        exoPlayer.setMediaItem(MediaItem.fromUri(c.url));
+        // ✅ FIX REFERER: usamos el MediaSource POR CANAL con su referer
+        exoPlayer.setMediaSource(construirMediaSource(c));
         exoPlayer.prepare();
         exoPlayer.play();
 
         programarTimeoutCanal();
 
-        // ✅ NUEVO: avisar al WebView que se entró al modo nativo
         avisarAlWebView("window.gtv&&window.gtv.onNativoIniciado&&window.gtv.onNativoIniciado();");
 
         handler.postDelayed(this::actualizarWatchNext, 5000);
@@ -1016,7 +1058,6 @@ DefaultMediaSourceFactory mediaSourceFactory =
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // ✅ NUEVO: marcar el WebView como listo para recibir JS
                 webViewListo = true;
                 Log.e(TAG, "WebView listo: " + url);
             }
@@ -1125,10 +1166,13 @@ DefaultMediaSourceFactory mediaSourceFactory =
                     for (int i = 0; i < arr.length(); i++) {
                         JSONObject o = arr.getJSONObject(i);
                         String nombre = o.optString("nombre", o.optString("name", "Canal " + (i + 1)));
+                        // ✅ FIX REFERER: leemos el campo referer del JSON
+                        String referer = o.optString("referer", "");
                         canales.add(new Canal(
                             o.getString("url"),
                             nombre,
-                            o.optString("logo", "")
+                            o.optString("logo", ""),
+                            referer
                         ));
                     }
                     Log.e(TAG, "setLista OK: " + canales.size());
@@ -1153,8 +1197,9 @@ DefaultMediaSourceFactory mediaSourceFactory =
             });
         }
 
+        // ✅ FIX REFERER: ahora acepta 5 args (url, nombre, numero, logo, referer)
         @JavascriptInterface
-        public void reproducir(String url, String nombre, String numero, String logo) {
+        public void reproducir(String url, String nombre, String numero, String logo, String referer) {
             runOnUiThread(() -> {
                 int idx = -1;
                 for (int i = 0; i < canales.size(); i++) {
@@ -1162,16 +1207,26 @@ DefaultMediaSourceFactory mediaSourceFactory =
                 }
                 if (idx >= 0) {
                     indiceActual = idx;
-                    reproducirEnExo(canales.get(idx));
+                    Canal c = canales.get(idx);
+                    // Si el JS mandó un referer y el canal no tiene, lo aplicamos
+                    if ((c.referer == null || c.referer.isEmpty()) && referer != null && !referer.isEmpty()) {
+                        reproducirEnExo(new Canal(c.url, c.nombre, c.logo, referer));
+                    } else {
+                        reproducirEnExo(c);
+                    }
                 } else {
-                    Canal c = new Canal(url, nombre, logo);
+                    Canal c = new Canal(url, nombre, logo, referer);
                     reproducirEnExo(c);
                 }
             });
         }
 
-        // ✅ NUEVO: le dice al JS si esta URL debe ir a Exo o al WebView
-        // Así el JS y el Java usan la MISMA regla (una sola fuente de verdad)
+        // Compatibilidad con Java viejo que llame sin referer (4 args)
+        @JavascriptInterface
+        public void reproducir(String url, String nombre, String numero, String logo) {
+            reproducir(url, nombre, numero, logo, "");
+        }
+
         @JavascriptInterface
         public boolean esExoPlayer(String url) {
             return esCanalExoPlayer(url);
@@ -1330,7 +1385,6 @@ DefaultMediaSourceFactory mediaSourceFactory =
                 "(function(){try{return (window.estoyEnPlayer&&window.estoyEnPlayer())?'PLAYER':'NO';}catch(e){return 'NO';}})()",
                 value -> {
                     if (value != null && value.contains("PLAYER")) {
-                        // ✅ MEJORADO: usar gtvStop si existe, sino fallback a stop
                         myWebView.evaluateJavascript(
                             "javascript:(function(){try{if(window.gtvStop)window.gtvStop();else if(window.stop)window.stop();}catch(e){}})()",
                             null);
@@ -1425,6 +1479,6 @@ DefaultMediaSourceFactory mediaSourceFactory =
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_FULLSCREEN);
         }
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        getWindow().addFlags(WindowManager.LayoutParams.KEEP_SCREEN_ON);
     }
 }
