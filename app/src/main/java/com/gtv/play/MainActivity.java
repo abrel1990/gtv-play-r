@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version";
     private static final int MAX_SKIPS = 3;
 
-    // ✅ User-Agent Android Mobile (como MX Player). Es lo que el CDN espera ver.
+    // User-Agent Android Mobile (como MX Player)
     private static final String UA_NAVEGADOR = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 
     static class Canal {
@@ -149,11 +149,7 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        // ============================================================
-        // ✅ Headers MÍNIMOS (como MX Player). Solo User-Agent.
-        // Los headers "extra" (Accept-Language, Connection, etc.) hacían
-        // que el CDN nos detecte como cliente raro y bloquee.
-        // ============================================================
+        // Headers MÍNIMOS (como MX Player). Solo User-Agent.
         Map<String, String> headersBase = new HashMap<>();
         headersBase.put("User-Agent", UA_NAVEGADOR);
 
@@ -242,24 +238,17 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(this::inicializarWatchNext, 1500);
     }
 
-    // ============================================================
-    // Construye el MediaSource con headers MÍNIMOS (como MX Player).
-    // Solo aplica Referer si el canal tiene tvg-referer explícito.
-    // ============================================================
+    // Construye el MediaSource con headers MÍNIMOS + Referer por canal si aplica
     private androidx.media3.exoplayer.source.MediaSource construirMediaSource(Canal c) {
         Map<String, String> headers = new HashMap<>();
-        // ✅ Solo User-Agent. Nada más.
         headers.put("User-Agent", UA_NAVEGADOR);
 
-        // ✅ Referer SOLO si el canal tiene tvg-referer explícito
         if (c.referer != null && !c.referer.isEmpty()) {
             headers.put("Referer", c.referer);
             try {
                 java.net.URL u = new java.net.URL(c.referer);
                 headers.put("Origin", u.getProtocol() + "://" + u.getHost());
-            } catch (Exception e) {
-                // Referer no es URL válida, no ponemos Origin
-            }
+            } catch (Exception e) {}
             Log.e(TAG, "Referer aplicado a " + c.nombre + ": " + c.referer);
         }
 
@@ -432,10 +421,6 @@ public class MainActivity extends AppCompatActivity {
 
         agregarAlWatchNext(c);
     }
-
-    // ============================================================
-    // INTENT ENTRANTE DEL WATCH NEXT
-    // ============================================================
 
     @Override
     protected void onNewIntent(Intent intent) {
@@ -1500,7 +1485,6 @@ public class MainActivity extends AppCompatActivity {
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_FULLSCREEN);
         }
-        // ✅ FLAG_KEEP_SCREEN_ON (importante: con FLAG_)
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 }
