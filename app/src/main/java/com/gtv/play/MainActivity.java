@@ -111,14 +111,19 @@ public class MainActivity extends AppCompatActivity {
 
     static class Canal {
         final String url, nombre, logo, referer;
+        final float gain;
         Canal(String url, String nombre, String logo) {
-            this(url, nombre, logo, "");
+            this(url, nombre, logo, "", 1.0f);
         }
         Canal(String url, String nombre, String logo, String referer) {
+            this(url, nombre, logo, referer, 1.0f);
+        }
+        Canal(String url, String nombre, String logo, String referer, float gain) {
             this.url = url;
             this.nombre = nombre;
             this.logo = logo;
             this.referer = (referer != null) ? referer : "";
+            this.gain = (gain > 0f && gain <= 2f) ? gain : 1.0f;
         }
     }
 
@@ -146,8 +151,8 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        // ✅ EXOPLAYER ORIGINAL - sin headers custom, sin timeout custom
-        // Dejamos que ExoPlayer use sus defaults (rápido y estable)
+        // ✅ ExoPlayer ORIGINAL sin headers custom, sin timeout custom, sin LoadControl
+        // Vuelta a lo que andaba estable
         DefaultHttpDataSource.Factory httpFactory =
             new DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true);
@@ -221,9 +226,9 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(this::inicializarWatchNext, 1500);
     }
 
-    // ✅ Solo agrega Referer si el canal lo tiene. El resto es default.
+    // Construye el MediaSource con headers MÍNIMOS + Referer si aplica
     private androidx.media3.exoplayer.source.MediaSource construirMediaSource(Canal c) {
-        // Si el canal no tiene Referer, usamos el DataSource default
+        // Si no tiene Referer → DataSource default
         if (c.referer == null || c.referer.isEmpty()) {
             DefaultHttpDataSource.Factory factoryDefault =
                 new DefaultHttpDataSource.Factory()
@@ -232,7 +237,7 @@ public class MainActivity extends AppCompatActivity {
                 .createMediaSource(MediaItem.fromUri(c.url));
         }
 
-        // Si tiene Referer, creamos DataSource con Referer
+        // Si tiene Referer → DataSource con Referer
         Map<String, String> headers = new HashMap<>();
         headers.put("Referer", c.referer);
         try {
@@ -455,7 +460,7 @@ public class MainActivity extends AppCompatActivity {
                 irACanalWebView(idx);
             }
         } else {
-            Canal c = new Canal(url, nombre != null ? nombre : "Canal", logo != null ? logo : "", "");
+            Canal c = new Canal(url, nombre != null ? nombre : "Canal", logo != null ? logo : "", "", 1.0f);
             if (esCanalExoPlayer(url)) {
                 indiceActual = -1;
                 reproducirEnExo(c);
@@ -927,6 +932,14 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.prepare();
         exoPlayer.play();
 
+        // ✅ Aplicar gain (volumen por canal)
+        try {
+            exoPlayer.setVolume(c.gain);
+            Log.e(TAG, "Gain aplicado a " + c.nombre + ": " + c.gain);
+        } catch (Exception e) {
+            Log.e(TAG, "Error aplicando gain: " + e.getMessage());
+        }
+
         programarTimeoutCanal();
 
         avisarAlWebView("window.gtv&&window.gtv.onNativoIniciado&&window.gtv.onNativoIniciado();");
@@ -1137,11 +1150,14 @@ public class MainActivity extends AppCompatActivity {
                         JSONObject o = arr.getJSONObject(i);
                         String nombre = o.optString("nombre", o.optString("name", "Canal " + (i + 1)));
                         String referer = o.optString("referer", "");
+                        float gain = (float) o.optDouble("gain", 1.0);
+                        if (gain <= 0f || gain > 2f) gain = 1.0f;
                         canales.add(new Canal(
                             o.getString("url"),
                             nombre,
                             o.optString("logo", ""),
-                            referer
+                            referer,
+                            gain
                         ));
                     }
                     Log.e(TAG, "setLista OK: " + canales.size());
@@ -1166,9 +1182,11 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
+        // ✅ reproducir con 6 args: url, nombre, numero, logo, referer, gain
         @JavascriptInterface
-        public void reproducir(String url, String nombre, String numero, String logo, String referer) {
+        public void reproducir(String url, String nombre, String numero, String logo, String referer, float gain) {
             runOnUiThread(() -> {
+                if (gain <= 0f || gain > 2f) gain = 1.0f;
                 int idx = -1;
                 for (int i = 0; i < canales.size(); i++) {
                     if (canales.get(i).url.equals(url)) { idx = i; break; }
@@ -1176,21 +1194,26 @@ public class MainActivity extends AppCompatActivity {
                 if (idx >= 0) {
                     indiceActual = idx;
                     Canal c = canales.get(idx);
-                    if ((c.referer == null || c.referer.isEmpty()) && referer != null && !referer.isEmpty()) {
-                        reproducirEnExo(new Canal(c.url, c.nombre, c.logo, referer));
-                    } else {
-                        reproducirEnExo(c);
-                    }
+                    String refFinal = (c.referer != null && !c.referer.isEmpty()) ? c.referer : referer;
+                    float gainFinal = (c.gain > 0f) ? c.gain : gain;
+                    reproducirEnExo(new Canal(c.url, c.nombre, c.logo, refFinal, gainFinal));
                 } else {
-                    Canal c = new Canal(url, nombre, logo, referer);
+                    Canal c = new Canal(url, nombre, logo, referer, gain);
                     reproducirEnExo(c);
                 }
             });
         }
 
+        // Compatibilidad: reproducir con 5 args
+        @JavascriptInterface
+        public void reproducir(String url, String nombre, String numero, String logo, String referer) {
+            reproducir(url, nombre, numero, logo, referer, 1.0f);
+        }
+
+        // Compatibilidad: reproducir con 4 args
         @JavascriptInterface
         public void reproducir(String url, String nombre, String numero, String logo) {
-            reproducir(url, nombre, numero, logo, "");
+            reproducir(url, nombre, numero, logo, "", 1.0f);
         }
 
         @JavascriptInterface
