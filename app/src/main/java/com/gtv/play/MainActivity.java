@@ -46,7 +46,6 @@ import androidx.media3.common.Player;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
-import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.ui.PlayerView;
 import androidx.tvprovider.media.tv.TvContractCompat;
 import androidx.tvprovider.media.tv.WatchNextProgram;
@@ -97,7 +96,6 @@ public class MainActivity extends AppCompatActivity {
 
     private String deviceIdCache = null;
 
-    // Bandera para saber si el WebView ya cargó y puede recibir JS
     private volatile boolean webViewListo = false;
 
     // Watch Next
@@ -151,11 +149,8 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        // ============================================================
-        // ✅ DataSource BASE sin Referer hardcodeado.
+        // DataSource BASE sin Referer hardcodeado.
         // El Referer se aplica POR CANAL en construirMediaSource().
-        // Los canales sin tvg-referer usan este default y andan igual que antes.
-        // ============================================================
         Map<String, String> headersBase = new HashMap<>();
         headersBase.put("User-Agent", UA_NAVEGADOR);
         headersBase.put("Accept", "*/*");
@@ -238,18 +233,15 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(this::inicializarWatchNext, 1500);
     }
 
-    // ============================================================
-    // ✅ NUEVO: construye el MediaSource con el Referer específico del canal.
+    // Construye el MediaSource con el Referer específico del canal.
     // Si el canal no tiene referer, se comporta igual que antes (no rompe nada).
-    // ============================================================
-    private MediaSource construirMediaSource(Canal c) {
+    private androidx.media3.exoplayer.source.MediaSource construirMediaSource(Canal c) {
         Map<String, String> headers = new HashMap<>();
         headers.put("User-Agent", UA_NAVEGADOR);
         headers.put("Accept", "*/*");
         headers.put("Accept-Language", "es-AR,es;q=0.9,en;q=0.8");
         headers.put("Connection", "keep-alive");
 
-        // Si el canal tiene Referer propio, lo agregamos + Origin del mismo host
         if (c.referer != null && !c.referer.isEmpty()) {
             headers.put("Referer", c.referer);
             try {
@@ -271,7 +263,6 @@ public class MainActivity extends AppCompatActivity {
             .createMediaSource(MediaItem.fromUri(c.url));
     }
 
-    // Helper centralizado para hablar con el WebView
     private void avisarAlWebView(String js) {
         if (myWebView == null || !webViewListo) return;
         myWebView.post(() -> {
@@ -481,7 +472,6 @@ public class MainActivity extends AppCompatActivity {
                 irACanalWebView(idx);
             }
         } else {
-            // Canal no está en la lista, lo creamos SIN referer
             Canal c = new Canal(url, nombre != null ? nombre : "Canal", logo != null ? logo : "", "");
             if (esCanalExoPlayer(url)) {
                 indiceActual = -1;
@@ -879,7 +869,6 @@ public class MainActivity extends AppCompatActivity {
         Log.e(TAG, "TextureView inyectado en exo_content_frame");
     }
 
-    // Detección ampliada de lo que Exo puede reproducir
     private boolean esCanalExoPlayer(String url) {
         if (url == null) return false;
         String u = url.toLowerCase();
@@ -952,7 +941,6 @@ public class MainActivity extends AppCompatActivity {
 
         mostrarLoaderSintonizando();
 
-        // ✅ FIX REFERER: usamos el MediaSource POR CANAL con su referer
         exoPlayer.setMediaSource(construirMediaSource(c));
         exoPlayer.prepare();
         exoPlayer.play();
@@ -1166,7 +1154,6 @@ public class MainActivity extends AppCompatActivity {
                     for (int i = 0; i < arr.length(); i++) {
                         JSONObject o = arr.getJSONObject(i);
                         String nombre = o.optString("nombre", o.optString("name", "Canal " + (i + 1)));
-                        // ✅ FIX REFERER: leemos el campo referer del JSON
                         String referer = o.optString("referer", "");
                         canales.add(new Canal(
                             o.getString("url"),
@@ -1197,7 +1184,6 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        // ✅ FIX REFERER: ahora acepta 5 args (url, nombre, numero, logo, referer)
         @JavascriptInterface
         public void reproducir(String url, String nombre, String numero, String logo, String referer) {
             runOnUiThread(() -> {
@@ -1208,7 +1194,6 @@ public class MainActivity extends AppCompatActivity {
                 if (idx >= 0) {
                     indiceActual = idx;
                     Canal c = canales.get(idx);
-                    // Si el JS mandó un referer y el canal no tiene, lo aplicamos
                     if ((c.referer == null || c.referer.isEmpty()) && referer != null && !referer.isEmpty()) {
                         reproducirEnExo(new Canal(c.url, c.nombre, c.logo, referer));
                     } else {
@@ -1221,7 +1206,6 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        // Compatibilidad con Java viejo que llame sin referer (4 args)
         @JavascriptInterface
         public void reproducir(String url, String nombre, String numero, String logo) {
             reproducir(url, nombre, numero, logo, "");
@@ -1479,6 +1463,7 @@ public class MainActivity extends AppCompatActivity {
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_FULLSCREEN);
         }
-        getWindow().addFlags(WindowManager.LayoutParams.KEEP_SCREEN_ON);
+        // ✅ FIX: FLAG_KEEP_SCREEN_ON (antes estaba mal como KEEP_SCREEN_ON)
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 }
