@@ -109,8 +109,8 @@ public class MainActivity extends AppCompatActivity {
     private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version";
     private static final int MAX_SKIPS = 3;
 
-    // User-Agent global (Chrome, más compatible que VLC con CDN modernos)
-    private static final String UA_NAVEGADOR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    // ✅ User-Agent Android Mobile (como MX Player). Es lo que el CDN espera ver.
+    private static final String UA_NAVEGADOR = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 
     static class Canal {
         final String url, nombre, logo, referer;
@@ -149,13 +149,13 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        // DataSource BASE sin Referer hardcodeado.
-        // El Referer se aplica POR CANAL en construirMediaSource().
+        // ============================================================
+        // ✅ Headers MÍNIMOS (como MX Player). Solo User-Agent.
+        // Los headers "extra" (Accept-Language, Connection, etc.) hacían
+        // que el CDN nos detecte como cliente raro y bloquee.
+        // ============================================================
         Map<String, String> headersBase = new HashMap<>();
         headersBase.put("User-Agent", UA_NAVEGADOR);
-        headersBase.put("Accept", "*/*");
-        headersBase.put("Accept-Language", "es-AR,es;q=0.9,en;q=0.8");
-        headersBase.put("Connection", "keep-alive");
 
         DefaultHttpDataSource.Factory httpFactoryBase =
             new DefaultHttpDataSource.Factory()
@@ -197,6 +197,15 @@ public class MainActivity extends AppCompatActivity {
                 mostrarLoaderError();
                 Log.e(TAG, "ExoPlayer error: " + error.getMessage());
                 avisarAlWebView("window.gtv&&window.gtv.onNativoError&&window.gtv.onNativoError();");
+                // Reset defensivo: limpiar estado sucio tras error
+                try {
+                    exoPlayer.stop();
+                    exoPlayer.clearMediaItems();
+                } catch (Exception e) {}
+                if (timeoutCanalCaido != null) {
+                    handler.removeCallbacks(timeoutCanalCaido);
+                    timeoutCanalCaido = null;
+                }
                 handler.postDelayed(() -> {
                     ocultarLoaders();
                 }, 5000);
@@ -233,15 +242,16 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(this::inicializarWatchNext, 1500);
     }
 
-    // Construye el MediaSource con el Referer específico del canal.
-    // Si el canal no tiene referer, se comporta igual que antes (no rompe nada).
+    // ============================================================
+    // Construye el MediaSource con headers MÍNIMOS (como MX Player).
+    // Solo aplica Referer si el canal tiene tvg-referer explícito.
+    // ============================================================
     private androidx.media3.exoplayer.source.MediaSource construirMediaSource(Canal c) {
         Map<String, String> headers = new HashMap<>();
+        // ✅ Solo User-Agent. Nada más.
         headers.put("User-Agent", UA_NAVEGADOR);
-        headers.put("Accept", "*/*");
-        headers.put("Accept-Language", "es-AR,es;q=0.9,en;q=0.8");
-        headers.put("Connection", "keep-alive");
 
+        // ✅ Referer SOLO si el canal tiene tvg-referer explícito
         if (c.referer != null && !c.referer.isEmpty()) {
             headers.put("Referer", c.referer);
             try {
@@ -934,16 +944,43 @@ public class MainActivity extends AppCompatActivity {
             Glide.with(this).load(c.logo).into(logoCanal);
         }
 
+        // Reset completo antes de reproducir
         try {
             exoPlayer.stop();
             exoPlayer.clearMediaItems();
         } catch (Exception e) {}
 
+        if (timeoutCanalCaido != null) {
+            handler.removeCallbacks(timeoutCanalCaido);
+            timeoutCanalCaido = null;
+        }
+
         mostrarLoaderSintonizando();
 
-        exoPlayer.setMediaSource(construirMediaSource(c));
-        exoPlayer.prepare();
-        exoPlayer.play();
+        try {
+            exoPlayer.setMediaSource(construirMediaSource(c));
+            exoPlayer.prepare();
+            exoPlayer.setPlayWhenReady(true);
+        } catch (Exception e) {
+            Log.e(TAG, "Error al preparar canal " + c.nombre + ": " + e.getMessage());
+            mostrarLoaderError();
+            // Retry automático
+            handler.postDelayed(() -> {
+                if (enExoPlayer) {
+                    try {
+                        exoPlayer.stop();
+                        exoPlayer.clearMediaItems();
+                        exoPlayer.setMediaSource(construirMediaSource(c));
+                        exoPlayer.prepare();
+                        exoPlayer.setPlayWhenReady(true);
+                    } catch (Exception e2) {
+                        Log.e(TAG, "Reintento fallido: " + e2.getMessage());
+                        mostrarLoaderError();
+                    }
+                }
+            }, 1500);
+            return;
+        }
 
         programarTimeoutCanal();
 
@@ -1463,7 +1500,7 @@ public class MainActivity extends AppCompatActivity {
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_FULLSCREEN);
         }
-        // ✅ FIX: FLAG_KEEP_SCREEN_ON (antes estaba mal como KEEP_SCREEN_ON)
+        // ✅ FLAG_KEEP_SCREEN_ON (importante: con FLAG_)
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 }
