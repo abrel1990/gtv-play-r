@@ -109,9 +109,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version";
     private static final int MAX_SKIPS = 3;
 
-    // User-Agent Android Mobile (como MX Player)
-    private static final String UA_NAVEGADOR = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
-
     static class Canal {
         final String url, nombre, logo, referer;
         Canal(String url, String nombre, String logo) {
@@ -149,22 +146,17 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        // Headers MÍNIMOS (como MX Player). Solo User-Agent.
-        Map<String, String> headersBase = new HashMap<>();
-        headersBase.put("User-Agent", UA_NAVEGADOR);
-
-        DefaultHttpDataSource.Factory httpFactoryBase =
+        // ✅ EXOPLAYER ORIGINAL - sin headers custom, sin timeout custom
+        // Dejamos que ExoPlayer use sus defaults (rápido y estable)
+        DefaultHttpDataSource.Factory httpFactory =
             new DefaultHttpDataSource.Factory()
-                .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(15000)
-                .setReadTimeoutMs(15000)
-                .setDefaultRequestProperties(headersBase);
+                .setAllowCrossProtocolRedirects(true);
 
-        DefaultMediaSourceFactory mediaSourceFactoryBase =
-            new DefaultMediaSourceFactory(httpFactoryBase);
+        DefaultMediaSourceFactory mediaSourceFactory =
+            new DefaultMediaSourceFactory(httpFactory);
 
         exoPlayer = new ExoPlayer.Builder(this)
-            .setMediaSourceFactory(mediaSourceFactoryBase)
+            .setMediaSourceFactory(mediaSourceFactory)
             .build();
 
         inyectarTextureView();
@@ -193,15 +185,6 @@ public class MainActivity extends AppCompatActivity {
                 mostrarLoaderError();
                 Log.e(TAG, "ExoPlayer error: " + error.getMessage());
                 avisarAlWebView("window.gtv&&window.gtv.onNativoError&&window.gtv.onNativoError();");
-                // Reset defensivo: limpiar estado sucio tras error
-                try {
-                    exoPlayer.stop();
-                    exoPlayer.clearMediaItems();
-                } catch (Exception e) {}
-                if (timeoutCanalCaido != null) {
-                    handler.removeCallbacks(timeoutCanalCaido);
-                    timeoutCanalCaido = null;
-                }
                 handler.postDelayed(() -> {
                     ocultarLoaders();
                 }, 5000);
@@ -238,27 +221,32 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(this::inicializarWatchNext, 1500);
     }
 
-    // Construye el MediaSource con headers MÍNIMOS + Referer por canal si aplica
+    // ✅ Solo agrega Referer si el canal lo tiene. El resto es default.
     private androidx.media3.exoplayer.source.MediaSource construirMediaSource(Canal c) {
-        Map<String, String> headers = new HashMap<>();
-        headers.put("User-Agent", UA_NAVEGADOR);
-
-        if (c.referer != null && !c.referer.isEmpty()) {
-            headers.put("Referer", c.referer);
-            try {
-                java.net.URL u = new java.net.URL(c.referer);
-                headers.put("Origin", u.getProtocol() + "://" + u.getHost());
-            } catch (Exception e) {}
-            Log.e(TAG, "Referer aplicado a " + c.nombre + ": " + c.referer);
+        // Si el canal no tiene Referer, usamos el DataSource default
+        if (c.referer == null || c.referer.isEmpty()) {
+            DefaultHttpDataSource.Factory factoryDefault =
+                new DefaultHttpDataSource.Factory()
+                    .setAllowCrossProtocolRedirects(true);
+            return new DefaultMediaSourceFactory(factoryDefault)
+                .createMediaSource(MediaItem.fromUri(c.url));
         }
 
-        DefaultHttpDataSource.Factory factory = new DefaultHttpDataSource.Factory()
+        // Si tiene Referer, creamos DataSource con Referer
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Referer", c.referer);
+        try {
+            java.net.URL u = new java.net.URL(c.referer);
+            headers.put("Origin", u.getProtocol() + "://" + u.getHost());
+        } catch (Exception e) {}
+
+        DefaultHttpDataSource.Factory factoryReferer = new DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(15000)
             .setDefaultRequestProperties(headers);
 
-        return new DefaultMediaSourceFactory(factory)
+        Log.e(TAG, "Referer aplicado a " + c.nombre + ": " + c.referer);
+
+        return new DefaultMediaSourceFactory(factoryReferer)
             .createMediaSource(MediaItem.fromUri(c.url));
     }
 
@@ -789,7 +777,6 @@ public class MainActivity extends AppCompatActivity {
             if (exoPlayer != null && exoPlayer.getPlaybackState() != Player.STATE_READY) {
                 detenerLoaderAnim();
                 mostrarLoaderError();
-                avisarAlWebView("window.gtv&&window.gtv.onNativoError&&window.gtv.onNativoError();");
             }
         };
         handler.postDelayed(timeoutCanalCaido, 15000);
@@ -929,43 +916,16 @@ public class MainActivity extends AppCompatActivity {
             Glide.with(this).load(c.logo).into(logoCanal);
         }
 
-        // Reset completo antes de reproducir
         try {
             exoPlayer.stop();
             exoPlayer.clearMediaItems();
         } catch (Exception e) {}
 
-        if (timeoutCanalCaido != null) {
-            handler.removeCallbacks(timeoutCanalCaido);
-            timeoutCanalCaido = null;
-        }
-
         mostrarLoaderSintonizando();
 
-        try {
-            exoPlayer.setMediaSource(construirMediaSource(c));
-            exoPlayer.prepare();
-            exoPlayer.setPlayWhenReady(true);
-        } catch (Exception e) {
-            Log.e(TAG, "Error al preparar canal " + c.nombre + ": " + e.getMessage());
-            mostrarLoaderError();
-            // Retry automático
-            handler.postDelayed(() -> {
-                if (enExoPlayer) {
-                    try {
-                        exoPlayer.stop();
-                        exoPlayer.clearMediaItems();
-                        exoPlayer.setMediaSource(construirMediaSource(c));
-                        exoPlayer.prepare();
-                        exoPlayer.setPlayWhenReady(true);
-                    } catch (Exception e2) {
-                        Log.e(TAG, "Reintento fallido: " + e2.getMessage());
-                        mostrarLoaderError();
-                    }
-                }
-            }, 1500);
-            return;
-        }
+        exoPlayer.setMediaSource(construirMediaSource(c));
+        exoPlayer.prepare();
+        exoPlayer.play();
 
         programarTimeoutCanal();
 
