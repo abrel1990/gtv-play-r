@@ -57,8 +57,7 @@ dependencies {
     implementation 'androidx.tvprovider:tvprovider:1.0.0'
 
     // ✅ PipePipeExtractor (commit fijo en lugar de master-SNAPSHOT)
-    implementation 'com.github.InfinityLoop1308:PipePipeExtractor:2d8fae9e9b'
-
+    implementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.24.4'
     // ✅ OkHttp (versión 4.12.0 compatible con compileSdk 34)
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 
