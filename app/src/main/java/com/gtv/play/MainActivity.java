@@ -68,6 +68,7 @@ import org.schabi.newpipe.extractor.ServiceList;
 import org.schabi.newpipe.extractor.channel.ChannelInfo;
 import org.schabi.newpipe.extractor.stream.StreamInfo;
 import org.schabi.newpipe.extractor.stream.StreamInfoItem;
+import org.schabi.newpipe.extractor.stream.StreamType;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 
 public class MainActivity extends AppCompatActivity {
@@ -229,9 +230,9 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // ✅ NUEVO: Inicializar NewPipe
+        // ✅ NUEVO: Inicializar NewPipe (CORREGIDO: sin .getService())
         try {
-            NewPipe.init(ServiceList.YouTube.getService());
+            NewPipe.init(ServiceList.YouTube);
             Log.e(TAG, "NewPipe inicializado");
         } catch (Exception e) {
             Log.e(TAG, "Error inicializando NewPipe: " + e.getMessage());
@@ -242,7 +243,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ============================================================
-    // ✅ NUEVO: NewPipe - resolver YouTube sin scraping
+    // ✅ NUEVO: NewPipe - resolver YouTube sin scraping (CORREGIDO)
     // ============================================================
 
     private void resolverYouTubeConNewPipe(String url) {
@@ -263,8 +264,9 @@ public class MainActivity extends AppCompatActivity {
                         "https://www.youtube.com/" + handle
                     );
 
+                    // ✅ FIX: getStreamType() == StreamType.LIVE_STREAM
                     for (StreamInfoItem item : channelInfo.getRelatedItems()) {
-                        if (item.isLive()) {
+                        if (item.getStreamType() == StreamType.LIVE_STREAM) {
                             videoId = item.getUrl().replace("https://www.youtube.com/watch?v=", "");
                             break;
                         }
@@ -1531,7 +1533,7 @@ public class MainActivity extends AppCompatActivity {
                 value -> {
                     if (value != null && value.contains("PLAYER")) {
                         myWebView.evaluateJavascript(
-                            "javascript:(function(){try{if(window.gtvStop)window.gtvStop();else if(window.stop)window.stop();}catch(e){}})()",
+                            "javascript:(function(){try{if(window.gtvStop)window.gtvStop();else if(window.stop)window.stop();}catch(e){}})();",
                             null);
                     } else if (myWebView.canGoBack()) {
                         myWebView.goBack();
