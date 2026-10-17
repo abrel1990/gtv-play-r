@@ -27,6 +27,7 @@ import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -256,6 +257,46 @@ public class MainActivity extends AppCompatActivity {
             try {
                 myWebView.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
             } catch (Exception e) {}
+        });
+    }
+
+    // ============================================================
+    // ✅ NUEVO: Cargar YouTube con baseUrl para engañar el Error 153
+    // ============================================================
+    private void cargarIframeConBaseUrl(String videoId) {
+        if (myWebView == null) return;
+        String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
+            "<style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}" +
+            "iframe{width:100%;height:100%;border:0;display:block}</style>" +
+            "<meta name='referrer' content='origin'>" +
+            "</head><body>" +
+            "<iframe src='https://www.youtube.com/embed/" + videoId + 
+            "?autoplay=1&playsinline=1&rel=0&modestbranding=1&cc_load_policy=0&iv_load_policy=3'" +
+            " allow='autoplay; encrypted-media; fullscreen; picture-in-picture'" +
+            " allowfullscreen></iframe>" +
+            "</body></html>";
+        myWebView.loadDataWithBaseURL(
+            "https://www.youtube.com/", 
+            html, 
+            "text/html", 
+            "UTF-8", 
+            null
+        );
+        Log.e(TAG, "Iframe YouTube cargado con baseUrl para video: " + videoId);
+    }
+
+    @JavascriptInterface
+    public void cargarYouTubeSeguro(String videoId) {
+        runOnUiThread(() -> {
+            try {
+                playerContainer.setVisibility(View.GONE);
+                myWebView.setVisibility(View.VISIBLE);
+                myWebView.onResume();
+                myWebView.resumeTimers();
+                cargarIframeConBaseUrl(videoId);
+            } catch (Exception e) {
+                Log.e(TAG, "Error cargando YouTube seguro: " + e.getMessage());
+            }
         });
     }
 
@@ -1027,6 +1068,11 @@ public class MainActivity extends AppCompatActivity {
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setSupportMultipleWindows(false);
 
+        // ✅ FIX: User-Agent de Chrome + cookies para YouTube
+        s.setUserAgentString("Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(myWebView, true);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         }
@@ -1176,7 +1222,6 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        // ✅ reproducir con 6 args (con gain)
         @JavascriptInterface
         public void reproducir(String url, String nombre, String numero, String logo, String referer, float gainArg) {
             final float gain = (gainArg > 0f && gainArg <= 2f) ? gainArg : 1.0f;
@@ -1199,13 +1244,11 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        // Compatibilidad: 5 args
         @JavascriptInterface
         public void reproducir(String url, String nombre, String numero, String logo, String referer) {
             reproducir(url, nombre, numero, logo, referer, 1.0f);
         }
 
-        // Compatibilidad: 4 args
         @JavascriptInterface
         public void reproducir(String url, String nombre, String numero, String logo) {
             reproducir(url, nombre, numero, logo, "", 1.0f);
