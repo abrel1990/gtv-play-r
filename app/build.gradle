@@ -1,5 +1,7 @@
 plugins {
     id 'com.android.application'
+    // ✅ AGREGADO: Plugin de Kotlin (necesario para PoTokenProviderImpl.kt y PoTokenWebView.kt)
+    id 'org.jetbrains.kotlin.android'
 }
 
 def buildVersionCode = (System.getenv("BUILD_VERSION_CODE") ?: "1").toInteger()
@@ -40,6 +42,11 @@ android {
         // ✅ CRÍTICO: desugar_jdk_libs_nio (NO el normal) para NewPipe con minSdk 21
         coreLibraryDesugaringEnabled true
     }
+
+    // ✅ AGREGADO: Opciones de compilación de Kotlin
+    kotlinOptions {
+        jvmTarget = '17'
+    }
 }
 
 repositories {
@@ -64,6 +71,9 @@ dependencies {
 
     // ✅ CRÍTICO: desugar_jdk_libs_nio (NO desugar_jdk_libs)
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.0.4'
-    // ✅ OkHttp (necesario para InnerTube)
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // ✅ AGREGADO: Kotlin y RxJava (necesarios para el PoTokenProvider)
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
+    implementation 'io.reactivex.rxjava3:rxjava:3.1.8'
+    implementation 'io.reactivex.rxjava3:rxandroid:3.0.2'
 }
