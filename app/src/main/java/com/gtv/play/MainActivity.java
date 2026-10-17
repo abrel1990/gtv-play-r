@@ -253,10 +253,8 @@ public class MainActivity extends AppCompatActivity {
                 String videoId = null;
                 String handle = null;
 
-                // Detectar tipo de URL de forma robusta
                 String lowerUrl = url.toLowerCase();
                 if (lowerUrl.contains("@")) {
-                    // @handle o /c/ o /channel/ o /user/
                     int atIdx = url.indexOf('@');
                     if (atIdx >= 0) {
                         String resto = url.substring(atIdx);
@@ -275,20 +273,17 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
-                // Si es handle, buscar el live en la pestaña de directos
                 if (handle != null) {
                     ChannelInfo channelInfo = ChannelInfo.getInfo(
                         ServiceList.YouTube,
                         "https://www.youtube.com/" + handle
                     );
 
-                    // Recorrer las pestañas del canal buscando la de "live"
                     for (ListLinkHandler tab : channelInfo.getTabs()) {
                         List<String> filters = tab.getContentFilters();
                         if (filters != null && !filters.isEmpty() &&
                             "live".equals(filters.get(0))) {
 
-                            // ✅ API CORRECTA: StreamingService.getChannelTabExtractor
                             ChannelTabExtractor tabExtractor = ServiceList.YouTube.getChannelTabExtractor(tab);
                             tabExtractor.fetchPage();
                             for (InfoItem item : tabExtractor.getInitialPage().getItems()) {
@@ -296,7 +291,6 @@ public class MainActivity extends AppCompatActivity {
                                     StreamInfoItem stream = (StreamInfoItem) item;
                                     if (stream.getStreamType() == StreamType.LIVE_STREAM) {
                                         String streamUrl = stream.getUrl();
-                                        // Extraer videoId de la URL del stream
                                         if (streamUrl.contains("watch?v=")) {
                                             videoId = streamUrl.substring(streamUrl.indexOf("watch?v=") + 8, streamUrl.indexOf("watch?v=") + 8 + 11);
                                         }
@@ -319,32 +313,30 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                // Obtener info del stream
                 StreamInfo info = StreamInfo.getInfo(
                     ServiceList.YouTube,
                     "https://www.youtube.com/watch?v=" + videoId
                 );
 
-                // Buscar stream en formato M3U8 o MP4 (muxed)
                 String videoUrl = null;
-for (VideoStream vs : info.getVideoStreams()) {
-    if (vs.getUrl().contains("m3u8") || vs.getUrl().contains("mp4")) {
-        videoUrl = vs.getUrl();
-        break;
-    }
-}
-if (videoUrl == null && !info.getVideoStreams().isEmpty()) {
-    videoUrl = info.getVideoStreams().get(0).getUrl();
-}
+                for (VideoStream vs : info.getVideoStreams()) {
+                    if (vs.getUrl().contains("m3u8") || vs.getUrl().contains("mp4")) {
+                        videoUrl = vs.getUrl();
+                        break;
+                    }
+                }
+                if (videoUrl == null && !info.getVideoStreams().isEmpty()) {
+                    videoUrl = info.getVideoStreams().get(0).getUrl();
+                }
 
-// ✅ PLAN B: Si no hay streams directos, buscar en HLS o DASH
-if (videoUrl == null || videoUrl.isEmpty()) {
-    if (info.getHlsUrl() != null && !info.getHlsUrl().isEmpty()) {
-        videoUrl = info.getHlsUrl();
-    } else if (info.getDashMpdUrl() != null && !info.getDashMpdUrl().isEmpty()) {
-        videoUrl = info.getDashMpdUrl();
-    }
-}
+                // Plan B: si no hay streams directos, buscar en HLS o DASH
+                if (videoUrl == null || videoUrl.isEmpty()) {
+                    if (info.getHlsUrl() != null && !info.getHlsUrl().isEmpty()) {
+                        videoUrl = info.getHlsUrl();
+                    } else if (info.getDashMpdUrl() != null && !info.getDashMpdUrl().isEmpty()) {
+                        videoUrl = info.getDashMpdUrl();
+                    }
+                }
 
                 if (videoUrl != null) {
                     final String finalUrl = videoUrl;
@@ -363,7 +355,6 @@ if (videoUrl == null || videoUrl.isEmpty()) {
             } catch (Exception e) {
                 Log.e(TAG, "NewPipe error: " + e.getMessage());
                 runOnUiThread(() -> {
-                    // Fallback: si es watch?v= intentar con el iframe
                     if (url.contains("watch?v=")) {
                         String vid = url.substring(url.indexOf("watch?v=") + 8).substring(0, 11);
                         cargarYouTubeSeguro(vid);
@@ -379,6 +370,7 @@ if (videoUrl == null || videoUrl.isEmpty()) {
         runOnUiThread(() -> {
             mostrarLoaderError();
             Toast.makeText(this, "Canal sin señal", Toast.LENGTH_SHORT).show();
+            avisarAlWebView("window.gtv&&window.gtv.onNativoError&&window.gtv.onNativoError();");
         });
     }
 
