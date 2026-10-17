@@ -232,12 +232,10 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // ✅ NUEVO: Inicializar NewPipe con DownloaderImpl y registrar PoTokenProvider
+        // NewPipe: inicializar con DownloaderImpl
         try {
             NewPipe.init(DownloaderImpl.getInstance());
-            // ✅ REGISTRAR EL PO TOKEN PROVIDER (Para que no nos bloquee YouTube)
-//            NewPipe.getService(0).setPoTokenProvider(new PoTokenProviderImpl(this));
-            Log.e(TAG, "NewPipe inicializado y PoTokenProvider registrado OK");
+            Log.e(TAG, "NewPipe inicializado OK");
         } catch (Exception e) {
             Log.e(TAG, "Error inicializando NewPipe: " + e.getMessage());
         }
