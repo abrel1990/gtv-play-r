@@ -279,26 +279,34 @@ public class MainActivity extends AppCompatActivity {
                         "https://www.youtube.com/" + handle
                     );
 
+                    // ✅ FIX: Detección robusta de la pestaña de vivos
                     for (ListLinkHandler tab : channelInfo.getTabs()) {
                         List<String> filters = tab.getContentFilters();
-                        if (filters != null && !filters.isEmpty() &&
-                            "live".equals(filters.get(0))) {
-
-                            ChannelTabExtractor tabExtractor = ServiceList.YouTube.getChannelTabExtractor(tab);
-                            tabExtractor.fetchPage();
-                            for (InfoItem item : tabExtractor.getInitialPage().getItems()) {
-                                if (item instanceof StreamInfoItem) {
-                                    StreamInfoItem stream = (StreamInfoItem) item;
-                                    if (stream.getStreamType() == StreamType.LIVE_STREAM) {
-                                        String streamUrl = stream.getUrl();
-                                        if (streamUrl.contains("watch?v=")) {
-                                            videoId = streamUrl.substring(streamUrl.indexOf("watch?v=") + 8, streamUrl.indexOf("watch?v=") + 8 + 11);
+                        if (filters != null && !filters.isEmpty()) {
+                            String filtro = filters.get(0).toLowerCase();
+                            
+                            // Acepta "live", "livestreams", "en vivo", "directo"
+                            if (filtro.contains("live") || filtro.contains("vivo") || filtro.contains("directo")) {
+                                try {
+                                    ChannelTabExtractor tabExtractor = ServiceList.YouTube.getChannelTabExtractor(tab);
+                                    tabExtractor.fetchPage();
+                                    for (InfoItem item : tabExtractor.getInitialPage().getItems()) {
+                                        if (item instanceof StreamInfoItem) {
+                                            StreamInfoItem stream = (StreamInfoItem) item;
+                                            if (stream.getStreamType() == StreamType.LIVE_STREAM) {
+                                                String streamUrl = stream.getUrl();
+                                                if (streamUrl.contains("watch?v=")) {
+                                                    videoId = streamUrl.substring(streamUrl.indexOf("watch?v=") + 8, streamUrl.indexOf("watch?v=") + 8 + 11);
+                                                }
+                                                break;
+                                            }
                                         }
-                                        break;
                                     }
+                                } catch (Exception e) {
+                                    Log.e(TAG, "Error en pestaña de vivos: " + e.getMessage());
                                 }
+                                if (videoId != null) break;
                             }
-                            break;
                         }
                     }
 
@@ -329,7 +337,7 @@ public class MainActivity extends AppCompatActivity {
                     videoUrl = info.getVideoStreams().get(0).getUrl();
                 }
 
-                // Plan B: si no hay streams directos, buscar en HLS o DASH
+                // ✅ Plan B: si no hay streams directos, buscar en HLS o DASH
                 if (videoUrl == null || videoUrl.isEmpty()) {
                     if (info.getHlsUrl() != null && !info.getHlsUrl().isEmpty()) {
                         videoUrl = info.getHlsUrl();
