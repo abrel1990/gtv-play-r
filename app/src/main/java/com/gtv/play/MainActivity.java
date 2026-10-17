@@ -60,7 +60,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -232,7 +231,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ============================================================
-    // YOUTUBE: InnerTube con VISIONOS (y IOS de fallback)
+    // YOUTUBE: InnerTube con MWEB (y VISIONOS/WEB_SAFARI de fallback)
     // ============================================================
     private void resolverYouTubeConInnerTube(String url) {
         new Thread(() -> {
@@ -243,24 +242,24 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                // 1º intento: VISIONOS (Apple Vision Pro)
-                String hls = intentarPlayer(videoId, "VISIONOS", "1.0", "Apple Vision Pro");
+                // 1º intento: MWEB (Mobile Web) - el que reportan que funciona hoy
+                String hls = intentarPlayer(videoId, "MWEB", "2.20241010.01.00", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
                 if (hls != null) {
                     final String finalUrl = hls;
                     runOnUiThread(() -> reproducirEnExo(new Canal(finalUrl, "YouTube", "", "", 1.0f)));
                     return;
                 }
 
-                // 2º intento: IOS
-                hls = intentarPlayer(videoId, "IOS", "19.45.4", "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1_0 like Mac OS X;)");
+                // 2º intento: VISIONOS
+                hls = intentarPlayer(videoId, "VISIONOS", "1.0", "Apple Vision Pro");
                 if (hls != null) {
                     final String finalUrl = hls;
                     runOnUiThread(() -> reproducirEnExo(new Canal(finalUrl, "YouTube", "", "", 1.0f)));
                     return;
                 }
 
-                // 3º intento: TVHTML5_SIMPLY_EMBEDDED_PLAYER (último recurso)
-                hls = intentarPlayer(videoId, "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "2.0", "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version");
+                // 3º intento: WEB_SAFARI (a veces devuelve HLS)
+                hls = intentarPlayer(videoId, "WEB_SAFARI", "19.45.4", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.10 Safari/605.1.15");
                 if (hls != null) {
                     final String finalUrl = hls;
                     runOnUiThread(() -> reproducirEnExo(new Canal(finalUrl, "YouTube", "", "", 1.0f)));
@@ -282,12 +281,6 @@ public class MainActivity extends AppCompatActivity {
             JSONObject client = new JSONObject();
             client.put("clientName", clientName);
             client.put("clientVersion", clientVersion);
-            if (clientName.equals("VISIONOS")) {
-                client.put("deviceMake", "Apple");
-                client.put("deviceModel", "RealityDevice14,1");
-                client.put("osName", "visionOS");
-                client.put("osVersion", "1.3.0.21O224");
-            }
 
             JSONObject context = new JSONObject();
             context.put("client", client);
@@ -312,14 +305,12 @@ public class MainActivity extends AppCompatActivity {
 
             Log.e(TAG, "InnerTube " + clientName + " status: " + response.code());
 
-            // Buscar hlsManifestUrl en el JSON
             int idx = respStr.indexOf("\"hlsManifestUrl\":\"");
             if (idx >= 0) {
                 int start = idx + "\"hlsManifestUrl\":\"".length();
                 int end = respStr.indexOf("\"", start);
                 if (end > start) {
                     String hls = respStr.substring(start, end);
-                    // Desescapar \u0026
                     hls = hls.replace("\\u0026", "&");
                     Log.e(TAG, "HLS encontrado (" + clientName + "): " + hls.substring(0, Math.min(80, hls.length())) + "...");
                     return hls;
