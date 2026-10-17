@@ -327,15 +327,24 @@ public class MainActivity extends AppCompatActivity {
 
                 // Buscar stream en formato M3U8 o MP4 (muxed)
                 String videoUrl = null;
-                for (VideoStream vs : info.getVideoStreams()) {
-                    if (vs.getUrl().contains("m3u8") || vs.getUrl().contains("mp4")) {
-                        videoUrl = vs.getUrl();
-                        break;
-                    }
-                }
-                if (videoUrl == null && !info.getVideoStreams().isEmpty()) {
-                    videoUrl = info.getVideoStreams().get(0).getUrl();
-                }
+for (VideoStream vs : info.getVideoStreams()) {
+    if (vs.getUrl().contains("m3u8") || vs.getUrl().contains("mp4")) {
+        videoUrl = vs.getUrl();
+        break;
+    }
+}
+if (videoUrl == null && !info.getVideoStreams().isEmpty()) {
+    videoUrl = info.getVideoStreams().get(0).getUrl();
+}
+
+// ✅ PLAN B: Si no hay streams directos, buscar en HLS o DASH
+if (videoUrl == null || videoUrl.isEmpty()) {
+    if (info.getHlsUrl() != null && !info.getHlsUrl().isEmpty()) {
+        videoUrl = info.getHlsUrl();
+    } else if (info.getDashMpdUrl() != null && !info.getDashMpdUrl().isEmpty()) {
+        videoUrl = info.getDashMpdUrl();
+    }
+}
 
                 if (videoUrl != null) {
                     final String finalUrl = videoUrl;
