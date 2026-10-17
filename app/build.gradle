@@ -15,7 +15,6 @@ android {
         targetSdk 34
         versionCode buildVersionCode
         versionName buildVersionName
-        // ✅ NUEVO: desugaring para NewPipe (minSdk 21)
         multiDexEnabled true
     }
 
@@ -38,13 +37,12 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
-        // ✅ NUEVO: desugaring para NewPipe
+        // ✅ CRÍTICO: desugar_jdk_libs_nio (NO el normal) para NewPipe con minSdk 21
         coreLibraryDesugaringEnabled true
     }
 }
 
 repositories {
-    // ✅ NUEVO: repositorio de JitPack para NewPipe
     maven { url 'https://jitpack.io' }
 }
 
@@ -57,10 +55,13 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
     implementation 'androidx.media3:media3-ui:1.4.1'
     implementation 'androidx.tvprovider:tvprovider:1.0.0'
-    
-    // ✅ NUEVO: NewPipe Extractor
+
+    // ✅ NewPipe Extractor
     implementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.24.8'
-    
-    // ✅ NUEVO: desugaring (necesario para minSdk 21)
+
+    // ✅ CRÍTICO: OkHttp para el Downloader de NewPipe
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // ✅ CRÍTICO: desugar_jdk_libs_nio (NO desugar_jdk_libs)
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.0.4'
 }
