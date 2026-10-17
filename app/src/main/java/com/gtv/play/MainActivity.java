@@ -62,22 +62,17 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-// NewPipe
-import org.schabi.newpipe.extractor.NewPipe;
-import org.schabi.newpipe.extractor.ServiceList;
-import org.schabi.newpipe.extractor.InfoItem;
-import org.schabi.newpipe.extractor.channel.ChannelInfo;
-import org.schabi.newpipe.extractor.channel.tabs.ChannelTabExtractor;
-import org.schabi.newpipe.extractor.linkhandler.ListLinkHandler;
-import org.schabi.newpipe.extractor.stream.StreamInfo;
-import org.schabi.newpipe.extractor.stream.StreamInfoItem;
-import org.schabi.newpipe.extractor.stream.StreamType;
-import org.schabi.newpipe.extractor.stream.VideoStream;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GTV_DEBUG";
+    private static final String YT_API_KEY = "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w";
+    private static final OkHttpClient httpClient = new OkHttpClient();
 
     private WebView myWebView;
     private ExoPlayer exoPlayer;
@@ -232,146 +227,124 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // NewPipe: inicializar con DownloaderImpl
-        try {
-            NewPipe.init(DownloaderImpl.getInstance());
-            Log.e(TAG, "NewPipe inicializado OK");
-        } catch (Exception e) {
-            Log.e(TAG, "Error inicializando NewPipe: " + e.getMessage());
-        }
-
         handler.postDelayed(this::checkForUpdates, 3000);
         handler.postDelayed(this::inicializarWatchNext, 1500);
     }
 
     // ============================================================
-    // NewPipe: resolver YouTube (watch?v= y @handle)
+    // YOUTUBE: InnerTube con VISIONOS (y IOS de fallback)
     // ============================================================
-    private void resolverYouTubeConNewPipe(String url) {
+    private void resolverYouTubeConInnerTube(String url) {
         new Thread(() -> {
             try {
-                String videoId = null;
-                String handle = null;
-
-                String lowerUrl = url.toLowerCase();
-                if (lowerUrl.contains("@")) {
-                    int atIdx = url.indexOf('@');
-                    if (atIdx >= 0) {
-                        String resto = url.substring(atIdx);
-                        int slash = resto.indexOf('/');
-                        handle = (slash > 0) ? resto.substring(0, slash) : resto;
-                    }
-                } else if (lowerUrl.contains("watch?v=")) {
-                    int idx = lowerUrl.indexOf("watch?v=");
-                    if (idx >= 0 && idx + 8 + 11 <= url.length()) {
-                        videoId = url.substring(idx + 8, idx + 8 + 11);
-                    }
-                } else if (lowerUrl.contains("youtu.be/")) {
-                    int idx = lowerUrl.indexOf("youtu.be/");
-                    if (idx >= 0 && idx + 9 + 11 <= url.length()) {
-                        videoId = url.substring(idx + 9, idx + 9 + 11);
-                    }
-                }
-
-                if (handle != null) {
-                    ChannelInfo channelInfo = ChannelInfo.getInfo(
-                        ServiceList.YouTube,
-                        "https://www.youtube.com/" + handle
-                    );
-
-                    // ✅ FIX: Detección robusta de la pestaña de vivos
-                    for (ListLinkHandler tab : channelInfo.getTabs()) {
-                        List<String> filters = tab.getContentFilters();
-                        if (filters != null && !filters.isEmpty()) {
-                            String filtro = filters.get(0).toLowerCase();
-                            
-                            // Acepta "live", "livestreams", "en vivo", "directo"
-                            if (filtro.contains("live") || filtro.contains("vivo") || filtro.contains("directo")) {
-                                try {
-                                    ChannelTabExtractor tabExtractor = ServiceList.YouTube.getChannelTabExtractor(tab);
-                                    tabExtractor.fetchPage();
-                                    for (InfoItem item : tabExtractor.getInitialPage().getItems()) {
-                                        if (item instanceof StreamInfoItem) {
-                                            StreamInfoItem stream = (StreamInfoItem) item;
-                                            if (stream.getStreamType() == StreamType.LIVE_STREAM) {
-                                                String streamUrl = stream.getUrl();
-                                                if (streamUrl.contains("watch?v=")) {
-                                                    videoId = streamUrl.substring(streamUrl.indexOf("watch?v=") + 8, streamUrl.indexOf("watch?v=") + 8 + 11);
-                                                }
-                                                break;
-                                            }
-                                        }
-                                    }
-                                } catch (Exception e) {
-                                    Log.e(TAG, "Error en pestaña de vivos: " + e.getMessage());
-                                }
-                                if (videoId != null) break;
-                            }
-                        }
-                    }
-
-                    if (videoId == null) {
-                        runOnUiThread(this::mostrarSinSenal);
-                        return;
-                    }
-                }
-
+                String videoId = extraerVideoId(url);
                 if (videoId == null) {
                     runOnUiThread(this::mostrarSinSenal);
                     return;
                 }
 
-                StreamInfo info = StreamInfo.getInfo(
-                    ServiceList.YouTube,
-                    "https://www.youtube.com/watch?v=" + videoId
-                );
-
-                String videoUrl = null;
-                for (VideoStream vs : info.getVideoStreams()) {
-                    if (vs.getUrl().contains("m3u8") || vs.getUrl().contains("mp4")) {
-                        videoUrl = vs.getUrl();
-                        break;
-                    }
-                }
-                if (videoUrl == null && !info.getVideoStreams().isEmpty()) {
-                    videoUrl = info.getVideoStreams().get(0).getUrl();
+                // 1º intento: VISIONOS (Apple Vision Pro)
+                String hls = intentarPlayer(videoId, "VISIONOS", "1.0", "Apple Vision Pro");
+                if (hls != null) {
+                    final String finalUrl = hls;
+                    runOnUiThread(() -> reproducirEnExo(new Canal(finalUrl, "YouTube", "", "", 1.0f)));
+                    return;
                 }
 
-                // ✅ Plan B: si no hay streams directos, buscar en HLS o DASH
-                if (videoUrl == null || videoUrl.isEmpty()) {
-                    if (info.getHlsUrl() != null && !info.getHlsUrl().isEmpty()) {
-                        videoUrl = info.getHlsUrl();
-                    } else if (info.getDashMpdUrl() != null && !info.getDashMpdUrl().isEmpty()) {
-                        videoUrl = info.getDashMpdUrl();
-                    }
+                // 2º intento: IOS
+                hls = intentarPlayer(videoId, "IOS", "19.45.4", "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1_0 like Mac OS X;)");
+                if (hls != null) {
+                    final String finalUrl = hls;
+                    runOnUiThread(() -> reproducirEnExo(new Canal(finalUrl, "YouTube", "", "", 1.0f)));
+                    return;
                 }
 
-                if (videoUrl != null) {
-                    final String finalUrl = videoUrl;
-                    runOnUiThread(() -> {
-                        Log.e(TAG, "NewPipe OK: " + finalUrl);
-                        if (indiceActual >= 0 && indiceActual < canales.size()) {
-                            Canal c = canales.get(indiceActual);
-                            reproducirEnExo(new Canal(finalUrl, c.nombre, c.logo, c.referer, c.gain));
-                        } else {
-                            reproducirEnExo(new Canal(finalUrl, "YouTube", "", "", 1.0f));
-                        }
-                    });
-                } else {
-                    runOnUiThread(this::mostrarSinSenal);
+                // 3º intento: TVHTML5_SIMPLY_EMBEDDED_PLAYER (último recurso)
+                hls = intentarPlayer(videoId, "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "2.0", "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version");
+                if (hls != null) {
+                    final String finalUrl = hls;
+                    runOnUiThread(() -> reproducirEnExo(new Canal(finalUrl, "YouTube", "", "", 1.0f)));
+                    return;
                 }
+
+                // Si todo falla
+                runOnUiThread(this::mostrarSinSenal);
+
             } catch (Exception e) {
-                Log.e(TAG, "NewPipe error: " + e.getMessage());
-                runOnUiThread(() -> {
-                    if (url.contains("watch?v=")) {
-                        String vid = url.substring(url.indexOf("watch?v=") + 8).substring(0, 11);
-                        cargarYouTubeSeguro(vid);
-                    } else {
-                        mostrarSinSenal();
-                    }
-                });
+                Log.e(TAG, "InnerTube error: " + e.getMessage());
+                runOnUiThread(this::mostrarSinSenal);
             }
         }).start();
+    }
+
+    private String intentarPlayer(String videoId, String clientName, String clientVersion, String userAgent) {
+        try {
+            JSONObject client = new JSONObject();
+            client.put("clientName", clientName);
+            client.put("clientVersion", clientVersion);
+            if (clientName.equals("VISIONOS")) {
+                client.put("deviceMake", "Apple");
+                client.put("deviceModel", "RealityDevice14,1");
+                client.put("osName", "visionOS");
+                client.put("osVersion", "1.3.0.21O224");
+            }
+
+            JSONObject context = new JSONObject();
+            context.put("client", client);
+
+            JSONObject body = new JSONObject();
+            body.put("context", context);
+            body.put("videoId", videoId);
+            body.put("contentCheckOk", true);
+            body.put("racyCheckOk", true);
+
+            RequestBody reqBody = RequestBody.create(body.toString(), MediaType.parse("application/json"));
+            Request request = new Request.Builder()
+                .url("https://www.youtube.com/youtubei/v1/player?key=" + YT_API_KEY + "&prettyPrint=false")
+                .post(reqBody)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("User-Agent", userAgent)
+                .build();
+
+            Response response = httpClient.newCall(request).execute();
+            String respStr = response.body().string();
+            response.close();
+
+            Log.e(TAG, "InnerTube " + clientName + " status: " + response.code());
+
+            // Buscar hlsManifestUrl en el JSON
+            int idx = respStr.indexOf("\"hlsManifestUrl\":\"");
+            if (idx >= 0) {
+                int start = idx + "\"hlsManifestUrl\":\"".length();
+                int end = respStr.indexOf("\"", start);
+                if (end > start) {
+                    String hls = respStr.substring(start, end);
+                    // Desescapar \u0026
+                    hls = hls.replace("\\u0026", "&");
+                    Log.e(TAG, "HLS encontrado (" + clientName + "): " + hls.substring(0, Math.min(80, hls.length())) + "...");
+                    return hls;
+                }
+            }
+
+            Log.e(TAG, "No hay hlsManifestUrl para " + clientName);
+            return null;
+        } catch (Exception e) {
+            Log.e(TAG, "Error en intentarPlayer " + clientName + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    private String extraerVideoId(String url) {
+        String lower = url.toLowerCase();
+        if (lower.contains("watch?v=")) {
+            int i = lower.indexOf("watch?v=") + 8;
+            if (i + 11 <= url.length()) return url.substring(i, i + 11);
+        }
+        if (lower.contains("youtu.be/")) {
+            int i = lower.indexOf("youtu.be/") + 9;
+            if (i + 11 <= url.length()) return url.substring(i, i + 11);
+        }
+        return null;
     }
 
     private void mostrarSinSenal() {
@@ -384,7 +357,7 @@ public class MainActivity extends AppCompatActivity {
 
     @JavascriptInterface
     public void resolverYouTube(String url) {
-        resolverYouTubeConNewPipe(url);
+        resolverYouTubeConInnerTube(url);
     }
 
     private void avisarAlWebView(String js) {
@@ -396,9 +369,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ============================================================
-    // Fallback: iframe con baseUrl
-    // ============================================================
     private void cargarIframeConBaseUrl(String videoId) {
         if (myWebView == null) return;
         String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
@@ -1002,8 +972,7 @@ public class MainActivity extends AppCompatActivity {
                 if (logo != null && !logo.isEmpty()) Glide.with(MainActivity.this).load(logo).into(logoCanal);
             });
         }
-        // NewPipe
-        @JavascriptInterface public void resolverYouTube(String url) { resolverYouTubeConNewPipe(url); }
+        @JavascriptInterface public void resolverYouTube(String url) { resolverYouTubeConInnerTube(url); }
     }
 
     private void volverAlWebViewConJS(String js) {
