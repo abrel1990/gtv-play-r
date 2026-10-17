@@ -236,7 +236,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             NewPipe.init(DownloaderImpl.getInstance());
             // ✅ REGISTRAR EL PO TOKEN PROVIDER (Para que no nos bloquee YouTube)
-            NewPipe.getService(0).setPoTokenProvider(new PoTokenProviderImpl(this));
+//            NewPipe.getService(0).setPoTokenProvider(new PoTokenProviderImpl(this));
             Log.e(TAG, "NewPipe inicializado y PoTokenProvider registrado OK");
         } catch (Exception e) {
             Log.e(TAG, "Error inicializando NewPipe: " + e.getMessage());
