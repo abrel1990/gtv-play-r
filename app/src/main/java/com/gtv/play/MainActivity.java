@@ -63,7 +63,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// ✅ NewPipe
+// NewPipe
 import org.schabi.newpipe.extractor.NewPipe;
 import org.schabi.newpipe.extractor.ServiceList;
 import org.schabi.newpipe.extractor.InfoItem;
@@ -232,7 +232,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // ✅ NewPipe: inicializar con DownloaderImpl
+        // NewPipe: inicializar con DownloaderImpl
         try {
             NewPipe.init(DownloaderImpl.getInstance());
             Log.e(TAG, "NewPipe inicializado OK");
@@ -245,7 +245,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ============================================================
-    // ✅ NewPipe: resolver YouTube
+    // NewPipe: resolver YouTube (watch?v= y @handle)
     // ============================================================
     private void resolverYouTubeConNewPipe(String url) {
         new Thread(() -> {
@@ -253,31 +253,53 @@ public class MainActivity extends AppCompatActivity {
                 String videoId = null;
                 String handle = null;
 
-                if (url.contains("@")) {
-                    handle = url.substring(url.indexOf("@")).split("/")[0];
-                } else if (url.contains("watch?v=")) {
-                    videoId = url.substring(url.indexOf("watch?v=") + 8).substring(0, 11);
+                // Detectar tipo de URL de forma robusta
+                String lowerUrl = url.toLowerCase();
+                if (lowerUrl.contains("@")) {
+                    // @handle o /c/ o /channel/ o /user/
+                    int atIdx = url.indexOf('@');
+                    if (atIdx >= 0) {
+                        String resto = url.substring(atIdx);
+                        int slash = resto.indexOf('/');
+                        handle = (slash > 0) ? resto.substring(0, slash) : resto;
+                    }
+                } else if (lowerUrl.contains("watch?v=")) {
+                    int idx = lowerUrl.indexOf("watch?v=");
+                    if (idx >= 0 && idx + 8 + 11 <= url.length()) {
+                        videoId = url.substring(idx + 8, idx + 8 + 11);
+                    }
+                } else if (lowerUrl.contains("youtu.be/")) {
+                    int idx = lowerUrl.indexOf("youtu.be/");
+                    if (idx >= 0 && idx + 9 + 11 <= url.length()) {
+                        videoId = url.substring(idx + 9, idx + 9 + 11);
+                    }
                 }
 
+                // Si es handle, buscar el live en la pestaña de directos
                 if (handle != null) {
                     ChannelInfo channelInfo = ChannelInfo.getInfo(
                         ServiceList.YouTube,
                         "https://www.youtube.com/" + handle
                     );
 
-                    // Buscar pestaña de LIVESTREAMS
+                    // Recorrer las pestañas del canal buscando la de "live"
                     for (ListLinkHandler tab : channelInfo.getTabs()) {
                         List<String> filters = tab.getContentFilters();
                         if (filters != null && !filters.isEmpty() &&
-                            filters.get(0).toLowerCase().contains("live")) {
-                            ChannelTabExtractor tabExtractor = ChannelTabExtractor.fromService(
-                                ServiceList.YouTube, tab);
+                            "live".equals(filters.get(0))) {
+
+                            // ✅ API CORRECTA: StreamingService.getChannelTabExtractor
+                            ChannelTabExtractor tabExtractor = ServiceList.YouTube.getChannelTabExtractor(tab);
                             tabExtractor.fetchPage();
                             for (InfoItem item : tabExtractor.getInitialPage().getItems()) {
                                 if (item instanceof StreamInfoItem) {
                                     StreamInfoItem stream = (StreamInfoItem) item;
                                     if (stream.getStreamType() == StreamType.LIVE_STREAM) {
-                                        videoId = stream.getUrl().replace("https://www.youtube.com/watch?v=", "");
+                                        String streamUrl = stream.getUrl();
+                                        // Extraer videoId de la URL del stream
+                                        if (streamUrl.contains("watch?v=")) {
+                                            videoId = streamUrl.substring(streamUrl.indexOf("watch?v=") + 8, streamUrl.indexOf("watch?v=") + 8 + 11);
+                                        }
                                         break;
                                     }
                                 }
@@ -297,11 +319,13 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
+                // Obtener info del stream
                 StreamInfo info = StreamInfo.getInfo(
                     ServiceList.YouTube,
                     "https://www.youtube.com/watch?v=" + videoId
                 );
 
+                // Buscar stream en formato M3U8 o MP4 (muxed)
                 String videoUrl = null;
                 for (VideoStream vs : info.getVideoStreams()) {
                     if (vs.getUrl().contains("m3u8") || vs.getUrl().contains("mp4")) {
@@ -330,6 +354,7 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 Log.e(TAG, "NewPipe error: " + e.getMessage());
                 runOnUiThread(() -> {
+                    // Fallback: si es watch?v= intentar con el iframe
                     if (url.contains("watch?v=")) {
                         String vid = url.substring(url.indexOf("watch?v=") + 8).substring(0, 11);
                         cargarYouTubeSeguro(vid);
@@ -363,7 +388,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ============================================================
-    // Fallback: iframe con baseUrl (Error 153)
+    // Fallback: iframe con baseUrl
     // ============================================================
     private void cargarIframeConBaseUrl(String videoId) {
         if (myWebView == null) return;
@@ -968,7 +993,7 @@ public class MainActivity extends AppCompatActivity {
                 if (logo != null && !logo.isEmpty()) Glide.with(MainActivity.this).load(logo).into(logoCanal);
             });
         }
-        // ✅ NewPipe
+        // NewPipe
         @JavascriptInterface public void resolverYouTube(String url) { resolverYouTubeConNewPipe(url); }
     }
 
