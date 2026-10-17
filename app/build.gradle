@@ -59,7 +59,7 @@ dependencies {
     implementation 'androidx.tvprovider:tvprovider:1.0.0'
 
     // ✅ PipePipeExtractor (el fork con SABR)
-    implementation 'com.github.InfinityLoop1308:PipePipeExtractor:master-SNAPSHOT'
+    implementation 'com.github.InfinityLoop1308:PipePipeExtractor:2d8fae9e9b'
 
     // ✅ OkHttp (para el Downloader)
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
