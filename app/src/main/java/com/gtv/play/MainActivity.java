@@ -241,8 +241,8 @@ public class MainActivity extends AppCompatActivity {
             com.gtv.play.potoken.PoTokenProviderImpl.INSTANCE.init(this);
             // Registrar el provider en el extractor de YouTube
             org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor.setPoTokenProvider(
-    com.gtv.play.potoken.PoTokenProviderImpl.INSTANCE
-);
+                com.gtv.play.potoken.PoTokenProviderImpl.INSTANCE
+            );
             Log.e(TAG, "PoTokenProvider registrado OK");
         } catch (Exception e) {
             Log.e(TAG, "Error inicializando NewPipe: " + e.getMessage());
@@ -256,71 +256,63 @@ public class MainActivity extends AppCompatActivity {
     // NewPipe: resolver YouTube (watch?v= y @handle)
     // ============================================================
     private void resolverYouTubeConNewPipe(String url) {
-        new Thread(() -> {
-            try {
-                String videoId = null;
-                String handle = null;
+        // ✅ FIX: Sin new Thread. Se ejecuta en el hilo principal para que
+        // PoTokenWebView pueda crear el WebView sin crashear.
+        try {
+            String videoId = null;
+            String handle = null;
 
-                String lowerUrl = url.toLowerCase();
-                if (lowerUrl.contains("@")) {
-                    int atIdx = url.indexOf('@');
-                    if (atIdx >= 0) {
-                        String resto = url.substring(atIdx);
-                        int slash = resto.indexOf('/');
-                        handle = (slash > 0) ? resto.substring(0, slash) : resto;
-                    }
-                } else if (lowerUrl.contains("watch?v=")) {
-                    int idx = lowerUrl.indexOf("watch?v=");
-                    if (idx >= 0 && idx + 8 + 11 <= url.length()) {
-                        videoId = url.substring(idx + 8, idx + 8 + 11);
-                    }
-                } else if (lowerUrl.contains("youtu.be/")) {
-                    int idx = lowerUrl.indexOf("youtu.be/");
-                    if (idx >= 0 && idx + 9 + 11 <= url.length()) {
-                        videoId = url.substring(idx + 9, idx + 9 + 11);
-                    }
+            String lowerUrl = url.toLowerCase();
+            if (lowerUrl.contains("@")) {
+                int atIdx = url.indexOf('@');
+                if (atIdx >= 0) {
+                    String resto = url.substring(atIdx);
+                    int slash = resto.indexOf('/');
+                    handle = (slash > 0) ? resto.substring(0, slash) : resto;
                 }
+            } else if (lowerUrl.contains("watch?v=")) {
+                int idx = lowerUrl.indexOf("watch?v=");
+                if (idx >= 0 && idx + 8 + 11 <= url.length()) {
+                    videoId = url.substring(idx + 8, idx + 8 + 11);
+                }
+            } else if (lowerUrl.contains("youtu.be/")) {
+                int idx = lowerUrl.indexOf("youtu.be/");
+                if (idx >= 0 && idx + 9 + 11 <= url.length()) {
+                    videoId = url.substring(idx + 9, idx + 9 + 11);
+                }
+            }
 
-                if (handle != null) {
-                    ChannelInfo channelInfo = ChannelInfo.getInfo(
-                        ServiceList.YouTube,
-                        "https://www.youtube.com/" + handle
-                    );
+            if (handle != null) {
+                ChannelInfo channelInfo = ChannelInfo.getInfo(
+                    ServiceList.YouTube,
+                    "https://www.youtube.com/" + handle
+                );
 
-                    // ✅ FIX: Detección robusta de la pestaña de vivos
-                    for (ListLinkHandler tab : channelInfo.getTabs()) {
-                        List<String> filters = tab.getContentFilters();
-                        if (filters != null && !filters.isEmpty()) {
-                            String filtro = filters.get(0).toLowerCase();
-                            
-                            // Acepta "live", "livestreams", "en vivo", "directo"
-                            if (filtro.contains("live") || filtro.contains("vivo") || filtro.contains("directo")) {
-                                try {
-                                    ChannelTabExtractor tabExtractor = ServiceList.YouTube.getChannelTabExtractor(tab);
-                                    tabExtractor.fetchPage();
-                                    for (InfoItem item : tabExtractor.getInitialPage().getItems()) {
-                                        if (item instanceof StreamInfoItem) {
-                                            StreamInfoItem stream = (StreamInfoItem) item;
-                                            if (stream.getStreamType() == StreamType.LIVE_STREAM) {
-                                                String streamUrl = stream.getUrl();
-                                                if (streamUrl.contains("watch?v=")) {
-                                                    videoId = streamUrl.substring(streamUrl.indexOf("watch?v=") + 8, streamUrl.indexOf("watch?v=") + 8 + 11);
-                                                }
-                                                break;
+                for (ListLinkHandler tab : channelInfo.getTabs()) {
+                    List<String> filters = tab.getContentFilters();
+                    if (filters != null && !filters.isEmpty()) {
+                        String filtro = filters.get(0).toLowerCase();
+                        if (filtro.contains("live") || filtro.contains("vivo") || filtro.contains("directo")) {
+                            try {
+                                ChannelTabExtractor tabExtractor = ServiceList.YouTube.getChannelTabExtractor(tab);
+                                tabExtractor.fetchPage();
+                                for (InfoItem item : tabExtractor.getInitialPage().getItems()) {
+                                    if (item instanceof StreamInfoItem) {
+                                        StreamInfoItem stream = (StreamInfoItem) item;
+                                        if (stream.getStreamType() == StreamType.LIVE_STREAM) {
+                                            String streamUrl = stream.getUrl();
+                                            if (streamUrl.contains("watch?v=")) {
+                                                videoId = streamUrl.substring(streamUrl.indexOf("watch?v=") + 8, streamUrl.indexOf("watch?v=") + 8 + 11);
                                             }
+                                            break;
                                         }
                                     }
-                                } catch (Exception e) {
-                                    Log.e(TAG, "Error en pestaña de vivos: " + e.getMessage());
                                 }
-                                if (videoId != null) break;
+                            } catch (Exception e) {
+                                Log.e(TAG, "Error en pestaña de vivos: " + e.getMessage());
                             }
+                            if (videoId != null) break;
                         }
-                    }
-
-                    if (videoId == null) {
-                        runOnUiThread(this::mostrarSinSenal);
-                        return;
                     }
                 }
 
@@ -328,58 +320,62 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(this::mostrarSinSenal);
                     return;
                 }
+            }
 
-                StreamInfo info = StreamInfo.getInfo(
-                    ServiceList.YouTube,
-                    "https://www.youtube.com/watch?v=" + videoId
-                );
+            if (videoId == null) {
+                runOnUiThread(this::mostrarSinSenal);
+                return;
+            }
 
-                String videoUrl = null;
-                for (VideoStream vs : info.getVideoStreams()) {
-                    if (vs.getUrl().contains("m3u8") || vs.getUrl().contains("mp4")) {
-                        videoUrl = vs.getUrl();
-                        break;
-                    }
-                }
-                if (videoUrl == null && !info.getVideoStreams().isEmpty()) {
-                    videoUrl = info.getVideoStreams().get(0).getUrl();
-                }
+            StreamInfo info = StreamInfo.getInfo(
+                ServiceList.YouTube,
+                "https://www.youtube.com/watch?v=" + videoId
+            );
 
-                // ✅ Plan B: si no hay streams directos, buscar en HLS o DASH
-                if (videoUrl == null || videoUrl.isEmpty()) {
-                    if (info.getHlsUrl() != null && !info.getHlsUrl().isEmpty()) {
-                        videoUrl = info.getHlsUrl();
-                    } else if (info.getDashMpdUrl() != null && !info.getDashMpdUrl().isEmpty()) {
-                        videoUrl = info.getDashMpdUrl();
-                    }
+            String videoUrl = null;
+            for (VideoStream vs : info.getVideoStreams()) {
+                if (vs.getUrl().contains("m3u8") || vs.getUrl().contains("mp4")) {
+                    videoUrl = vs.getUrl();
+                    break;
                 }
+            }
+            if (videoUrl == null && !info.getVideoStreams().isEmpty()) {
+                videoUrl = info.getVideoStreams().get(0).getUrl();
+            }
 
-                if (videoUrl != null) {
-                    final String finalUrl = videoUrl;
-                    runOnUiThread(() -> {
-                        Log.e(TAG, "NewPipe OK: " + finalUrl);
-                        if (indiceActual >= 0 && indiceActual < canales.size()) {
-                            Canal c = canales.get(indiceActual);
-                            reproducirEnExo(new Canal(finalUrl, c.nombre, c.logo, c.referer, c.gain));
-                        } else {
-                            reproducirEnExo(new Canal(finalUrl, "YouTube", "", "", 1.0f));
-                        }
-                    });
-                } else {
-                    runOnUiThread(this::mostrarSinSenal);
+            if (videoUrl == null || videoUrl.isEmpty()) {
+                if (info.getHlsUrl() != null && !info.getHlsUrl().isEmpty()) {
+                    videoUrl = info.getHlsUrl();
+                } else if (info.getDashMpdUrl() != null && !info.getDashMpdUrl().isEmpty()) {
+                    videoUrl = info.getDashMpdUrl();
                 }
-            } catch (Exception e) {
-                Log.e(TAG, "NewPipe error: " + e.getMessage());
+            }
+
+            if (videoUrl != null) {
+                final String finalUrl = videoUrl;
                 runOnUiThread(() -> {
-                    if (url.contains("watch?v=")) {
-                        String vid = url.substring(url.indexOf("watch?v=") + 8).substring(0, 11);
-                        cargarYouTubeSeguro(vid);
+                    Log.e(TAG, "NewPipe OK: " + finalUrl);
+                    if (indiceActual >= 0 && indiceActual < canales.size()) {
+                        Canal c = canales.get(indiceActual);
+                        reproducirEnExo(new Canal(finalUrl, c.nombre, c.logo, c.referer, c.gain));
                     } else {
-                        mostrarSinSenal();
+                        reproducirEnExo(new Canal(finalUrl, "YouTube", "", "", 1.0f));
                     }
                 });
+            } else {
+                runOnUiThread(this::mostrarSinSenal);
             }
-        }).start();
+        } catch (Exception e) {
+            Log.e(TAG, "NewPipe error: " + e.getMessage());
+            runOnUiThread(() -> {
+                if (url.contains("watch?v=")) {
+                    String vid = url.substring(url.indexOf("watch?v=") + 8).substring(0, 11);
+                    cargarYouTubeSeguro(vid);
+                } else {
+                    mostrarSinSenal();
+                }
+            });
+        }
     }
 
     private void mostrarSinSenal() {
