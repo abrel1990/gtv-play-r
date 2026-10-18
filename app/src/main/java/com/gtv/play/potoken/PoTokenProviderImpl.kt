@@ -30,18 +30,16 @@ object PoTokenProviderImpl : PoTokenProvider {
             return null
         }
 
-        try {
-            return getWebClientPoToken(videoId = videoId, forceRecreate = false)
-        } catch (e: RuntimeException) {
-            when (val cause = e.cause) {
-                is BadWebViewException -> {
-                    Log.e(TAG, "Could not obtain poToken because WebView is broken", e)
-                    webViewBadImpl = true
-                    return null
-                }
-                null -> throw e
-                else -> throw cause
+        return try {
+            getWebClientPoToken(videoId = videoId, forceRecreate = false)
+        } catch (e: Throwable) {
+            // Atrapamos CUALQUIER excepción (no solo RuntimeException) para evitar
+            // que un fallo en el parseo de BotGuard o en el WebView cierre la app.
+            Log.e(TAG, "Error generando poToken, se devuelve null: ${e.message}", e)
+            if (e is BadWebViewException || (e.cause is BadWebViewException)) {
+                webViewBadImpl = true
             }
+            null
         }
     }
 
