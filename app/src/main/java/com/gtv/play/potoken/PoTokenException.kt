@@ -1,4 +1,4 @@
-package org.schabi.newpipe.util.potoken
+package com.gtv.play.potoken
 
 class PoTokenException(message: String) : Exception(message)
 
