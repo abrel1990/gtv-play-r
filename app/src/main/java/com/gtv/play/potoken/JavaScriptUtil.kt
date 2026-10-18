@@ -1,4 +1,4 @@
-package org.schabi.newpipe.util.potoken
+package com.gtv.play.potoken
 
 import com.grack.nanojson.JsonObject
 import com.grack.nanojson.JsonParser
