@@ -346,7 +346,6 @@ if (videoUrl == null || videoUrl.isEmpty()) {
             videoUrl = vs.getUrl();
             break;
         }
-    }
 }
 
 // ❌ ELIMINAMOS HLS POR COMPLETO.
