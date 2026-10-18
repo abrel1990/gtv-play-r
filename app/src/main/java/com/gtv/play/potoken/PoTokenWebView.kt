@@ -286,14 +286,11 @@ class PoTokenWebView private constructor(
                     "x-goog-api-key" to listOf(GOOGLE_API_KEY),
                     "x-user-agent" to listOf("grpc-web-javascript/0.1")
                 )
-                val npRequest = NPRequest(
-                    "POST",
-                    url,
-                    headers,
-                    data.toByteArray(),
-                    null
-                )
-                return@fromCallable DownloaderImpl.getInstance().execute(npRequest)
+                val npRequest = NPRequest.Builder()
+    .post(url, data.toByteArray())
+    .headers(headers)
+    .build()
+return@fromCallable DownloaderImpl.getInstance().execute(npRequest)
             }
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
