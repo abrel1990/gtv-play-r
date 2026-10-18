@@ -33,29 +33,21 @@ object PoTokenProviderImpl : PoTokenProvider {
         return try {
             getWebClientPoToken(videoId = videoId, forceRecreate = false)
         } catch (e: Throwable) {
-            // Atrapamos CUALQUIER excepción (no solo RuntimeException) para evitar
-            // que un fallo en el parseo de BotGuard o en el WebView cierre la app.
-            Log.e(TAG, "Error generando poToken, se devuelve null: ${e.message}", e)
-            if (e is BadWebViewException || (e.cause is BadWebViewException)) {
-                webViewBadImpl = true
-            }
+            Log.e(TAG, "PoToken error, returning null", e)
+            webViewBadImpl = true
             null
         }
     }
 
     override fun getWebEmbedClientPoToken(videoId: String): PoTokenResult? {
-        // El cliente web embebido no es crítico para el caso de uso principal.
-        // Devolver null es válido según la interfaz.
         return null
     }
 
     override fun getAndroidClientPoToken(videoId: String): PoTokenResult? {
-        // No generamos poTokens para el cliente Android (requiere DroidGuard).
         return null
     }
 
     override fun getIosClientPoToken(videoId: String): PoTokenResult? {
-        // No generamos poTokens para el cliente iOS (requiere iosGuard).
         return null
     }
 
