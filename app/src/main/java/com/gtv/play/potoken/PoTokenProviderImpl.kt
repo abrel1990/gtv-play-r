@@ -45,6 +45,12 @@ object PoTokenProviderImpl : PoTokenProvider {
         }
     }
 
+    override fun getWebEmbedClientPoToken(videoId: String): PoTokenResult? {
+        // El cliente web embebido no es crítico para el caso de uso principal.
+        // Devolver null es válido según la interfaz.
+        return null
+    }
+
     private fun getWebClientPoToken(videoId: String, forceRecreate: Boolean): PoTokenResult {
         data class Quadruple<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
 
