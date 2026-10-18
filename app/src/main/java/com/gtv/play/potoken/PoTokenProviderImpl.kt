@@ -51,6 +51,16 @@ object PoTokenProviderImpl : PoTokenProvider {
         return null
     }
 
+    override fun getAndroidClientPoToken(videoId: String): PoTokenResult? {
+        // No generamos poTokens para el cliente Android (requiere DroidGuard).
+        return null
+    }
+
+    override fun getIosClientPoToken(videoId: String): PoTokenResult? {
+        // No generamos poTokens para el cliente iOS (requiere iosGuard).
+        return null
+    }
+
     private fun getWebClientPoToken(videoId: String, forceRecreate: Boolean): PoTokenResult {
         data class Quadruple<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
 
