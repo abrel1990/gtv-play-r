@@ -68,7 +68,7 @@ dependencies {
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
     implementation 'io.reactivex.rxjava3:rxjava:3.1.8'
     implementation 'io.reactivex.rxjava3:rxandroid:3.0.2'
-    implementation 'com.grack:nanojson:1.7'
+    //implementation 'com.grack:nanojson:1.7'
 }
 
 // ✅ Fuerza versiones compatibles con Kotlin 1.9.22
