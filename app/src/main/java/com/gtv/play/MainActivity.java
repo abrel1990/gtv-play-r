@@ -333,12 +333,23 @@ public class MainActivity extends AppCompatActivity {
             );
 
             String videoUrl = null;
-            for (VideoStream vs : info.getVideoStreams()) {
-                if (vs.getUrl().contains("m3u8") || vs.getUrl().contains("mp4")) {
-                    videoUrl = vs.getUrl();
-                    break;
-                }
-            }
+
+// ✅ PRIORIDAD 1: DASH (funciona con PoToken)
+if (info.getDashMpdUrl() != null && !info.getDashMpdUrl().isEmpty()) {
+    videoUrl = info.getDashMpdUrl();
+}
+
+// ✅ PRIORIDAD 2: Solo si no hay DASH, buscar mp4 directo (NUNCA m3u8)
+if (videoUrl == null || videoUrl.isEmpty()) {
+    for (VideoStream vs : info.getVideoStreams()) {
+        if (vs.getUrl().contains("mp4")) {
+            videoUrl = vs.getUrl();
+            break;
+        }
+    }
+}
+
+// ❌ ELIMINÁ completamente la búsqueda de m3u8
             if (videoUrl == null && !info.getVideoStreams().isEmpty()) {
                 videoUrl = info.getVideoStreams().get(0).getUrl();
             }
