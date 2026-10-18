@@ -1,4 +1,4 @@
-package org.schabi.newpipe.util.potoken
+package com.gtv.play.potoken
 
 import android.content.Context
 import android.os.Handler
@@ -17,8 +17,8 @@ import io.reactivex.rxjava3.core.SingleEmitter
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.schedulers.Schedulers
 import java.time.Instant
-import org.schabi.newpipe.BuildConfig
-import org.schabi.newpipe.DownloaderImpl
+import com.gtv.play.DownloaderImpl
+import org.schabi.newpipe.extractor.downloader.Request as NPRequest
 
 class PoTokenWebView private constructor(
     context: Context,
@@ -70,9 +70,7 @@ class PoTokenWebView private constructor(
      * run it, and obtain an `integrityToken`.
      */
     private fun loadHtmlAndObtainBotguard(context: Context) {
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "loadHtmlAndObtainBotguard() called")
-        }
+        Log.d(TAG, "loadHtmlAndObtainBotguard() called")
 
         disposables.add(
             Single.fromCallable {
@@ -107,9 +105,7 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun downloadAndRunBotguard() {
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "downloadAndRunBotguard() called")
-        }
+        Log.d(TAG, "downloadAndRunBotguard() called")
 
         makeBotguardServiceRequest(
             "https://www.youtube.com/api/jnn/v1/Create",
@@ -139,9 +135,7 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onJsInitializationError(error: String) {
-        if (BuildConfig.DEBUG) {
-            Log.e(TAG, "Initialization error from JavaScript: $error")
-        }
+        Log.e(TAG, "Initialization error from JavaScript: $error")
         onInitializationErrorCloseAndCancel(buildExceptionForJsError(error))
     }
 
@@ -151,16 +145,12 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onRunBotguardResult(botguardResponse: String) {
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "botguardResponse: $botguardResponse")
-        }
+        Log.d(TAG, "botguardResponse: $botguardResponse")
         makeBotguardServiceRequest(
             "https://www.youtube.com/api/jnn/v1/GenerateIT",
             "[ \"$REQUEST_KEY\", \"$botguardResponse\" ]"
         ) { responseBody ->
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "GenerateIT response: $responseBody")
-            }
+            Log.d(TAG, "GenerateIT response: $responseBody")
             val (integrityToken, expirationTimeInSeconds) = parseIntegrityTokenData(responseBody)
 
             // leave 10 minutes of margin just to be sure
@@ -169,9 +159,7 @@ class PoTokenWebView private constructor(
             webView.evaluateJavascript(
                 "this.integrityToken = $integrityToken"
             ) {
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "initialization finished, expiration=${expirationTimeInSeconds}s")
-                }
+                Log.d(TAG, "initialization finished, expiration=${expirationTimeInSeconds}s")
                 generatorEmitter.onSuccess(this)
             }
         }
@@ -180,9 +168,7 @@ class PoTokenWebView private constructor(
 
     //region Obtaining poTokens
     override fun generatePoToken(identifier: String): Single<String> = Single.create { emitter ->
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "generatePoToken() called with identifier $identifier")
-        }
+        Log.d(TAG, "generatePoToken() called with identifier $identifier")
         runOnMainThread(emitter) {
             addPoTokenEmitter(identifier, emitter)
             val u8Identifier = stringToU8(identifier)
@@ -210,9 +196,7 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onObtainPoTokenError(identifier: String, error: String) {
-        if (BuildConfig.DEBUG) {
-            Log.e(TAG, "obtainPoToken error from JavaScript: $error")
-        }
+        Log.e(TAG, "obtainPoToken error from JavaScript: $error")
         popPoTokenEmitter(identifier)?.onError(buildExceptionForJsError(error))
     }
 
@@ -222,9 +206,7 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onObtainPoTokenResult(identifier: String, poTokenU8: String) {
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "Generated poToken (before decoding): identifier=$identifier poTokenU8=$poTokenU8")
-        }
+        Log.d(TAG, "Generated poToken (before decoding): identifier=$identifier poTokenU8=$poTokenU8")
         val poToken = try {
             u8ToBase64(poTokenU8)
         } catch (t: Throwable) {
@@ -232,9 +214,7 @@ class PoTokenWebView private constructor(
             return
         }
 
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "Generated poToken: identifier=$identifier poToken=$poToken")
-        }
+        Log.d(TAG, "Generated poToken: identifier=$identifier poToken=$poToken")
         popPoTokenEmitter(identifier)?.onSuccess(poToken)
     }
 
@@ -299,18 +279,21 @@ class PoTokenWebView private constructor(
     ) {
         disposables.add(
             Single.fromCallable {
-                return@fromCallable DownloaderImpl.getInstance().post(
-                    url,
-                    mapOf(
-                        // replace the downloader user agent
-                        "User-Agent" to listOf(USER_AGENT),
-                        "Accept" to listOf("application/json"),
-                        "Content-Type" to listOf("application/json+protobuf"),
-                        "x-goog-api-key" to listOf(GOOGLE_API_KEY),
-                        "x-user-agent" to listOf("grpc-web-javascript/0.1")
-                    ),
-                    data.toByteArray()
+                val headers = mapOf(
+                    "User-Agent" to listOf(USER_AGENT),
+                    "Accept" to listOf("application/json"),
+                    "Content-Type" to listOf("application/json+protobuf"),
+                    "x-goog-api-key" to listOf(GOOGLE_API_KEY),
+                    "x-user-agent" to listOf("grpc-web-javascript/0.1")
                 )
+                val npRequest = NPRequest(
+                    "POST",
+                    url,
+                    headers,
+                    data.toByteArray(),
+                    null
+                )
+                return@fromCallable DownloaderImpl.getInstance().execute(npRequest)
             }
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
