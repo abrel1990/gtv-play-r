@@ -91,16 +91,13 @@ object PoTokenProviderImpl : PoTokenProvider {
                 )
             }
 
-        val playerPot = try {
-            poTokenGenerator.generatePoToken(videoId).blockingGet()
-        } catch (throwable: Throwable) {
-            if (hasBeenRecreated) {
-                throw throwable
-            } else {
-                Log.e(TAG, "Failed to obtain poToken, retrying", throwable)
-                return getWebClientPoToken(videoId = videoId, forceRecreate = true)
-            }
-        }
+        // ✅ FORZAR recreación siempre para evitar tokens caducados
+val playerPot = try {
+    poTokenGenerator.generatePoToken(videoId).blockingGet()
+} catch (throwable: Throwable) {
+    Log.e(TAG, "Failed to obtain poToken, recreating", throwable)
+    return getWebClientPoToken(videoId = videoId, forceRecreate = true)
+}
 
         return PoTokenResult(visitorData, playerPot, streamingPot)
     }
