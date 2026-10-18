@@ -232,10 +232,19 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // NewPipe: inicializar con DownloaderImpl
+        // NewPipe: inicializar con DownloaderImpl y registrar PoTokenProvider
         try {
             NewPipe.init(DownloaderImpl.getInstance());
             Log.e(TAG, "NewPipe inicializado OK");
+
+            // Inicializar PoTokenProviderImpl con el Context de la app
+            com.gtv.play.potoken.PoTokenProviderImpl.INSTANCE.init(getApplicationContext());
+
+            // Registrar el provider en el extractor de YouTube
+            org.schabi.newpipe.extractor.services.youtube.YoutubeStreamExtractor.setPoTokenProvider(
+                com.gtv.play.potoken.PoTokenProviderImpl.INSTANCE
+            );
+            Log.e(TAG, "PoTokenProvider registrado OK");
         } catch (Exception e) {
             Log.e(TAG, "Error inicializando NewPipe: " + e.getMessage());
         }
