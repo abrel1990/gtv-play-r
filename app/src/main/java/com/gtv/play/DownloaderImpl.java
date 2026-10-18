@@ -45,16 +45,23 @@ public class DownloaderImpl extends Downloader {
         builder.method(method, body);
 
         okhttp3.Response response = client.newCall(builder.build()).execute();
-        ResponseBody responseBody = response.body();
-        String responseBodyString = responseBody != null ? responseBody.string() : "";
-        if (responseBody != null) responseBody.close();
 
-        return new Response(
-            response.code(),
-            response.message(),
-            response.headers().toMultimap(),
-            responseBodyString,
-            response.request().url().toString()
-        );
+// ✅ Manejo de HTTP 429: lanzar ReCaptchaException
+if (response.code() == 429) {
+    if (response.body() != null) response.body().close();
+    throw new ReCaptchaException("reCaptcha Challenge requested", url);
+}
+
+ResponseBody responseBody = response.body();
+String responseBodyString = responseBody != null ? responseBody.string() : "";
+if (responseBody != null) responseBody.close();
+
+return new Response(
+    response.code(),
+    response.message(),
+    response.headers().toMultimap(),
+    responseBodyString,
+    response.request().url().toString()
+);
     }
 }
