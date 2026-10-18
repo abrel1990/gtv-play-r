@@ -241,9 +241,9 @@ public class MainActivity extends AppCompatActivity {
             com.gtv.play.potoken.PoTokenProviderImpl.INSTANCE.init(getApplicationContext());
 
             // Registrar el provider en el extractor de YouTube
-            org.schabi.newpipe.extractor.services.youtube.YoutubeStreamExtractor.setPoTokenProvider(
-                com.gtv.play.potoken.PoTokenProviderImpl.INSTANCE
-            );
+            org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExtractor.setPoTokenProvider(
+    com.gtv.play.potoken.PoTokenProviderImpl.INSTANCE
+);
             Log.e(TAG, "PoTokenProvider registrado OK");
         } catch (Exception e) {
             Log.e(TAG, "Error inicializando NewPipe: " + e.getMessage());
