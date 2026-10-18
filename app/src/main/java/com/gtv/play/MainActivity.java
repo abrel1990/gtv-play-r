@@ -334,12 +334,12 @@ public class MainActivity extends AppCompatActivity {
 
             String videoUrl = null;
 
-// ✅ PRIORIDAD 1: DASH (funciona con PoToken)
+// ✅ PRIORIDAD 1: DASH (es el único que funciona bien con PoToken)
 if (info.getDashMpdUrl() != null && !info.getDashMpdUrl().isEmpty()) {
     videoUrl = info.getDashMpdUrl();
 }
 
-// ✅ PRIORIDAD 2: Solo si no hay DASH, buscar mp4 directo (NUNCA m3u8)
+// ✅ PRIORIDAD 2: Si no hay DASH, buscar MP4 directo (NUNCA m3u8)
 if (videoUrl == null || videoUrl.isEmpty()) {
     for (VideoStream vs : info.getVideoStreams()) {
         if (vs.getUrl().contains("mp4")) {
@@ -347,6 +347,10 @@ if (videoUrl == null || videoUrl.isEmpty()) {
             break;
         }
     }
+}
+
+// ❌ ELIMINAMOS HLS POR COMPLETO.
+// YouTube rechaza HLS cuando hay PoToken de por medio. No lo busques más.
 }
 
 // ❌ ELIMINÁ completamente la búsqueda de m3u8
