@@ -44,6 +44,10 @@ android {
     kotlinOptions {
         jvmTarget = '17'
     }
+
+    buildFeatures {
+        buildConfig true
+    }
 }
 
 dependencies {
@@ -51,38 +55,38 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.webkit:webkit:1.8.0'
     implementation 'com.github.bumptech.glide:glide:4.16.0'
+
+    // Media3: base + HLS + DASH + UI + extractores (m3u8/mpd/ts/mp4/webm)
     implementation 'androidx.media3:media3-exoplayer:1.4.1'
     implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-dash:1.4.1'
+    implementation 'androidx.media3:media3-extractor:1.4.1'
     implementation 'androidx.media3:media3-ui:1.4.1'
+
     implementation 'androidx.tvprovider:tvprovider:1.0.0'
 
-    // ✅ PipePipeExtractor (commit fijo en lugar de master-SNAPSHOT)
+    // NewPipeExtractor
     implementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.26.4'
-    // ✅ OkHttp (versión 4.12.0 compatible con compileSdk 34)
+
+    // OkHttp 4.x compatible con compileSdk 34
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 
-    // ✅ Desugaring (para minSdk 21)
+    // Desugaring (para minSdk 21)
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.0.4'
 
-    // ✅ Kotlin y RxJava (para los archivos .kt del PoToken)
+    // Kotlin y RxJava para los .kt del PoToken
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
     implementation 'io.reactivex.rxjava3:rxjava:3.1.8'
     implementation 'io.reactivex.rxjava3:rxandroid:3.0.2'
     implementation 'com.github.TeamNewPipe:nanojson:1d9e1aea9049fc9f85e68b43ba39fe7be1c1f751'
-    //implementation 'com.grack:nanojson:1.7'
 }
 
-// ✅ Fuerza versiones compatibles con Kotlin 1.9.22
 configurations.all {
     resolutionStrategy {
-        // OkHttp 4.12.0 (evita la 5.x que pide compileSdk 36)
-       // force 'com.squareup.okhttp3:okhttp:4.12.0'
-       // force 'com.squareup.okhttp3:okhttp-android:4.12.0'
-        // Kotlin 1.9.22 (evita que se cuele la 2.1.x)
+        force 'com.squareup.okhttp3:okhttp:4.12.0'
         force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
         force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.22'
         force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22'
-        // Okio 3.9.1 (evita la 3.17.0 que exige Kotlin 2.1)
         force 'com.squareup.okio:okio:3.9.1'
         force 'com.squareup.okio:okio-jvm:3.9.1'
     }
