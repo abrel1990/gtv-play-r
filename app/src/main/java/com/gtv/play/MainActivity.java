@@ -298,8 +298,11 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "Error inicializando NewPipe: " + e.getMessage());
         }
 
-        handler.postDelayed(this::checkForUpdates, 3000);
-        handler.postDelayed(this::inicializarWatchNext, 1500);
+        handler.postDelayed(this::checkForUpdates, 2000);
+        handler.postDelayed(() -> {
+        try { inicializarWatchNext(); }
+        catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
+        }, 5000);
     }
 
     // ============================================================
