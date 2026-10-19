@@ -973,10 +973,10 @@ public class MainActivity extends AppCompatActivity {
         String mime = mimeDe(c.url);
         if (mime != null) ib.setMimeType(mime);
 
-        return new DefaultMediaSourceFactory(f)
-            .setExtractorsFactory(extractors)
-            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
-            .createMediaSource(ib.build());
+        // ✅ Correcto: el ExtractorsFactory va en el constructor
+return new DefaultMediaSourceFactory(f, extractors)
+    .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
+    .createMediaSource(ib.build());
     }
 
     private void rotar() {
