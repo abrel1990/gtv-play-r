@@ -29,6 +29,7 @@ import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -977,9 +978,9 @@ public class MainActivity extends AppCompatActivity {
         if (mime != null) ib.setMimeType(mime);
 
         // ✅ Correcto: el ExtractorsFactory va en el constructor
-return new DefaultMediaSourceFactory(f, extractors)
-    .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
-    .createMediaSource(ib.build());
+        return new DefaultMediaSourceFactory(f, extractors)
+            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
+            .createMediaSource(ib.build());
     }
 
     private void rotar() {
@@ -1040,6 +1041,29 @@ return new DefaultMediaSourceFactory(f, extractors)
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         myWebView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) { super.onPageFinished(view, url); webViewListo = true; }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (url.contains("youtube.com") || url.contains("youtube-nocookie.com") || url.contains("googlevideo.com")) {
+                    try {
+                        URL u = new URL(url);
+                        HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                        conn.setRequestProperty("Referer", "https://" + getPackageName());
+                        conn.setRequestProperty("Referrer-Policy", "strict-origin-when-cross-origin");
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+                        conn.setConnectTimeout(15000);
+                        conn.setReadTimeout(15000);
+                        String contentType = conn.getContentType();
+                        String encoding = conn.getContentEncoding();
+                        return new WebResourceResponse(contentType, encoding, conn.getInputStream());
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error interceptando YouTube: " + e.getMessage());
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 if (!url.startsWith("http://") && !url.startsWith("https://")) {
