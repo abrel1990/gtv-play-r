@@ -486,7 +486,7 @@ public class MainActivity extends AppCompatActivity {
             " allow='autoplay; encrypted-media; fullscreen; picture-in-picture'" +
             " allowfullscreen></iframe>" +
             "</body></html>";
-        myWebView.loadDataWithBaseURL("https://www.youtube.com/", html, "text/html", "UTF-8", null);
+        myWebView.loadDataWithBaseURL("https://gtv-portero.abrel03.workers.dev/", html, "text/html", "UTF-8", null);
     }
 
     @JavascriptInterface
@@ -504,7 +504,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ✅ MÉTODO NUEVO PARA EL WORKER
+    // ✅ MÉTODO NUEVO PARA EL WORKER (CORREGIDO CON LOADURL)
     @JavascriptInterface
     public void cargarYouTubeLive(final String channelId) {
         runOnUiThread(() -> {
@@ -514,20 +514,16 @@ public class MainActivity extends AppCompatActivity {
                 myWebView.onResume();
                 myWebView.resumeTimers();
                 
-                String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
-                    "<meta name='referrer' content='strict-origin-when-cross-origin'>" +
-                    "<style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}" +
-                    "iframe{width:100%;height:100%;border:0;display:block}</style>" +
-                    "</head><body>" +
-                    "<iframe src='https://www.youtube.com/embed/live_stream?channel=" + channelId + "'" +
-                    " referrerpolicy='strict-origin-when-cross-origin'" +
-                    " allow='autoplay; encrypted-media; fullscreen; picture-in-picture'" +
-                    " allowfullscreen></iframe>" +
-                    "</body></html>";
+                String embedUrl = "https://www.youtube.com/embed/live_stream?channel=" + channelId + "&autoplay=1";
                 
-                myWebView.loadDataWithBaseURL("https://" + getPackageName() + "/", html, "text/html", "UTF-8", null);
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Referer", "https://gtv-portero.abrel03.workers.dev/");
+                headers.put("Referrer-Policy", "strict-origin-when-cross-origin");
+                headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
                 
-                Log.e(TAG, "Cargando YouTube Live con channelId: " + channelId);
+                myWebView.loadUrl(embedUrl, headers);
+                
+                Log.e(TAG, "Cargando YouTube Live con headers: " + embedUrl);
             } catch (Exception e) {
                 Log.e(TAG, "Error cargando YouTube Live: " + e.getMessage());
             }
@@ -1047,7 +1043,7 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         URL u = new URL(url);
                         HttpURLConnection conn = (HttpURLConnection) u.openConnection();
-                        conn.setRequestProperty("Referer", "https://" + getPackageName());
+                        conn.setRequestProperty("Referer", "https://gtv-portero.abrel03.workers.dev/");
                         conn.setRequestProperty("Referrer-Policy", "strict-origin-when-cross-origin");
                         conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
                         conn.setConnectTimeout(15000);
@@ -1201,20 +1197,16 @@ public class MainActivity extends AppCompatActivity {
                     myWebView.onResume();
                     myWebView.resumeTimers();
                     
-                    String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
-                        "<meta name='referrer' content='strict-origin-when-cross-origin'>" +
-                        "<style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}" +
-                        "iframe{width:100%;height:100%;border:0;display:block}</style>" +
-                        "</head><body>" +
-                        "<iframe src='https://www.youtube.com/embed/live_stream?channel=" + channelId + "'" +
-                        " referrerpolicy='strict-origin-when-cross-origin'" +
-                        " allow='autoplay; encrypted-media; fullscreen; picture-in-picture'" +
-                        " allowfullscreen></iframe>" +
-                        "</body></html>";
+                    String embedUrl = "https://www.youtube.com/embed/live_stream?channel=" + channelId + "&autoplay=1";
                     
-                    myWebView.loadDataWithBaseURL("https://" + getPackageName() + "/", html, "text/html", "UTF-8", null);
+                    Map<String, String> headers = new HashMap<>();
+                    headers.put("Referer", "https://gtv-portero.abrel03.workers.dev/");
+                    headers.put("Referrer-Policy", "strict-origin-when-cross-origin");
+                    headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
                     
-                    Log.e(TAG, "Cargando YouTube Live con channelId: " + channelId);
+                    myWebView.loadUrl(embedUrl, headers);
+                    
+                    Log.e(TAG, "Cargando YouTube Live con headers: " + embedUrl);
                 } catch (Exception e) {
                     Log.e(TAG, "Error cargando YouTube Live: " + e.getMessage());
                 }
