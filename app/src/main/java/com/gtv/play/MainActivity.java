@@ -29,6 +29,7 @@ import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -207,7 +208,6 @@ public class MainActivity extends AppCompatActivity {
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
-        // ==== ExoPlayer: renderers con fallback + LoadControl acotado ====
         DefaultRenderersFactory renderers = new DefaultRenderersFactory(this)
             .setEnableDecoderFallback(true);
 
@@ -305,9 +305,6 @@ public class MainActivity extends AppCompatActivity {
         }, 5000);
     }
 
-    // ============================================================
-    // Reintentos
-    // ============================================================
     private boolean reintentar() {
         if (reintentos >= 3 || canalActual == null || !enExoPlayer) return false;
         reintentos++;
@@ -317,9 +314,6 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    // ============================================================
-    // YouTube async (token de cancelación)
-    // ============================================================
     private void resolverYouTubeConNewPipe(String url, int tok) {
         try {
             String videoId = null;
@@ -398,13 +392,11 @@ public class MainActivity extends AppCompatActivity {
             String videoUrl = null;
             String mime = null;
 
-            // Prioridad 1: DASH
             if (info.getDashMpdUrl() != null && !info.getDashMpdUrl().isEmpty()) {
                 videoUrl = info.getDashMpdUrl();
                 mime = "application/dash+xml";
             }
 
-            // Prioridad 2: MP4 directo
             if (videoUrl == null) {
                 for (VideoStream vs : info.getVideoStreams()) {
                     if (vs.getUrl().toLowerCase().contains("mp4")) {
@@ -415,7 +407,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // Prioridad 3: primer stream disponible (nunca m3u8)
             if (videoUrl == null && !info.getVideoStreams().isEmpty()) {
                 VideoStream vs = info.getVideoStreams().get(0);
                 videoUrl = vs.getUrl();
@@ -483,9 +474,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ============================================================
-    // Fallback: iframe
-    // ============================================================
     private void cargarIframeConBaseUrl(String videoId) {
         if (myWebView == null) return;
         String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
@@ -516,9 +504,36 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ============================================================
-    // WATCH NEXT
-    // ============================================================
+    // ✅ MÉTODO NUEVO PARA EL WORKER
+    @JavascriptInterface
+    public void cargarYouTubeLive(final String channelId) {
+        runOnUiThread(() -> {
+            try {
+                playerContainer.setVisibility(View.GONE);
+                myWebView.setVisibility(View.VISIBLE);
+                myWebView.onResume();
+                myWebView.resumeTimers();
+                
+                String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
+                    "<meta name='referrer' content='strict-origin-when-cross-origin'>" +
+                    "<style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}" +
+                    "iframe{width:100%;height:100%;border:0;display:block}</style>" +
+                    "</head><body>" +
+                    "<iframe src='https://www.youtube.com/embed/live_stream?channel=" + channelId + "'" +
+                    " referrerpolicy='strict-origin-when-cross-origin'" +
+                    " allow='autoplay; encrypted-media; fullscreen; picture-in-picture'" +
+                    " allowfullscreen></iframe>" +
+                    "</body></html>";
+                
+                myWebView.loadDataWithBaseURL("https://" + getPackageName() + "/", html, "text/html", "UTF-8", null);
+                
+                Log.e(TAG, "Cargando YouTube Live con channelId: " + channelId);
+            } catch (Exception e) {
+                Log.e(TAG, "Error cargando YouTube Live: " + e.getMessage());
+            }
+        });
+    }
+
     private boolean esTV() {
         return getPackageManager().hasSystemFeature("android.software.leanback");
     }
@@ -577,7 +592,6 @@ public class MainActivity extends AppCompatActivity {
             if (canal.logo != null && !canal.logo.isEmpty()) builder.setPosterArtUri(Uri.parse(canal.logo));
             builder.setInternalProviderId(canal.url);
 
-            // Borrar duplicado previo
             try {
                 getContentResolver().delete(
                     TvContractCompat.WatchNextPrograms.CONTENT_URI,
@@ -652,9 +666,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ============================================================
-    // ACTUALIZACIONES
-    // ============================================================
     private void checkForUpdates() {
         if (!hayInternet()) return;
         new Thread(() -> {
@@ -803,9 +814,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ============================================================
-    // LOADERS
-    // ============================================================
     private void mostrarLoaderSintonizando() {
         if (exoLoader == null) return;
         if (exoLoaderError != null) exoLoaderError.setVisibility(View.GONE);
@@ -847,9 +855,6 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(timeoutCanalCaido, 15000);
     }
 
-    // ============================================================
-    // DEVICE ID
-    // ============================================================
     private String generarDeviceId() {
         if (deviceIdCache != null) return deviceIdCache;
         String androidId = null;
@@ -867,9 +872,6 @@ public class MainActivity extends AppCompatActivity {
         return deviceIdCache;
     }
 
-    // ============================================================
-    // REPRODUCTOR
-    // ============================================================
     private void inyectarTextureView() {
         View contentFrame = playerView.findViewById(androidx.media3.ui.R.id.exo_content_frame);
         if (!(contentFrame instanceof ViewGroup)) return;
@@ -887,7 +889,6 @@ public class MainActivity extends AppCompatActivity {
             || u.contains(".ts") || u.contains(".webm") || u.contains(".mkv")) return true;
         if (u.contains("/hls/") || u.contains("type=hls") || u.contains("format=hls")
             || u.contains("type=m3u8") || u.contains("format=m3u8")) return true;
-        // YouTube NUNCA por Exo directo (va por NewPipe)
         if (u.contains("youtube.com") || u.contains("youtu.be")) return false;
         return false;
     }
@@ -954,7 +955,6 @@ public class MainActivity extends AppCompatActivity {
             .setReadTimeoutMs(10000);
 
         Map<String, String> h = new HashMap<>();
-        // UA de navegador: necesario para YouTube y muchos CDN IPTV
         h.put("User-Agent",
             "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
@@ -976,10 +976,9 @@ public class MainActivity extends AppCompatActivity {
         String mime = mimeDe(c.url);
         if (mime != null) ib.setMimeType(mime);
 
-        // ✅ Correcto: el ExtractorsFactory va en el constructor
-return new DefaultMediaSourceFactory(f, extractors)
-    .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
-    .createMediaSource(ib.build());
+        return new DefaultMediaSourceFactory(f, extractors)
+            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
+            .createMediaSource(ib.build());
     }
 
     private void rotar() {
@@ -1040,6 +1039,29 @@ return new DefaultMediaSourceFactory(f, extractors)
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         myWebView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) { super.onPageFinished(view, url); webViewListo = true; }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (url.contains("youtube.com") || url.contains("youtube-nocookie.com") || url.contains("googlevideo.com")) {
+                    try {
+                        URL u = new URL(url);
+                        HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                        conn.setRequestProperty("Referer", "https://" + getPackageName());
+                        conn.setRequestProperty("Referrer-Policy", "strict-origin-when-cross-origin");
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+                        conn.setConnectTimeout(15000);
+                        conn.setReadTimeout(15000);
+                        String contentType = conn.getContentType();
+                        String encoding = conn.getContentEncoding();
+                        return new WebResourceResponse(contentType, encoding, conn.getInputStream());
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error interceptando YouTube: " + e.getMessage());
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 if (!url.startsWith("http://") && !url.startsWith("https://")) {
@@ -1169,6 +1191,34 @@ return new DefaultMediaSourceFactory(f, extractors)
         @JavascriptInterface public void resolverYouTube(String url) {
             final int tok = ++ytToken;
             ytExec.execute(() -> resolverYouTubeConNewPipe(url, tok));
+        }
+
+        @JavascriptInterface public void cargarYouTubeLive(final String channelId) {
+            runOnUiThread(() -> {
+                try {
+                    playerContainer.setVisibility(View.GONE);
+                    myWebView.setVisibility(View.VISIBLE);
+                    myWebView.onResume();
+                    myWebView.resumeTimers();
+                    
+                    String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
+                        "<meta name='referrer' content='strict-origin-when-cross-origin'>" +
+                        "<style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}" +
+                        "iframe{width:100%;height:100%;border:0;display:block}</style>" +
+                        "</head><body>" +
+                        "<iframe src='https://www.youtube.com/embed/live_stream?channel=" + channelId + "'" +
+                        " referrerpolicy='strict-origin-when-cross-origin'" +
+                        " allow='autoplay; encrypted-media; fullscreen; picture-in-picture'" +
+                        " allowfullscreen></iframe>" +
+                        "</body></html>";
+                    
+                    myWebView.loadDataWithBaseURL("https://" + getPackageName() + "/", html, "text/html", "UTF-8", null);
+                    
+                    Log.e(TAG, "Cargando YouTube Live con channelId: " + channelId);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error cargando YouTube Live: " + e.getMessage());
+                }
+            });
         }
 
         @JavascriptInterface public void salirApp() {
