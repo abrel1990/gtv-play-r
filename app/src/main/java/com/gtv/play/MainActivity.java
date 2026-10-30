@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
+import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -18,6 +19,7 @@ import android.os.Handler;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.LayoutInflater;
 import android.view.SurfaceView;
 import android.view.TextureView;
@@ -103,6 +105,13 @@ public class MainActivity extends AppCompatActivity {
     private TextView exoLoaderError;
     private Button btnPrev, btnNext, btnClose, btnRotate;
     private View btnShield;
+    private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
+    private boolean bgGuardado = false;
+
+    // ==== Modo YouTube dentro del WebView ====
+    private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
+    private boolean enYouTubeWeb = false;
+    private String jsPendienteAlVolver = null;
 
     private final ArrayList<Canal> canales = new ArrayList<>();
     private int indiceActual = -1;
@@ -495,6 +504,7 @@ public class MainActivity extends AppCompatActivity {
                 myWebView.setVisibility(View.VISIBLE);
                 myWebView.onResume();
                 myWebView.resumeTimers();
+                entrarModoYouTube();
                 cargarIframeConBaseUrl(videoId);
             } catch (Exception e) {
                 Log.e(TAG, "Error cargando YouTube seguro: " + e.getMessage());
@@ -512,6 +522,7 @@ public class MainActivity extends AppCompatActivity {
                 myWebView.onResume();
                 myWebView.resumeTimers();
                 
+                entrarModoYouTube();
                 String embedUrl = "https://www.youtube.com/embed/live_stream?channel=" + channelId + "&autoplay=1";
                 
                 Map<String, String> headers = new HashMap<>();
@@ -917,6 +928,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void reproducirEnExo(Canal c) {
         ytToken++;
+        mostrarEscudo(false);
+        if (enYouTubeWeb) recargarLista("window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");window.volverDelExo&&window.volverDelExo();");
         enExoPlayer = true;
         canalActual = c;
         reintentos = 0;
@@ -978,6 +991,7 @@ public class MainActivity extends AppCompatActivity {
     private void rotar() {
         rotado = !rotado;
         getSharedPreferences("gtv_prefs", MODE_PRIVATE).edit().putBoolean("rotado", rotado).apply();
+        aplicarRotacionYouTube();
         aplicarRotacion();
         reposicionarBotones();
     }
@@ -1032,7 +1046,25 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         myWebView.setWebViewClient(new WebViewClient() {
-            @Override public void onPageFinished(WebView view, String url) { super.onPageFinished(view, url); webViewListo = true; }
+            @Override public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                webViewListo = true;
+                if (url != null && url.startsWith(WORKER_URL)) {
+                    final String js = jsPendienteAlVolver;
+                    jsPendienteAlVolver = null;
+                    // Solo se ejecuta si no quedó reproduciendo el ExoPlayer; si no, lo resuelve el cierre del Exo.
+                    if (js != null && !enExoPlayer) {
+                        view.postDelayed(() -> {
+                            try {
+                                view.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
+                            } catch (Exception ignored) {}
+                        }, 1500);
+                    }
+                } else if (enYouTubeWeb && url != null && url.contains("youtube.com/embed")) {
+                    aplicarRotacionYouTube();
+                    view.postDelayed(() -> MainActivity.this.aplicarRotacionYouTube(), 1500);
+                }
+            }
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -1090,6 +1122,85 @@ public class MainActivity extends AppCompatActivity {
         });
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
+    }
+
+    // ==== Capa nativa sobre YouTube: reutiliza playerContainer (botones + btnShield) en transparente ====
+    // on=true: el contenedor nativo se superpone al WebView sin tapar el video y muestra los controles.
+    // on=false: restaura fondos y el PlayerView para el uso normal de ExoPlayer.
+    private void mostrarEscudo(boolean on) {
+        if (playerContainer == null || rotWrapper == null || playerView == null || myWebView == null) return;
+        if (on) {
+            if (!bgGuardado) {
+                bgContainerOrig = playerContainer.getBackground();
+                bgRotOrig = rotWrapper.getBackground();
+                bgGuardado = true;
+            }
+            playerContainer.setBackgroundColor(Color.TRANSPARENT);
+            rotWrapper.setBackgroundColor(Color.TRANSPARENT);
+            playerView.setVisibility(View.INVISIBLE);
+            myWebView.setFocusable(false);
+            myWebView.setFocusableInTouchMode(false);
+            playerContainer.setVisibility(View.VISIBLE);
+            playerContainer.bringToFront();
+            if (indiceActual >= 0 && indiceActual < canales.size()) {
+                Canal c = canales.get(indiceActual);
+                nombreCanal.setText(c.nombre);
+                numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+                if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
+            }
+            mostrarControles();
+            playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+        } else {
+            if (bgGuardado) {
+                playerContainer.setBackground(bgContainerOrig);
+                rotWrapper.setBackground(bgRotOrig);
+            }
+            playerView.setVisibility(View.VISIBLE);
+            myWebView.setFocusable(true);
+            myWebView.setFocusableInTouchMode(true);
+        }
+    }
+
+    private void entrarModoYouTube() {
+        enYouTubeWeb = true;
+        mostrarEscudo(true);
+    }
+
+    // Al cargar el embed, la página del Worker (la lista) se reemplaza. Para volver hay que recargarla.
+    private void recargarLista(String jsPendiente) {
+        enYouTubeWeb = false;
+        mostrarEscudo(false);
+        jsPendienteAlVolver = (jsPendiente != null && !jsPendiente.isEmpty()) ? jsPendiente : null;
+        Map<String, String> h = new HashMap<>();
+        h.put("X-GTV-Origin", "gtv_app_2026_secreto_xyz789");
+        myWebView.loadUrl(WORKER_URL, h);
+    }
+
+    private void salirDeYouTube() {
+        ytToken++;
+        volverAlWebViewConJS("window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");"
+            + "window.volverDelExo&&window.volverDelExo();");
+    }
+
+    // Rota el documento del embed (la página cargada con loadUrl) si la app está rotada.
+    private void aplicarRotacionYouTube() {
+        if (myWebView == null || !enYouTubeWeb) return;
+        // Estilo con !important en un <style> propio + un temporizador que lo reinstala,
+        // para que el reproductor de YouTube no lo pise cuando se reacomoda.
+        String css = rotado
+            ? "html{position:fixed!important;top:50%!important;left:50%!important;width:100vh!important;"
+              + "height:100vw!important;margin-top:-50vw!important;margin-left:-50vh!important;"
+              + "transform:rotate(90deg)!important;background:#000!important;}"
+            : "";
+        String js = "(function(){"
+            + "window.__gtvRotCss='" + css + "';"
+            + "function ap(){var s=document.getElementById('gtv-rot');"
+            + "if(!s){s=document.createElement('style');s.id='gtv-rot';(document.head||document.documentElement).appendChild(s);}"
+            + "if(s.textContent!==window.__gtvRotCss)s.textContent=window.__gtvRotCss;}"
+            + "ap();"
+            + "if(!window.__gtvRotTimer)window.__gtvRotTimer=setInterval(ap,500);"
+            + "})();";
+        myWebView.evaluateJavascript(js, null);
     }
 
     private void configurarBotones() {
@@ -1211,6 +1322,7 @@ public class MainActivity extends AppCompatActivity {
                     myWebView.onResume();
                     myWebView.resumeTimers();
                     
+                    entrarModoYouTube();
                     String embedUrl = "https://www.youtube.com/embed/live_stream?channel=" + channelId + "&autoplay=1";
                     
                     Map<String, String> headers = new HashMap<>();
@@ -1227,12 +1339,18 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
+        @JavascriptInterface public void cargarYouTubeSeguro(String videoId) {
+            MainActivity.this.cargarYouTubeSeguro(videoId);
+        }
+
         @JavascriptInterface public void salirApp() {
             runOnUiThread(() -> finishAndRemoveTask());
         }
     }
 
     private void volverAlWebViewConJS(String js) {
+        mostrarEscudo(false);
+        final boolean veniaDeYouTube = enYouTubeWeb;
         enExoPlayer = false;
         try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
         playerContainer.setVisibility(View.GONE);
@@ -1242,6 +1360,7 @@ public class MainActivity extends AppCompatActivity {
         handler.removeCallbacks(reintentoRunnable);
         myWebView.setVisibility(View.VISIBLE);
         myWebView.onResume(); myWebView.resumeTimers();
+        if (veniaDeYouTube) { recargarLista(js); return; }
         myWebView.postDelayed(() -> {
             try {
                 if (js != null && !js.isEmpty())
@@ -1251,6 +1370,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void cerrarExoPlayer() {
+        if (enYouTubeWeb) { salirDeYouTube(); return; }
         if (myWebView != null) {
             myWebView.evaluateJavascript(
                 "(function(){try{return window._zappingEnCurso?'SI':'NO';}catch(e){return 'NO';}})()",
@@ -1261,6 +1381,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void ejecutarCierreExo(boolean esZapping) {
+        mostrarEscudo(false);
         enExoPlayer = false;
         canalActual = null;
         handler.removeCallbacks(reintentoRunnable);
@@ -1288,7 +1409,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void mostrarControles() {
-        if (!enExoPlayer) return;
+        if (!enExoPlayer && !enYouTubeWeb) return;
         controlesVisibles = true;
         infoCanal.setVisibility(View.VISIBLE);
         btnPrev.setVisibility(View.VISIBLE); btnNext.setVisibility(View.VISIBLE);
@@ -1303,13 +1424,17 @@ public class MainActivity extends AppCompatActivity {
             switch (keyCode) {
                 case KeyEvent.KEYCODE_DPAD_RIGHT: navegar(+1); return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT: navegar(-1); return true;
-                case KeyEvent.KEYCODE_DPAD_CENTER: case KeyEvent.KEYCODE_ENTER: return true;
+                case KeyEvent.KEYCODE_DPAD_CENTER: case KeyEvent.KEYCODE_ENTER:
+                case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_DPAD_DOWN:
+                    if (enYouTubeWeb) mostrarControles();
+                    return true;
             }
         }
         return super.onKeyDown(keyCode, event);
     }
 
     @Override public void onBackPressed() {
+        if (enYouTubeWeb) { salirDeYouTube(); return; }
         if (enExoPlayer) { ytToken++; cerrarExoPlayer(); return; }
         ytToken++;
         if (myWebView == null) { finish(); return; }
