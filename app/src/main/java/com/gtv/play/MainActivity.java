@@ -158,18 +158,87 @@ public class MainActivity extends AppCompatActivity {
     };
 
     // ==== Zapping con debounce ====
+    // ==== Zapping con debounce (VERSIÓN FLAMA - SIN REINICIOS) ====
     private int zapPend = -1;
     private final Runnable zapRun = new Runnable() {
         @Override public void run() {
             if (zapPend < 0) return;
-            indiceActual = zapPend; zapPend = -1;
+            indiceActual = zapPend;
+            zapPend = -1;
             Canal c = canales.get(indiceActual);
-            if (esCanalExoPlayer(c.url)) reproducirEnExo(c);
-            else volverAlWebViewConJS("javascript:if(typeof window.irACanal==='function')window.irACanal(" + indiceActual + ");");
+
+            // 1. Feedback visual inmediato (siempre, para que el usuario vea que respondió)
+            nombreCanal.setText(c.nombre);
+            numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+            if (c.logo != null && !c.logo.isEmpty()) {
+                Glide.with(MainActivity.this).load(c.logo).into(logoCanal);
+            }
+
+            String urlLower = c.url.toLowerCase();
+            boolean esYoutube = urlLower.contains("youtube.com") || urlLower.contains("youtu.be") || urlLower.contains("/@");
+            boolean esExo = esCanalExoPlayer(c.url);
+
+            if (esExo) {
+                // CASO A: Canal nativo (HLS, MP4, TS, etc.). Cambio directo y seamless en ExoPlayer.
+                // (Esto ya funcionaba perfecto, lo dejamos intacto).
+                reproducirEnExo(c);
+                
+            } else if (esYoutube) {
+                // CASO B: Canal de YouTube. 
+                // SOLUCIÓN CLAVE: Lo resolvemos nativamente con NewPipe y lo mandamos a ExoPlayer.
+                // Esto EVITA POR COMPLETO que el WebView haga un loadUrl() y muestre "Cargando canales...".
+                final int tok = ++ytToken;
+                enYouTubeWeb = false; // Desactivamos el modo web para que no interfiera
+                enExoPlayer = false;  // Se pondrá en true automáticamente dentro de reproducirEnExo
+                
+                // Preparamos la transición visual (ocultamos web, mostramos contenedor nativo)
+                try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+                myWebView.setVisibility(View.GONE);
+                playerContainer.setVisibility(View.VISIBLE);
+                playerContainer.bringToFront();
+                mostrarLoaderSintonizando();
+                
+                // Ejecutamos el extractor que ya tenés funcionando en tu app
+                ytExec.execute(() -> resolverYouTubeConNewPipe(c.url, tok));
+                
+            } else {
+                // CASO C: Otros reproductores Web (ej. Kick, Twitch, etc.)
+                if (enYouTubeWeb) {
+                    // Venimos de un embed de YouTube en el WebView.
+                    // En lugar de recargar la URL desde cero (network request), volvemos atrás en el historial 
+                    // del WebView (que tiene la lista principal en caché bfcache) y luego cambiamos el canal.
+                    enYouTubeWeb = false;
+                    mostrarEscudo(false);
+                    enExoPlayer = false;
+                    try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+                    playerContainer.setVisibility(View.GONE);
+                    ocultarControlesNativos();
+                    detenerLoaderAnim(); 
+                    ocultarLoaders();
+                    
+                    myWebView.setVisibility(View.VISIBLE);
+                    myWebView.onResume(); 
+                    myWebView.resumeTimers();
+                    
+                    if (myWebView.canGoBack()) {
+                        myWebView.goBack(); // Vuelta instantánea a la lista sin "Cargando..."
+                        // Programamos el cambio de canal para cuando termine de volver atrás
+                        handler.postDelayed(() -> {
+                            irACanalWebView(indiceActual);
+                        }, 600);
+                    } else {
+                        // Fallback seguro por si acaso no hay historial (muy raro)
+                        irACanalWebView(indiceActual);
+                    }
+                } else {
+                    // Ya estamos en la lista principal del WebView o venimos de ExoPlayer.
+                    // Esto ya funcionaba bien, solo le pasamos el índice al JS sin recargar nada.
+                    irACanalWebView(indiceActual);
+                }
+            }
         }
     };
-
-    static class Canal {
+   static class Canal {
         final String url, nombre, logo, referer;
         final float gain;
         boolean oculto;
