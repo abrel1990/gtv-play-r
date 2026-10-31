@@ -969,10 +969,36 @@ public class MainActivity extends AppCompatActivity {
         }
         zapPend = i;
         Canal c = canales.get(i);
+        
+        // Feedback visual inmediato en la barra superior nativa
         nombreCanal.setText(c.nombre);
         numeroCanal.setText((i + 1) + "/" + n);
+        if (c.logo != null && !c.logo.isEmpty()) {
+            Glide.with(this).load(c.logo).into(logoCanal);
+        }
+        mostrarControles();
+
         handler.removeCallbacks(zapRun);
-        handler.postDelayed(zapRun, 300);
+        handler.postDelayed(() -> {
+            indiceActual = zapPend;
+            zapPend = -1;
+            Canal destino = canales.get(indiceActual);
+
+            if (esCanalExoPlayer(destino.url)) {
+                reproducirEnExo(destino);
+            } else {
+                // Si es YouTube / Web, mantenemos el WebView activo y evitamos la recarga total de la lista
+                enYouTubeWeb = true;
+                playerContainer.setVisibility(View.GONE);
+                myWebView.setVisibility(View.VISIBLE);
+                
+                // Mandamos la orden limpia al WebView para que cambie de canal al instante sin pasar por la grilla
+                if (myWebView != null) {
+                    myWebView.evaluateJavascript(
+                        "javascript:if(typeof window.irACanal==='function')window.irACanal(" + indiceActual + ");", null);
+                }
+            }
+        }, 150);
     }
 
     private void reproducirEnExo(Canal c) {
