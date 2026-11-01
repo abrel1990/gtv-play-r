@@ -969,37 +969,12 @@ public class MainActivity extends AppCompatActivity {
         }
         zapPend = i;
         Canal c = canales.get(i);
-        
-        // Feedback visual inmediato en la barra superior
         nombreCanal.setText(c.nombre);
         numeroCanal.setText((i + 1) + "/" + n);
-        if (c.logo != null && !c.logo.isEmpty()) {
-            Glide.with(this).load(c.logo).into(logoCanal);
-        }
-        mostrarControles();
-
         handler.removeCallbacks(zapRun);
-        handler.postDelayed(() -> {
-            indiceActual = zapPend;
-            zapPend = -1;
-            Canal destino = canales.get(indiceActual);
-
-            if (esCanalExoPlayer(destino.url)) {
-                reproducirEnExo(destino);
-            } else {
-                enYouTubeWeb = true;
-                playerContainer.setVisibility(View.GONE);
-                myWebView.setVisibility(View.VISIBLE);
-                myWebView.onResume();
-                myWebView.resumeTimers();
-
-                if (myWebView != null) {
-                    myWebView.evaluateJavascript(
-                        "javascript:if(typeof window.irACanal==='function') { window.irACanal(" + indiceActual + "); }", null);
-                }
-            }
-        }, 100);
+        handler.postDelayed(zapRun, 300);
     }
+
     private void reproducirEnExo(Canal c) {
         ytToken++;
         mostrarEscudo(false);
