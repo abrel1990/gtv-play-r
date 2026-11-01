@@ -1384,30 +1384,19 @@ public void cargarYouTubeLive(final String channelId) {
             ytExec.execute(() -> resolverYouTubeConNewPipe(url, tok));
         }
 
-        @JavascriptInterface public void cargarYouTubeLive(final String channelId) {
-            runOnUiThread(() -> {
-                try {
-                    playerContainer.setVisibility(View.GONE);
-                    myWebView.setVisibility(View.VISIBLE);
-                    myWebView.onResume();
-                    myWebView.resumeTimers();
-                    
-                    entrarModoYouTube();
-                    String embedUrl = "https://www.youtube.com/embed/live_stream?channel=" + channelId + "&autoplay=1";
-                    
-                    Map<String, String> headers = new HashMap<>();
-                    headers.put("Referer", "https://gtv-portero.abrel03.workers.dev/");
-                    headers.put("Referrer-Policy", "strict-origin-when-cross-origin");
-                    headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
-                    
-                    myWebView.loadUrl(embedUrl, headers);
-                    
-                    Log.e(TAG, "Cargando YouTube Live con headers: " + embedUrl);
-                } catch (Exception e) {
-                    Log.e(TAG, "Error cargando YouTube Live: " + e.getMessage());
-                }
-            });
+      @JavascriptInterface
+public void cargarYouTubeLive(final String channelId) {
+    runOnUiThread(() -> {
+        try {
+            myWebView.evaluateJavascript(
+                "javascript:if(typeof window.cargarYTEnIframe==='function')" +
+                "window.cargarYTEnIframe('" + channelId + "');", null);
+            Log.e(TAG, "cargarYouTubeLive → HTML iframe: " + channelId);
+        } catch (Exception e) {
+            Log.e(TAG, "cargarYouTubeLive error: " + e.getMessage());
         }
+    });
+}
 
         @JavascriptInterface public void cargarYouTubeSeguro(String videoId) {
             MainActivity.this.cargarYouTubeSeguro(videoId);
