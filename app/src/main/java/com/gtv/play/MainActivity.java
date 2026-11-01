@@ -181,38 +181,27 @@ public class MainActivity extends AppCompatActivity {
                 
             } else {
                 // CASO B: YouTube, Kick, Twitch y otros Webs.
-                // Usamos el WebView para reproducir (como lo hacía tu app original),
-                // pero evitamos la recarga de red usando el historial del navegador.
-                
                 if (enYouTubeWeb) {
-                    // Si venimos de un embed de YouTube/Kick, volvemos atrás en el historial 
-                    // del WebView. Esto restaura la lista de canales al instante desde la caché,
-                    // sin mostrar "Cargando canales..." ni hacer peticiones de red.
                     enYouTubeWeb = false;
                     mostrarEscudo(false);
                     enExoPlayer = false;
                     try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
                     playerContainer.setVisibility(View.GONE);
                     ocultarControlesNativos();
-                    detenerLoaderAnim(); 
+                    detenerLoaderAnim();
                     ocultarLoaders();
 
                     myWebView.setVisibility(View.VISIBLE);
-                    myWebView.onResume(); 
+                    myWebView.onResume();
                     myWebView.resumeTimers();
 
-                    if (myWebView.canGoBack()) {
-                        myWebView.goBack(); // Vuelta instantánea a la lista
-                        // Esperamos un momento a que vuelva a la lista y cambiamos el canal
-                        handler.postDelayed(() -> {
-                            irACanalWebView(indiceActual);
-                        }, 800);
-                    } else {
-                        // Fallback por si no hay historial (muy raro)
-                        irACanalWebView(indiceActual);
-                    }
+                    // Usamos el mecanismo unificado jsPendienteAlVolver + recargarLista.
+                    // onPageFinished ejecutará irACanal cuando el Worker esté listo.
+                    String js = "window.irACanal(" + indiceActual + ");";
+                    jsPendienteAlVolver = js;
+                    recargarLista(js);
+                    jsPendienteAlVolver = null;
                 } else {
-                    // Si ya estamos en la lista o venimos de ExoPlayer, cambiamos directo.
                     irACanalWebView(indiceActual);
                 }
             }
@@ -712,11 +701,27 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void irACanalWebView(final int idx) {
+        irACanalWebView(idx, 0);
+    }
+
+    private void irACanalWebView(final int idx, final int intento) {
         runOnUiThread(() -> {
-            if (myWebView != null) {
-                myWebView.evaluateJavascript(
-                    "javascript:if(typeof window.irACanal==='function')window.irACanal(" + idx + ");", null);
-            }
+            if (myWebView == null) return;
+            myWebView.evaluateJavascript(
+                "(function(){try{return typeof window.irACanal==='function';}catch(e){return false;}})()",
+                value -> {
+                    if ("true".equals(value)) {
+                        myWebView.evaluateJavascript("window.irACanal(" + idx + ");", null);
+                    } else if (intento < 10) {
+                        handler.postDelayed(() -> irACanalWebView(idx, intento + 1), 300);
+                    } else {
+                        Log.e(TAG, "irACanal no disponible tras reintentos, idx=" + idx + " -> recargando lista");
+                        String js = "window.irACanal(" + idx + ");";
+                        jsPendienteAlVolver = js;
+                        recargarLista(js);
+                        jsPendienteAlVolver = null;
+                    }
+                });
         });
     }
 
@@ -1074,6 +1079,21 @@ public class MainActivity extends AppCompatActivity {
         btnClose.setLayoutParams(lpClose);
     }
 
+
+    private void ejecutarJsCuandoListo(final WebView view, final String js, final int intento) {
+        if (view == null || intento > 20) return; // 20 * 250ms = 5s max
+        view.evaluateJavascript(
+            "(function(){try{return typeof window.irACanal==='function';}catch(e){return false;}})()",
+            value -> {
+                if ("true".equals(value)) {
+                    view.evaluateJavascript(
+                        "javascript:(function(){try{" + js + "}catch(e){}})();", null);
+                } else {
+                    view.postDelayed(() -> ejecutarJsCuandoListo(view, js, intento + 1), 250);
+                }
+            });
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private void configurarWebView() {
         WebSettings s = myWebView.getSettings();
@@ -1103,11 +1123,7 @@ public class MainActivity extends AppCompatActivity {
                     jsPendienteAlVolver = null;
                     // Solo se ejecuta si no quedó reproduciendo el ExoPlayer; si no, lo resuelve el cierre del Exo.
                     if (js != null && !enExoPlayer) {
-                        view.postDelayed(() -> {
-                            try {
-                                view.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
-                            } catch (Exception ignored) {}
-                        }, 1500);
+                        ejecutarJsCuandoListo(view, js, 0);
                     }
                 } else if (enYouTubeWeb && url != null && url.contains("youtube.com/embed")) {
                     aplicarRotacionYouTube();
@@ -1212,6 +1228,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void entrarModoYouTube() {
         enYouTubeWeb = true;
+        jsPendienteAlVolver = null;
         mostrarEscudo(true);
     }
 
@@ -1227,8 +1244,24 @@ public class MainActivity extends AppCompatActivity {
 
     private void salirDeYouTube() {
         ytToken++;
-        volverAlWebViewConJS("window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");"
-            + "window.volverDelExo&&window.volverDelExo();");
+        enYouTubeWeb = false;
+        mostrarEscudo(false);
+        enExoPlayer = false;
+        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+        playerContainer.setVisibility(View.GONE);
+        ocultarControlesNativos();
+        detenerLoaderAnim();
+        ocultarLoaders();
+
+        myWebView.setVisibility(View.VISIBLE);
+        myWebView.onResume();
+        myWebView.resumeTimers();
+
+        String js = "window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");"
+            + "window.volverDelExo&&window.volverDelExo();";
+        jsPendienteAlVolver = js;
+        recargarLista(js);
+        jsPendienteAlVolver = null;
     }
 
     // Rota el documento del embed (la página cargada con loadUrl) si la app está rotada.
