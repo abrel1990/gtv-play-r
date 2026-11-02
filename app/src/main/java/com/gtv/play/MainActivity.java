@@ -158,8 +158,6 @@ public class MainActivity extends AppCompatActivity {
     };
 
     // ==== Zapping con debounce ====
-    // ==== Zapping con debounce (VERSIÓN FLAMA - SIN REINICIOS) ====
-// ==== Zapping con debounce (VERSIÓN FINAL - WEBVIEW SIN RECARGAS) ====
     private int zapPend = -1;
     private final Runnable zapRun = new Runnable() {
         @Override public void run() {
@@ -178,8 +176,7 @@ public class MainActivity extends AppCompatActivity {
             if (esCanalExoPlayer(c.url)) {
                 // CASO A: Canales nativos (HLS, MP4). Van directo a ExoPlayer.
                 reproducirEnExo(c);
-                
-                 } else {
+            } else {
                 // CASO B: YouTube, Kick, Twitch y otros Webs.
                 if (enExoPlayer) {
                     enExoPlayer = false;
@@ -339,8 +336,8 @@ public class MainActivity extends AppCompatActivity {
 
         handler.postDelayed(this::checkForUpdates, 2000);
         handler.postDelayed(() -> {
-        try { inicializarWatchNext(); }
-        catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
+            try { inicializarWatchNext(); }
+            catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
         }, 5000);
     }
 
@@ -513,7 +510,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ✅ CAMBIO: ya no usa loadDataWithBaseURL. Carga la URL del embed directo con headers.
     private void cargarIframeConBaseUrl(String videoId) {
         if (myWebView == null) return;
 
@@ -542,20 +538,19 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ✅ MÉTODO NUEVO PARA EL WORKER (CORREGIDO CON LOADURL)
-  @JavascriptInterface
-public void cargarYouTubeLive(final String channelId) {
-    runOnUiThread(() -> {
-        try {
-            myWebView.evaluateJavascript(
-                "javascript:if(typeof window.cargarYTEnIframe==='function')" +
-                "window.cargarYTEnIframe('" + channelId + "');", null);
-            Log.e(TAG, "cargarYouTubeLive → HTML iframe: " + channelId);
-        } catch (Exception e) {
-            Log.e(TAG, "cargarYouTubeLive error: " + e.getMessage());
-        }
-    });
-}
+    @JavascriptInterface
+    public void cargarYouTubeLive(final String channelId) {
+        runOnUiThread(() -> {
+            try {
+                myWebView.evaluateJavascript(
+                    "javascript:if(typeof window.cargarYTEnIframe==='function')" +
+                    "window.cargarYTEnIframe('" + channelId + "');", null);
+                Log.e(TAG, "cargarYouTubeLive → HTML iframe: " + channelId);
+            } catch (Exception e) {
+                Log.e(TAG, "cargarYouTubeLive error: " + e.getMessage());
+            }
+        });
+    }
 
     private boolean esTV() {
         return getPackageManager().hasSystemFeature("android.software.leanback");
@@ -1059,7 +1054,6 @@ public void cargarYouTubeLive(final String channelId) {
         btnClose.setLayoutParams(lpClose);
     }
 
-
     private void ejecutarJsCuandoListo(final WebView view, final String js, final int intento) {
         if (view == null || intento > 20) return; // 20 * 250ms = 5s max
         view.evaluateJavascript(
@@ -1101,7 +1095,6 @@ public void cargarYouTubeLive(final String channelId) {
                 if (url != null && url.startsWith(WORKER_URL)) {
                     final String js = jsPendienteAlVolver;
                     jsPendienteAlVolver = null;
-                    // Solo se ejecuta si no quedó reproduciendo el ExoPlayer; si no, lo resuelve el cierre del Exo.
                     if (js != null && !enExoPlayer) {
                         ejecutarJsCuandoListo(view, js, 0);
                     }
@@ -1114,9 +1107,6 @@ public void cargarYouTubeLive(final String channelId) {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                // ✅ CAMBIO: solo GET, y el mimeType/charset se separan bien.
-                // Antes se pasaba "text/html; charset=UTF-8" entero como mimeType y el
-                // WebView lo mostraba como texto plano (el HTML crudo que ves en pantalla).
                 if ("GET".equalsIgnoreCase(request.getMethod())
                     && (url.contains("youtube.com") || url.contains("youtube-nocookie.com") || url.contains("googlevideo.com"))) {
                     try {
@@ -1167,6 +1157,7 @@ public void cargarYouTubeLive(final String channelId) {
         });
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
+    }
 
     // ==== Capa nativa sobre YouTube: reutiliza playerContainer (botones + btnShield) en transparente ====
     // on=true: el contenedor nativo se superpone al WebView sin tapar el video y muestra los controles.
@@ -1246,8 +1237,6 @@ public void cargarYouTubeLive(final String channelId) {
     // Rota el documento del embed (la página cargada con loadUrl) si la app está rotada.
     private void aplicarRotacionYouTube() {
         if (myWebView == null || !enYouTubeWeb) return;
-        // Estilo con !important en un <style> propio + un temporizador que lo reinstala,
-        // para que el reproductor de YouTube no lo pise cuando se reacomoda.
         String css = rotado
             ? "html{position:fixed!important;top:50%!important;left:50%!important;width:100vh!important;"
               + "height:100vw!important;margin-top:-50vw!important;margin-left:-50vh!important;"
@@ -1375,19 +1364,18 @@ public void cargarYouTubeLive(final String channelId) {
             ytExec.execute(() -> resolverYouTubeConNewPipe(url, tok));
         }
 
-      @JavascriptInterface
-public void cargarYouTubeLive(final String channelId) {
-    runOnUiThread(() -> {
-        try {
-            myWebView.evaluateJavascript(
-                "javascript:if(typeof window.cargarYTEnIframe==='function')" +
-                "window.cargarYTEnIframe('" + channelId + "');", null);
-            Log.e(TAG, "cargarYouTubeLive → HTML iframe: " + channelId);
-        } catch (Exception e) {
-            Log.e(TAG, "cargarYouTubeLive error: " + e.getMessage());
+        @JavascriptInterface public void cargarYouTubeLive(final String channelId) {
+            runOnUiThread(() -> {
+                try {
+                    myWebView.evaluateJavascript(
+                        "javascript:if(typeof window.cargarYTEnIframe==='function')" +
+                        "window.cargarYTEnIframe('" + channelId + "');", null);
+                    Log.e(TAG, "cargarYouTubeLive → HTML iframe: " + channelId);
+                } catch (Exception e) {
+                    Log.e(TAG, "cargarYouTubeLive error: " + e.getMessage());
+                }
+            });
         }
-    });
-}
 
         @JavascriptInterface public void cargarYouTubeSeguro(String videoId) {
             MainActivity.this.cargarYouTubeSeguro(videoId);
@@ -1556,3 +1544,4 @@ public void cargarYouTubeLive(final String channelId) {
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
+}
