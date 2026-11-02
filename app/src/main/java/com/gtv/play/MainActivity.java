@@ -196,7 +196,10 @@ public class MainActivity extends AppCompatActivity {
                 mostrarEscudo(false);
                 irACanalWebView(indiceActual);
             }
-   static class Canal {
+        }
+    };
+
+    static class Canal {
         final String url, nombre, logo, referer;
         final float gain;
         boolean oculto;
@@ -1164,7 +1167,6 @@ public void cargarYouTubeLive(final String channelId) {
         });
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
-    }
 
     // ==== Capa nativa sobre YouTube: reutiliza playerContainer (botones + btnShield) en transparente ====
     // on=true: el contenedor nativo se superpone al WebView sin tapar el video y muestra los controles.
@@ -1554,4 +1556,3 @@ public void cargarYouTubeLive(final String channelId) {
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
-}
