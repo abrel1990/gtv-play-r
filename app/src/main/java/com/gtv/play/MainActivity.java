@@ -36,6 +36,10 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.view.Gravity;
+import android.view.animation.LinearInterpolator;
+import android.animation.ValueAnimator;
+import android.widget.VideoView;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -128,6 +132,16 @@ public class MainActivity extends AppCompatActivity {
     private Runnable timeoutCanalCaido;
 
     private String deviceIdCache = null;
+    // ==== GTV Publicidad Nativa (ticker + modal sobre ExoPlayer) ====
+    private TextView pubTicker;
+    private FrameLayout pubModal;
+    private ImageView pubModalImg;
+    private VideoView pubModalVid;
+    private ValueAnimator pubTickerAnim;
+    private final Handler pubHandler = new Handler(android.os.Looper.getMainLooper());
+    private Runnable pubModalClose;
+
+
     private volatile boolean webViewListo = false;
 
     private static final String WATCH_NEXT_CHANNEL_NAME = "GTV Play Recientes";
@@ -241,6 +255,8 @@ public class MainActivity extends AppCompatActivity {
         btnShield = findViewById(R.id.btn_shield);
         exoLoader = findViewById(R.id.exo_loader);
         exoLoaderError = findViewById(R.id.exo_loader_error);
+
+        inicializarPublicidadNativa();
 
         rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
@@ -1261,6 +1277,55 @@ public class MainActivity extends AppCompatActivity {
         btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
     }
 
+
+    // ═══════════════════════════════════════════════════════════════
+    // GTV Publicidad Nativa: inicializa las vistas (ticker + modal)
+    // ═══════════════════════════════════════════════════════════════
+    private void inicializarPublicidadNativa() {
+        if (rotWrapper == null) return;
+
+        // Ticker (marquesina inferior)
+        pubTicker = new TextView(this);
+        pubTicker.setVisibility(View.GONE);
+        pubTicker.setTextSize(13f);
+        pubTicker.setPadding(dp(12), dp(4), dp(12), dp(4));
+        pubTicker.setSingleLine(true);
+        pubTicker.setTextColor(0xFFFFFFFF);
+        pubTicker.setBackgroundColor(0x88000000);
+        FrameLayout.LayoutParams tickerLp = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, dp(32));
+        tickerLp.gravity = Gravity.BOTTOM;
+        pubTicker.setLayoutParams(tickerLp);
+        rotWrapper.addView(pubTicker);
+
+        // Modal (imagen o video)
+        pubModal = new FrameLayout(this);
+        pubModal.setVisibility(View.GONE);
+        pubModal.setBackgroundColor(0xCC000000);
+        FrameLayout.LayoutParams modalLp = new FrameLayout.LayoutParams(dp(200), dp(200));
+        modalLp.gravity = Gravity.BOTTOM | Gravity.END;
+        modalLp.setMargins(dp(16), dp(16), dp(16), dp(48));
+        pubModal.setLayoutParams(modalLp);
+
+        pubModalImg = new ImageView(this);
+        pubModalImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        pubModalImg.setLayoutParams(new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        pubModal.addView(pubModalImg);
+
+        pubModalVid = new VideoView(this);
+        pubModalVid.setVisibility(View.GONE);
+        pubModalVid.setLayoutParams(new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        pubModal.addView(pubModalVid);
+
+        rotWrapper.addView(pubModal);
+    }
+
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
 
@@ -1384,6 +1449,63 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface public void salirApp() {
             runOnUiThread(() -> finishAndRemoveTask());
         }
+
+        // ═══════════════════════════════════════════════════════════
+        // GTV Publicidad Nativa: métodos expuestos al JS
+        // ═══════════════════════════════════════════════════════════
+        @JavascriptInterface
+        public void mostrarTicker(final String texto, final String badge, final int velocidad, final String colorBg, final String colorAc) {
+            runOnUiThread(() -> {
+                if (pubTicker == null) return;
+                pubTicker.setText(badge + "  " + texto);
+                try { pubTicker.setBackgroundColor(Color.parseColor(colorBg)); } catch (Exception e) {}
+                try { pubTicker.setTextColor(Color.parseColor(colorAc)); } catch (Exception e) {}
+                pubTicker.setVisibility(View.VISIBLE);
+                pubTicker.setTranslationX(pubTicker.getWidth());
+                if (pubTickerAnim != null) pubTickerAnim.cancel();
+                float anchoTexto = pubTicker.getPaint().measureText(pubTicker.getText().toString());
+                pubTickerAnim = ValueAnimator.ofFloat(pubTicker.getWidth(), -anchoTexto);
+                pubTickerAnim.setDuration(Math.max(5, velocidad) * 1000L);
+                pubTickerAnim.setRepeatCount(ValueAnimator.INFINITE);
+                pubTickerAnim.setInterpolator(new LinearInterpolator());
+                pubTickerAnim.addUpdateListener(a -> pubTicker.setTranslationX((float) a.getAnimatedValue()));
+                pubTickerAnim.start();
+            });
+        }
+
+        @JavascriptInterface
+        public void mostrarModalPublicidad(final String url, final boolean esVideo, final int duracionSeg) {
+            runOnUiThread(() -> {
+                if (pubModal == null) return;
+                pubModal.setVisibility(View.VISIBLE);
+                if (esVideo) {
+                    pubModalImg.setVisibility(View.GONE);
+                    pubModalVid.setVisibility(View.VISIBLE);
+                    try {
+                        pubModalVid.setVideoURI(Uri.parse(url));
+                        pubModalVid.setOnPreparedListener(mp -> { mp.setLooping(true); pubModalVid.start(); });
+                    } catch (Exception e) {}
+                } else {
+                    pubModalVid.setVisibility(View.GONE);
+                    pubModalImg.setVisibility(View.VISIBLE);
+                    try { Glide.with(MainActivity.this).load(url).into(pubModalImg); } catch (Exception e) {}
+                }
+                if (pubModalClose != null) pubHandler.removeCallbacks(pubModalClose);
+                pubModalClose = () -> pubModal.setVisibility(View.GONE);
+                pubHandler.postDelayed(pubModalClose, Math.max(2, duracionSeg) * 1000L);
+            });
+        }
+
+        @JavascriptInterface
+        public void ocultarPublicidad() {
+            runOnUiThread(() -> {
+                if (pubTicker != null) pubTicker.setVisibility(View.GONE);
+                if (pubModal != null) pubModal.setVisibility(View.GONE);
+                if (pubTickerAnim != null) pubTickerAnim.cancel();
+                if (pubModalClose != null) pubHandler.removeCallbacks(pubModalClose);
+            });
+        }
+
     }
 
     private void volverAlWebViewConJS(String js) {
