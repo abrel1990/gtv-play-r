@@ -179,34 +179,23 @@ public class MainActivity extends AppCompatActivity {
                 // CASO A: Canales nativos (HLS, MP4). Van directo a ExoPlayer.
                 reproducirEnExo(c);
                 
-            } else {
+                 } else {
                 // CASO B: YouTube, Kick, Twitch y otros Webs.
-                if (enYouTubeWeb) {
-                    enYouTubeWeb = false;
-                    mostrarEscudo(false);
+                if (enExoPlayer) {
                     enExoPlayer = false;
                     try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
                     playerContainer.setVisibility(View.GONE);
                     ocultarControlesNativos();
                     detenerLoaderAnim();
                     ocultarLoaders();
-
                     myWebView.setVisibility(View.VISIBLE);
                     myWebView.onResume();
                     myWebView.resumeTimers();
-
-                    // Usamos el mecanismo unificado jsPendienteAlVolver + recargarLista.
-                    // onPageFinished ejecutará irACanal cuando el Worker esté listo.
-                    String js = "window.irACanal(" + indiceActual + ");";
-                    jsPendienteAlVolver = js;
-                    recargarLista(js);
-                    jsPendienteAlVolver = null;
-                } else {
-                    irACanalWebView(indiceActual);
                 }
+                enYouTubeWeb = false;
+                mostrarEscudo(false);
+                irACanalWebView(indiceActual);
             }
-        }
-    };
    static class Canal {
         final String url, nombre, logo, referer;
         final float gain;
