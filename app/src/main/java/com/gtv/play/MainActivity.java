@@ -16,6 +16,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -121,7 +122,7 @@ public class MainActivity extends AppCompatActivity {
     private int indiceActual = -1;
 
     private boolean rotado = false;
-    private boolean enExoPlayer = false;
+    private volatile boolean enExoPlayer = false;
     private boolean controlesVisibles = false;
     private final Handler handler = new Handler();
     private Runnable ocultarControlesRunnable;
@@ -132,12 +133,19 @@ public class MainActivity extends AppCompatActivity {
     private Runnable timeoutCanalCaido;
 
     private String deviceIdCache = null;
+
     // ==== GTV Publicidad Nativa (ticker + modal sobre ExoPlayer) ====
-    private TextView pubTicker;
+    private FrameLayout pubTickerBox;
+    private TextView pubTickerTxt;
+    private boolean pubTickerRunning = false;
+    private int pubTickerGen = 0;
+    private int pubTickerDurMs = 20000;
+    private long pubTickerT0 = 0;
+    private float pubTickerFrom = 0f, pubTickerTo = 0f;
+
     private FrameLayout pubModal;
     private ImageView pubModalImg;
     private VideoView pubModalVid;
-    private ValueAnimator pubTickerAnim;
     private final Handler pubHandler = new Handler(android.os.Looper.getMainLooper());
     private Runnable pubModalClose;
 
@@ -153,11 +161,9 @@ public class MainActivity extends AppCompatActivity {
     private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version";
     private static final int MAX_SKIPS = 3;
 
-    // ==== YouTube async ====
     private final ExecutorService ytExec = Executors.newSingleThreadExecutor();
     private volatile int ytToken = 0;
 
-    // ==== Reintentos de ExoPlayer ====
     private Canal canalActual;
     private int reintentos = 0;
     private final Runnable reintentoRunnable = new Runnable() {
@@ -170,7 +176,6 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    // ==== Zapping con debounce ====
     private int zapPend = -1;
     private final Runnable zapRun = new Runnable() {
         @Override public void run() {
@@ -179,7 +184,6 @@ public class MainActivity extends AppCompatActivity {
             zapPend = -1;
             Canal c = canales.get(indiceActual);
 
-            // 1. Feedback visual inmediato
             nombreCanal.setText(c.nombre);
             numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
             if (c.logo != null && !c.logo.isEmpty()) {
@@ -187,11 +191,10 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (esCanalExoPlayer(c.url)) {
-                // CASO A: Canales nativos (HLS, MP4). Van directo a ExoPlayer.
                 reproducirEnExo(c);
             } else {
-                // CASO B: YouTube, Kick, Twitch y otros Webs.
                 if (enExoPlayer) {
+                    tickerDetener(true);
                     enExoPlayer = false;
                     try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
                     playerContainer.setVisibility(View.GONE);
@@ -527,13 +530,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void cargarIframeConBaseUrl(String videoId) {
         if (myWebView == null) return;
-
         String embedUrl = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&playsinline=1&rel=0&modestbranding=1";
-
         Map<String, String> headers = new HashMap<>();
         headers.put("Referer", "https://gtv-portero.abrel03.workers.dev/");
         headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
-
         myWebView.loadUrl(embedUrl, headers);
     }
 
@@ -573,9 +573,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void inicializarWatchNext() {
         if (!esTV()) return;
-        try {
-            watchNextChannelId = obtenerOCrearCanalWatchNext();
-        } catch (Exception ignored) {}
+        try { watchNextChannelId = obtenerOCrearCanalWatchNext(); } catch (Exception ignored) {}
     }
 
     private long obtenerOCrearCanalWatchNext() {
@@ -978,8 +976,8 @@ public class MainActivity extends AppCompatActivity {
         canalActual = c;
         reintentos = 0;
         handler.removeCallbacks(reintentoRunnable);
-        myWebView.onPause();
-        myWebView.pauseTimers();
+        // FIX: NO pausar timers del WebView. El WebView queda con timers vivos
+        // para que pubSchedulerTick() siga corriendo (document.hidden = true pero el HTML lo compensa).
         myWebView.setVisibility(View.GONE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
@@ -1038,7 +1036,6 @@ public class MainActivity extends AppCompatActivity {
         aplicarRotacionYouTube();
         aplicarRotacion();
         reposicionarBotones();
-        // FIX: si el ticker está visible, reiniciar animación en el nuevo sistema rotado
         reiniciarTickerSiVisible();
     }
 
@@ -1176,7 +1173,6 @@ public class MainActivity extends AppCompatActivity {
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
     }
 
-    // ==== Capa nativa sobre YouTube: reutiliza playerContainer (botones + btnShield) en transparente ====
     private void mostrarEscudo(boolean on) {
         if (playerContainer == null || rotWrapper == null || playerView == null || myWebView == null) return;
         if (on) {
@@ -1227,6 +1223,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void salirDeYouTube() {
+        tickerDetener(true);
         ytToken++;
         enYouTubeWeb = false;
         mostrarEscudo(false);
@@ -1280,20 +1277,29 @@ public class MainActivity extends AppCompatActivity {
     private void inicializarPublicidadNativa() {
         if (rotWrapper == null) return;
 
-        // Ticker (marquesina inferior) — anclado al pie del rotWrapper:
-        // en horizontal queda abajo; en rotado 90° queda en el borde derecho físico.
-        pubTicker = new TextView(this);
-        pubTicker.setVisibility(View.GONE);
-        pubTicker.setTextSize(13f);
-        pubTicker.setPadding(dp(12), dp(4), dp(12), dp(4));
-        pubTicker.setSingleLine(true);
-        pubTicker.setTextColor(0xFFFFFFFF);
-        pubTicker.setBackgroundColor(0x88000000);
-        FrameLayout.LayoutParams tickerLp = new FrameLayout.LayoutParams(
+        // Ticker: FrameLayout contenedor (ancho pantalla) + TextView WRAP_CONTENT (ancho del texto).
+        // El TextView es más ancho que el contenedor para que el texto NO se recorte.
+        pubTickerBox = new FrameLayout(this);
+        pubTickerBox.setVisibility(View.GONE);
+        pubTickerBox.setBackgroundColor(0x88000000);
+        FrameLayout.LayoutParams boxLp = new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, dp(32));
-        tickerLp.gravity = Gravity.BOTTOM;
-        pubTicker.setLayoutParams(tickerLp);
-        rotWrapper.addView(pubTicker);
+        boxLp.gravity = Gravity.BOTTOM;
+        pubTickerBox.setLayoutParams(boxLp);
+
+        pubTickerTxt = new TextView(this);
+        pubTickerTxt.setTextSize(13f);
+        pubTickerTxt.setSingleLine(true);
+        pubTickerTxt.setHorizontallyScrolling(true);
+        pubTickerTxt.setEllipsize(null);
+        pubTickerTxt.setTextColor(0xFFFFFFFF);
+        pubTickerTxt.setShadowLayer(4f, 0f, 1f, 0xD9000000);
+        pubTickerTxt.setGravity(Gravity.CENTER_VERTICAL);
+        pubTickerTxt.setPadding(dp(12), 0, dp(12), 0);
+        pubTickerTxt.setLayoutParams(new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        pubTickerBox.addView(pubTickerTxt);
+        rotWrapper.addView(pubTickerBox);
 
         // Modal (imagen o video)
         pubModal = new FrameLayout(this);
@@ -1323,35 +1329,93 @@ public class MainActivity extends AppCompatActivity {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
-    // FIX: reinicia la animación del ticker si está visible (se llama al rotar).
-    // Conserva la duración del panel y vuelve a arrancar desde la derecha en el nuevo sistema.
+    // ═══════════════════════════════════════════════════════════════
+    // Ticker nativo: loop propio con uptimeMillis (independiente de la escala de animaciones)
+    // ═══════════════════════════════════════════════════════════════
+    private int parsearColor(String c, int def) {
+        if (c == null) return def;
+        String s = c.trim().toLowerCase();
+        if (s.isEmpty()) return def;
+        if (s.equals("transparent")) return Color.TRANSPARENT;
+        try {
+            if (s.startsWith("rgb")) {
+                int a = s.indexOf('('), z = s.indexOf(')');
+                if (a < 0 || z < 0) return def;
+                String[] p = s.substring(a + 1, z).split(",");
+                if (p.length < 3) return def;
+                int r = Math.round(Float.parseFloat(p[0].trim()));
+                int g = Math.round(Float.parseFloat(p[1].trim()));
+                int bl = Math.round(Float.parseFloat(p[2].trim()));
+                float al = p.length > 3 ? Float.parseFloat(p[3].trim()) : 1f;
+                al = Math.max(0f, Math.min(1f, al));
+                return Color.argb(Math.round(al * 255), r, g, bl);
+            }
+            if (s.startsWith("#") && s.length() == 4) {
+                s = "#" + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2) + s.charAt(3) + s.charAt(3);
+            } else if (s.startsWith("#") && s.length() == 9) {
+                s = "#" + s.substring(7, 9) + s.substring(1, 7);
+            }
+            return Color.parseColor(s);
+        } catch (Exception e) { return def; }
+    }
+
+    private final Runnable pubTickerLoop = new Runnable() {
+        @Override public void run() {
+            if (!pubTickerRunning || pubTickerBox == null) return;
+            float t = (SystemClock.uptimeMillis() - pubTickerT0) / (float) pubTickerDurMs;
+            if (t >= 1f) {
+                pubTickerRunning = false;
+                pubTickerBox.setVisibility(View.GONE);
+                avisarAlWebView("window.gtv&&window.gtv.onTickerTerminado&&window.gtv.onTickerTerminado();");
+                return;
+            }
+            if (pubTickerTxt != null)
+                pubTickerTxt.setTranslationX(pubTickerFrom + (pubTickerTo - pubTickerFrom) * t);
+            pubTickerBox.postOnAnimation(this);
+        }
+    };
+
+    private void tickerDetener(boolean ocultar) {
+        pubTickerRunning = false;
+        pubTickerGen++;
+        if (pubTickerBox != null) {
+            pubTickerBox.removeCallbacks(pubTickerLoop);
+            if (ocultar) pubTickerBox.setVisibility(View.GONE);
+        }
+    }
+
+    private void tickerArrancar(final int gen, final float prog, long delayMs) {
+        if (pubTickerBox == null || pubTickerTxt == null) return;
+        pubTickerBox.removeCallbacks(pubTickerLoop);
+        pubTickerRunning = false;
+        pubTickerBox.setVisibility(View.INVISIBLE);
+        final int[] intentos = {0};
+        pubTickerBox.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (gen != pubTickerGen || pubTickerBox == null) return;
+                int ancho = pubTickerBox.getWidth();
+                if (ancho <= 0) { if (++intentos[0] < 50) pubTickerBox.postDelayed(this, 100); return; }
+                float anchoTexto = pubTickerTxt.getPaint().measureText(pubTickerTxt.getText().toString());
+                int anchoView = (int) Math.ceil(anchoTexto) + dp(24);
+                FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubTickerTxt.getLayoutParams();
+                if (lp.width != anchoView) { lp.width = anchoView; pubTickerTxt.setLayoutParams(lp); }
+                pubTickerFrom = ancho;
+                pubTickerTo = -anchoView;
+                pubTickerT0 = SystemClock.uptimeMillis() - (long) (prog * pubTickerDurMs);
+                pubTickerTxt.setTranslationX(pubTickerFrom + (pubTickerTo - pubTickerFrom) * prog);
+                pubTickerBox.setVisibility(View.VISIBLE);
+                pubTickerRunning = true;
+                pubTickerBox.postOnAnimation(pubTickerLoop);
+            }
+        }, delayMs);
+    }
+
     private void reiniciarTickerSiVisible() {
-        if (pubTicker == null || pubTicker.getVisibility() != View.VISIBLE) return;
-        if (pubTickerAnim != null) { pubTickerAnim.cancel(); pubTickerAnim = null; }
-        final String textoActual = pubTicker.getText().toString();
-        final int duracionMs = (pubTickerAnim != null && pubTickerAnim.getDuration() > 0)
-            ? (int) pubTickerAnim.getDuration() : 20000;
-        pubTicker.post(() -> {
-            if (pubTicker == null) return;
-            int ancho = pubTicker.getWidth();
-            if (ancho <= 0) return;
-            float anchoTexto = pubTicker.getPaint().measureText(textoActual);
-            pubTicker.setTranslationX(ancho);
-            pubTickerAnim = ValueAnimator.ofFloat(ancho, -anchoTexto);
-            pubTickerAnim.setDuration(duracionMs);
-            pubTickerAnim.setRepeatCount(0);
-            pubTickerAnim.setInterpolator(new LinearInterpolator());
-            pubTickerAnim.addUpdateListener(a -> {
-                if (pubTicker != null) pubTicker.setTranslationX((float) a.getAnimatedValue());
-            });
-            pubTickerAnim.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator animation) {
-                    if (pubTicker != null) pubTicker.setVisibility(View.GONE);
-                    avisarAlWebView("window.gtv&&window.gtv.onTickerTerminado&&window.gtv.onTickerTerminado();");
-                }
-            });
-            pubTickerAnim.start();
-        });
+        if (pubTickerBox == null || !pubTickerRunning) return;
+        float prog = (SystemClock.uptimeMillis() - pubTickerT0) / (float) pubTickerDurMs;
+        prog = Math.max(0f, Math.min(0.99f, prog));
+        int gen = ++pubTickerGen;
+        tickerArrancar(gen, prog, 150);
     }
 
     public class WebAppInterface {
@@ -1434,6 +1498,7 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface public void mostrarWebView() {
             runOnUiThread(() -> {
                 ytToken++;
+                tickerDetener(true);
                 enExoPlayer = false;
                 try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
                 playerContainer.setVisibility(View.GONE);
@@ -1482,64 +1547,27 @@ public class MainActivity extends AppCompatActivity {
         // GTV Publicidad Nativa: métodos expuestos al JS
         // ═══════════════════════════════════════════════════════════
 
-        /**
-         * Muestra el ticker sobre ExoPlayer. UNA SOLA PASADA (no loop).
-         * - Espera al layout con post() para tener getWidth() correcto.
-         * - Arranca con el texto JUSTO fuera por la derecha (translationX = anchoPantalla).
-         * - Termina con el texto JUSTO fuera por la izquierda (translationX = -anchoTexto).
-         * - Al terminar se oculta y avisa al WebView con onTickerTerminado().
-         * - Respeta la duración exacta del panel (velocidad en segundos).
-         */
+        @JavascriptInterface public boolean estaEnExo() { return enExoPlayer; }
+
         @JavascriptInterface
-        public void mostrarTicker(final String texto, final String badge, final int velocidad, final String colorBg, final String colorAc) {
+        public void mostrarTicker(final String texto, final String badge, final int velocidad,
+                                  final String colorBg, final String colorAc) {
             runOnUiThread(() -> {
-                if (pubTicker == null || rotWrapper == null) return;
-
-                if (pubTickerAnim != null) { pubTickerAnim.cancel(); pubTickerAnim = null; }
-
-                String textoFinal = (badge != null && !badge.isEmpty()) ? (badge + "  " + texto) : texto;
-                pubTicker.setText(textoFinal);
-                try { pubTicker.setBackgroundColor(Color.parseColor(colorBg)); } catch (Exception e) {}
-                try { pubTicker.setTextColor(Color.parseColor(colorAc)); } catch (Exception e) {}
-                pubTicker.setVisibility(View.VISIBLE);
-                pubTicker.setTranslationX(0);
-
-                // CLAVE: esperar el layout para tener getWidth() correcto (sin esto, getWidth()=0 y la animación arranca mal)
-                pubTicker.post(() -> {
-                    if (pubTicker == null) return;
-                    final int anchoPantalla = pubTicker.getWidth();
-                    if (anchoPantalla <= 0) return;
-                    final float anchoTexto = pubTicker.getPaint().measureText(textoFinal);
-
-                    // Empieza JUSTO fuera por la derecha
-                    pubTicker.setTranslationX(anchoPantalla);
-
-                    pubTickerAnim = ValueAnimator.ofFloat(anchoPantalla, -anchoTexto);
-                    pubTickerAnim.setDuration(Math.max(3, velocidad) * 1000L);
-                    pubTickerAnim.setRepeatCount(0); // UNA SOLA PASADA — el panel controla la frecuencia
-                    pubTickerAnim.setInterpolator(new LinearInterpolator());
-                    pubTickerAnim.addUpdateListener(a -> {
-                        if (pubTicker != null) pubTicker.setTranslationX((float) a.getAnimatedValue());
-                    });
-                    pubTickerAnim.addListener(new android.animation.AnimatorListenerAdapter() {
-                        @Override public void onAnimationEnd(android.animation.Animator animation) {
-                            if (pubTicker != null) pubTicker.setVisibility(View.GONE);
-                            avisarAlWebView("window.gtv&&window.gtv.onTickerTerminado&&window.gtv.onTickerTerminado();");
-                        }
-                    });
-                    pubTickerAnim.start();
-                });
+                if (pubTickerBox == null || pubTickerTxt == null) return;
+                tickerDetener(false);
+                final int gen = pubTickerGen;
+                String tf = (badge != null && !badge.isEmpty()) ? (badge + "  " + texto) : String.valueOf(texto);
+                pubTickerTxt.setText(tf);
+                pubTickerBox.setBackgroundColor(parsearColor(colorBg, 0x88000000));
+                pubTickerTxt.setTextColor(parsearColor(colorAc, 0xFFFFFFFF));
+                pubTickerDurMs = Math.max(1, velocidad) * 1000;
+                tickerArrancar(gen, 0f, 0);
             });
         }
 
-        /** Oculta el ticker inmediatamente (el HTML lo llama al vencer la duración del panel). */
         @JavascriptInterface
         public void ocultarTicker() {
-            runOnUiThread(() -> {
-                if (pubTicker == null) return;
-                if (pubTickerAnim != null) { pubTickerAnim.cancel(); pubTickerAnim = null; }
-                pubTicker.setVisibility(View.GONE);
-            });
+            runOnUiThread(() -> tickerDetener(true));
         }
 
         @JavascriptInterface
@@ -1568,16 +1596,15 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface
         public void ocultarPublicidad() {
             runOnUiThread(() -> {
-                if (pubTicker != null) pubTicker.setVisibility(View.GONE);
+                tickerDetener(true);
                 if (pubModal != null) pubModal.setVisibility(View.GONE);
-                if (pubTickerAnim != null) pubTickerAnim.cancel();
                 if (pubModalClose != null) pubHandler.removeCallbacks(pubModalClose);
             });
         }
-
     }
 
     private void volverAlWebViewConJS(String js) {
+        tickerDetener(true);
         mostrarEscudo(false);
         final boolean veniaDeYouTube = enYouTubeWeb;
         enExoPlayer = false;
@@ -1610,6 +1637,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void ejecutarCierreExo(boolean esZapping) {
+        tickerDetener(true);
         mostrarEscudo(false);
         enExoPlayer = false;
         canalActual = null;
@@ -1698,8 +1726,8 @@ public class MainActivity extends AppCompatActivity {
 
     @Override protected void onDestroy() {
         super.onDestroy();
+        tickerDetener(true);
         detenerLoaderAnim();
-        if (pubTickerAnim != null) { try { pubTickerAnim.cancel(); } catch (Exception ignored) {} pubTickerAnim = null; }
         if (pubModalClose != null) { try { pubHandler.removeCallbacks(pubModalClose); } catch (Exception ignored) {} pubModalClose = null; }
         if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
         handler.removeCallbacks(reintentoRunnable);
