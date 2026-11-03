@@ -141,7 +141,6 @@ public class MainActivity extends AppCompatActivity {
     private final Handler pubHandler = new Handler(android.os.Looper.getMainLooper());
     private Runnable pubModalClose;
 
-
     private volatile boolean webViewListo = false;
 
     private static final String WATCH_NEXT_CHANNEL_NAME = "GTV Play Recientes";
@@ -1039,6 +1038,8 @@ public class MainActivity extends AppCompatActivity {
         aplicarRotacionYouTube();
         aplicarRotacion();
         reposicionarBotones();
+        // FIX: si el ticker está visible, reiniciar animación en el nuevo sistema rotado
+        reiniciarTickerSiVisible();
     }
 
     private void aplicarRotacion() {
@@ -1071,7 +1072,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void ejecutarJsCuandoListo(final WebView view, final String js, final int intento) {
-        if (view == null || intento > 20) return; // 20 * 250ms = 5s max
+        if (view == null || intento > 20) return;
         view.evaluateJavascript(
             "(function(){try{return typeof window.irACanal==='function';}catch(e){return false;}})()",
             value -> {
@@ -1176,8 +1177,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ==== Capa nativa sobre YouTube: reutiliza playerContainer (botones + btnShield) en transparente ====
-    // on=true: el contenedor nativo se superpone al WebView sin tapar el video y muestra los controles.
-    // on=false: restaura fondos y el PlayerView para el uso normal de ExoPlayer.
     private void mostrarEscudo(boolean on) {
         if (playerContainer == null || rotWrapper == null || playerView == null || myWebView == null) return;
         if (on) {
@@ -1218,7 +1217,6 @@ public class MainActivity extends AppCompatActivity {
         mostrarEscudo(true);
     }
 
-    // Al cargar el embed, la página del Worker (la lista) se reemplaza. Para volver hay que recargarla.
     private void recargarLista(String jsPendiente) {
         enYouTubeWeb = false;
         mostrarEscudo(false);
@@ -1250,7 +1248,6 @@ public class MainActivity extends AppCompatActivity {
         jsPendienteAlVolver = null;
     }
 
-    // Rota el documento del embed (la página cargada con loadUrl) si la app está rotada.
     private void aplicarRotacionYouTube() {
         if (myWebView == null || !enYouTubeWeb) return;
         String css = rotado
@@ -1277,14 +1274,14 @@ public class MainActivity extends AppCompatActivity {
         btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
     }
 
-
     // ═══════════════════════════════════════════════════════════════
     // GTV Publicidad Nativa: inicializa las vistas (ticker + modal)
     // ═══════════════════════════════════════════════════════════════
     private void inicializarPublicidadNativa() {
         if (rotWrapper == null) return;
 
-        // Ticker (marquesina inferior)
+        // Ticker (marquesina inferior) — anclado al pie del rotWrapper:
+        // en horizontal queda abajo; en rotado 90° queda en el borde derecho físico.
         pubTicker = new TextView(this);
         pubTicker.setVisibility(View.GONE);
         pubTicker.setTextSize(13f);
@@ -1324,6 +1321,37 @@ public class MainActivity extends AppCompatActivity {
 
     private int dp(int v) {
         return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    // FIX: reinicia la animación del ticker si está visible (se llama al rotar).
+    // Conserva la duración del panel y vuelve a arrancar desde la derecha en el nuevo sistema.
+    private void reiniciarTickerSiVisible() {
+        if (pubTicker == null || pubTicker.getVisibility() != View.VISIBLE) return;
+        if (pubTickerAnim != null) { pubTickerAnim.cancel(); pubTickerAnim = null; }
+        final String textoActual = pubTicker.getText().toString();
+        final int duracionMs = (pubTickerAnim != null && pubTickerAnim.getDuration() > 0)
+            ? (int) pubTickerAnim.getDuration() : 20000;
+        pubTicker.post(() -> {
+            if (pubTicker == null) return;
+            int ancho = pubTicker.getWidth();
+            if (ancho <= 0) return;
+            float anchoTexto = pubTicker.getPaint().measureText(textoActual);
+            pubTicker.setTranslationX(ancho);
+            pubTickerAnim = ValueAnimator.ofFloat(ancho, -anchoTexto);
+            pubTickerAnim.setDuration(duracionMs);
+            pubTickerAnim.setRepeatCount(0);
+            pubTickerAnim.setInterpolator(new LinearInterpolator());
+            pubTickerAnim.addUpdateListener(a -> {
+                if (pubTicker != null) pubTicker.setTranslationX((float) a.getAnimatedValue());
+            });
+            pubTickerAnim.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator animation) {
+                    if (pubTicker != null) pubTicker.setVisibility(View.GONE);
+                    avisarAlWebView("window.gtv&&window.gtv.onTickerTerminado&&window.gtv.onTickerTerminado();");
+                }
+            });
+            pubTickerAnim.start();
+        });
     }
 
     public class WebAppInterface {
@@ -1453,23 +1481,64 @@ public class MainActivity extends AppCompatActivity {
         // ═══════════════════════════════════════════════════════════
         // GTV Publicidad Nativa: métodos expuestos al JS
         // ═══════════════════════════════════════════════════════════
+
+        /**
+         * Muestra el ticker sobre ExoPlayer. UNA SOLA PASADA (no loop).
+         * - Espera al layout con post() para tener getWidth() correcto.
+         * - Arranca con el texto JUSTO fuera por la derecha (translationX = anchoPantalla).
+         * - Termina con el texto JUSTO fuera por la izquierda (translationX = -anchoTexto).
+         * - Al terminar se oculta y avisa al WebView con onTickerTerminado().
+         * - Respeta la duración exacta del panel (velocidad en segundos).
+         */
         @JavascriptInterface
         public void mostrarTicker(final String texto, final String badge, final int velocidad, final String colorBg, final String colorAc) {
             runOnUiThread(() -> {
-                if (pubTicker == null) return;
-                pubTicker.setText(badge + "  " + texto);
+                if (pubTicker == null || rotWrapper == null) return;
+
+                if (pubTickerAnim != null) { pubTickerAnim.cancel(); pubTickerAnim = null; }
+
+                String textoFinal = (badge != null && !badge.isEmpty()) ? (badge + "  " + texto) : texto;
+                pubTicker.setText(textoFinal);
                 try { pubTicker.setBackgroundColor(Color.parseColor(colorBg)); } catch (Exception e) {}
                 try { pubTicker.setTextColor(Color.parseColor(colorAc)); } catch (Exception e) {}
                 pubTicker.setVisibility(View.VISIBLE);
-                pubTicker.setTranslationX(pubTicker.getWidth());
-                if (pubTickerAnim != null) pubTickerAnim.cancel();
-                float anchoTexto = pubTicker.getPaint().measureText(pubTicker.getText().toString());
-                pubTickerAnim = ValueAnimator.ofFloat(pubTicker.getWidth(), -anchoTexto);
-                pubTickerAnim.setDuration(Math.max(5, velocidad) * 1000L);
-                pubTickerAnim.setRepeatCount(ValueAnimator.INFINITE);
-                pubTickerAnim.setInterpolator(new LinearInterpolator());
-                pubTickerAnim.addUpdateListener(a -> pubTicker.setTranslationX((float) a.getAnimatedValue()));
-                pubTickerAnim.start();
+                pubTicker.setTranslationX(0);
+
+                // CLAVE: esperar el layout para tener getWidth() correcto (sin esto, getWidth()=0 y la animación arranca mal)
+                pubTicker.post(() -> {
+                    if (pubTicker == null) return;
+                    final int anchoPantalla = pubTicker.getWidth();
+                    if (anchoPantalla <= 0) return;
+                    final float anchoTexto = pubTicker.getPaint().measureText(textoFinal);
+
+                    // Empieza JUSTO fuera por la derecha
+                    pubTicker.setTranslationX(anchoPantalla);
+
+                    pubTickerAnim = ValueAnimator.ofFloat(anchoPantalla, -anchoTexto);
+                    pubTickerAnim.setDuration(Math.max(3, velocidad) * 1000L);
+                    pubTickerAnim.setRepeatCount(0); // UNA SOLA PASADA — el panel controla la frecuencia
+                    pubTickerAnim.setInterpolator(new LinearInterpolator());
+                    pubTickerAnim.addUpdateListener(a -> {
+                        if (pubTicker != null) pubTicker.setTranslationX((float) a.getAnimatedValue());
+                    });
+                    pubTickerAnim.addListener(new android.animation.AnimatorListenerAdapter() {
+                        @Override public void onAnimationEnd(android.animation.Animator animation) {
+                            if (pubTicker != null) pubTicker.setVisibility(View.GONE);
+                            avisarAlWebView("window.gtv&&window.gtv.onTickerTerminado&&window.gtv.onTickerTerminado();");
+                        }
+                    });
+                    pubTickerAnim.start();
+                });
+            });
+        }
+
+        /** Oculta el ticker inmediatamente (el HTML lo llama al vencer la duración del panel). */
+        @JavascriptInterface
+        public void ocultarTicker() {
+            runOnUiThread(() -> {
+                if (pubTicker == null) return;
+                if (pubTickerAnim != null) { pubTickerAnim.cancel(); pubTickerAnim = null; }
+                pubTicker.setVisibility(View.GONE);
             });
         }
 
@@ -1630,6 +1699,8 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onDestroy() {
         super.onDestroy();
         detenerLoaderAnim();
+        if (pubTickerAnim != null) { try { pubTickerAnim.cancel(); } catch (Exception ignored) {} pubTickerAnim = null; }
+        if (pubModalClose != null) { try { pubHandler.removeCallbacks(pubModalClose); } catch (Exception ignored) {} pubModalClose = null; }
         if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
         handler.removeCallbacks(reintentoRunnable);
         handler.removeCallbacks(zapRun);
