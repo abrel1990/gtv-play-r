@@ -19,6 +19,7 @@ import android.os.Handler;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.LayoutInflater;
@@ -113,7 +114,6 @@ public class MainActivity extends AppCompatActivity {
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
     private boolean bgGuardado = false;
 
-    // ==== Modo YouTube dentro del WebView ====
     private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
     private boolean enYouTubeWeb = false;
     private String jsPendienteAlVolver = null;
@@ -134,7 +134,7 @@ public class MainActivity extends AppCompatActivity {
 
     private String deviceIdCache = null;
 
-    // ==== GTV Publicidad Nativa (ticker + modal sobre ExoPlayer) ====
+    // ==== GTV Publicidad Nativa ====
     private FrameLayout pubTickerBox;
     private TextView pubTickerTxt;
     private boolean pubTickerRunning = false;
@@ -976,8 +976,7 @@ public class MainActivity extends AppCompatActivity {
         canalActual = c;
         reintentos = 0;
         handler.removeCallbacks(reintentoRunnable);
-        // FIX: NO pausar timers del WebView. El WebView queda con timers vivos
-        // para que pubSchedulerTick() siga corriendo (document.hidden = true pero el HTML lo compensa).
+        // NO pausar timers del WebView: pubSchedulerTick sigue corriendo
         myWebView.setVisibility(View.GONE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
@@ -1271,24 +1270,20 @@ public class MainActivity extends AppCompatActivity {
         btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // GTV Publicidad Nativa: inicializa las vistas (ticker + modal)
-    // ═══════════════════════════════════════════════════════════════
     private void inicializarPublicidadNativa() {
         if (rotWrapper == null) return;
 
-        // Ticker: FrameLayout contenedor (ancho pantalla) + TextView WRAP_CONTENT (ancho del texto).
-        // El TextView es más ancho que el contenedor para que el texto NO se recorte.
+        // Ticker: FrameLayout contenedor + TextView con scroll horizontal
         pubTickerBox = new FrameLayout(this);
         pubTickerBox.setVisibility(View.GONE);
         pubTickerBox.setBackgroundColor(0x88000000);
         FrameLayout.LayoutParams boxLp = new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, dp(32));
+            FrameLayout.LayoutParams.MATCH_PARENT, dp(36));
         boxLp.gravity = Gravity.BOTTOM;
         pubTickerBox.setLayoutParams(boxLp);
 
         pubTickerTxt = new TextView(this);
-        pubTickerTxt.setTextSize(13f);
+        pubTickerTxt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
         pubTickerTxt.setSingleLine(true);
         pubTickerTxt.setHorizontallyScrolling(true);
         pubTickerTxt.setEllipsize(null);
@@ -1301,11 +1296,11 @@ public class MainActivity extends AppCompatActivity {
         pubTickerBox.addView(pubTickerTxt);
         rotWrapper.addView(pubTickerBox);
 
-        // Modal (imagen o video)
+        // Modal: contenedor chico (180dp) para no saturar el decoder de Exo
         pubModal = new FrameLayout(this);
         pubModal.setVisibility(View.GONE);
         pubModal.setBackgroundColor(0xCC000000);
-        FrameLayout.LayoutParams modalLp = new FrameLayout.LayoutParams(dp(200), dp(200));
+        FrameLayout.LayoutParams modalLp = new FrameLayout.LayoutParams(dp(180), dp(180));
         modalLp.gravity = Gravity.BOTTOM | Gravity.END;
         modalLp.setMargins(dp(16), dp(16), dp(16), dp(48));
         pubModal.setLayoutParams(modalLp);
@@ -1329,9 +1324,6 @@ public class MainActivity extends AppCompatActivity {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // Ticker nativo: loop propio con uptimeMillis (independiente de la escala de animaciones)
-    // ═══════════════════════════════════════════════════════════════
     private int parsearColor(String c, int def) {
         if (c == null) return def;
         String s = c.trim().toLowerCase();
@@ -1543,26 +1535,19 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> finishAndRemoveTask());
         }
 
-        // ═══════════════════════════════════════════════════════════
-        // GTV Publicidad Nativa: métodos expuestos al JS
-        // ═══════════════════════════════════════════════════════════
-
         @JavascriptInterface public boolean estaEnExo() { return enExoPlayer; }
 
+        // ---- TICKER: método con 5 args (compat) y con 6 args (con tamaño en px) ----
         @JavascriptInterface
         public void mostrarTicker(final String texto, final String badge, final int velocidad,
                                   final String colorBg, final String colorAc) {
-            runOnUiThread(() -> {
-                if (pubTickerBox == null || pubTickerTxt == null) return;
-                tickerDetener(false);
-                final int gen = pubTickerGen;
-                String tf = (badge != null && !badge.isEmpty()) ? (badge + "  " + texto) : String.valueOf(texto);
-                pubTickerTxt.setText(tf);
-                pubTickerBox.setBackgroundColor(parsearColor(colorBg, 0x88000000));
-                pubTickerTxt.setTextColor(parsearColor(colorAc, 0xFFFFFFFF));
-                pubTickerDurMs = Math.max(1, velocidad) * 1000;
-                tickerArrancar(gen, 0f, 0);
-            });
+            mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, 14);
+        }
+
+        @JavascriptInterface
+        public void mostrarTickerConTamano(final String texto, final String badge, final int velocidad,
+                                            final String colorBg, final String colorAc, final int tamPx) {
+            mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, tamPx);
         }
 
         @JavascriptInterface
@@ -1570,25 +1555,76 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> tickerDetener(true));
         }
 
+        // ---- MODAL: video/imagen chico, sin loop, sin freeze ----
         @JavascriptInterface
         public void mostrarModalPublicidad(final String url, final boolean esVideo, final int duracionSeg) {
             runOnUiThread(() -> {
                 if (pubModal == null) return;
+
+                // Detener reproducción previa
+                if (pubModalVid != null) {
+                    try { pubModalVid.stopPlayback(); pubModalVid.setVideoURI(null); } catch (Exception ignored) {}
+                }
+                if (pubModalClose != null) pubHandler.removeCallbacks(pubModalClose);
+
+                // Tamaño chico (180dp) para no saturar el decoder
+                FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubModal.getLayoutParams();
+                lp.width = dp(180);
+                lp.height = dp(180);
+                pubModal.setLayoutParams(lp);
+
                 pubModal.setVisibility(View.VISIBLE);
+
                 if (esVideo) {
                     pubModalImg.setVisibility(View.GONE);
                     pubModalVid.setVisibility(View.VISIBLE);
                     try {
                         pubModalVid.setVideoURI(Uri.parse(url));
-                        pubModalVid.setOnPreparedListener(mp -> { mp.setLooping(true); pubModalVid.start(); });
-                    } catch (Exception e) {}
+                        pubModalVid.setOnPreparedListener(mp -> {
+                            try {
+                                mp.setLooping(false);
+                                mp.setVolume(0f, 0f);
+                                mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT);
+                            } catch (Exception ignored) {}
+                            try { pubModalVid.start(); } catch (Exception ignored) {}
+                        });
+                        pubModalVid.setOnCompletionListener(mp -> {
+                            try { mp.stop(); } catch (Exception ignored) {}
+                        });
+                        pubModalVid.setOnErrorListener((mp, what, extra) -> {
+                            pubModal.setVisibility(View.GONE);
+                            avisarAlWebView("window.gtv&&window.gtv.onModalTerminado&&window.gtv.onModalTerminado();");
+                            return true;
+                        });
+                    } catch (Exception e) {
+                        pubModal.setVisibility(View.GONE);
+                        avisarAlWebView("window.gtv&&window.gtv.onModalTerminado&&window.gtv.onModalTerminado();");
+                        return;
+                    }
                 } else {
                     pubModalVid.setVisibility(View.GONE);
                     pubModalImg.setVisibility(View.VISIBLE);
-                    try { Glide.with(MainActivity.this).load(url).into(pubModalImg); } catch (Exception e) {}
+                    try {
+                        Glide.with(MainActivity.this)
+                            .load(url)
+                            .override(dp(180), dp(180))
+                            .centerCrop()
+                            .dontAnimate()
+                            .into(pubModalImg);
+                    } catch (Exception e) {
+                        pubModal.setVisibility(View.GONE);
+                        avisarAlWebView("window.gtv&&window.gtv.onModalTerminado&&window.gtv.onModalTerminado();");
+                        return;
+                    }
                 }
-                if (pubModalClose != null) pubHandler.removeCallbacks(pubModalClose);
-                pubModalClose = () -> pubModal.setVisibility(View.GONE);
+
+                pubModalClose = () -> {
+                    if (pubModal != null) pubModal.setVisibility(View.GONE);
+                    if (pubModalVid != null) {
+                        try { pubModalVid.stopPlayback(); pubModalVid.setVideoURI(null); } catch (Exception ignored) {}
+                    }
+                    avisarAlWebView("window.gtv&&window.gtv.onModalTerminado&&window.gtv.onModalTerminado();");
+                };
                 pubHandler.postDelayed(pubModalClose, Math.max(2, duracionSeg) * 1000L);
             });
         }
@@ -1601,6 +1637,28 @@ public class MainActivity extends AppCompatActivity {
                 if (pubModalClose != null) pubHandler.removeCallbacks(pubModalClose);
             });
         }
+    }
+
+    private void mostrarTickerImpl(final String texto, final String badge, final int velocidad,
+                                    final String colorBg, final String colorAc, final int tamPx) {
+        runOnUiThread(() -> {
+            if (pubTickerBox == null || pubTickerTxt == null) return;
+            tickerDetener(false);
+            final int gen = pubTickerGen;
+            String tf = (badge != null && !badge.isEmpty()) ? (badge + "  " + texto) : String.valueOf(texto);
+            pubTickerTxt.setText(tf);
+            // Tamaño en SP (respeta el tamaño que puso el admin)
+            int tamSeguro = Math.max(8, Math.min(72, tamPx));
+            pubTickerTxt.setTextSize(TypedValue.COMPLEX_UNIT_SP, tamSeguro);
+            // Altura dinámica del contenedor
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubTickerBox.getLayoutParams();
+            int altura = Math.max(dp(32), dp(tamSeguro + 10));
+            if (lp.height != altura) { lp.height = altura; pubTickerBox.setLayoutParams(lp); }
+            pubTickerBox.setBackgroundColor(parsearColor(colorBg, 0x88000000));
+            pubTickerTxt.setTextColor(parsearColor(colorAc, 0xFFFFFFFF));
+            pubTickerDurMs = Math.max(1, velocidad) * 1000;
+            tickerArrancar(gen, 0f, 0);
+        });
     }
 
     private void volverAlWebViewConJS(String js) {
