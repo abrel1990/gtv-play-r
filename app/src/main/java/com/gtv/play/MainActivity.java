@@ -190,6 +190,13 @@ public class MainActivity extends AppCompatActivity {
                 Glide.with(MainActivity.this).load(c.logo).into(logoCanal);
             }
 
+            // FIX ZAPPING: avisar al HTML del cambio de índice ANTES de reproducir
+            if (myWebView != null) {
+                myWebView.evaluateJavascript(
+                    "javascript:window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");",
+                    null);
+            }
+
             if (esCanalExoPlayer(c.url)) {
                 reproducirEnExo(c);
             } else {
@@ -952,8 +959,15 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
+    // FIX ZAPPING: delega al HTML para que respete el orden global y no se trabe
     private void navegar(int delta) {
         if (canales.isEmpty()) return;
+        if (myWebView != null) {
+            myWebView.evaluateJavascript(
+                "javascript:if(window.zapNativo)window.zapNativo(" + delta + ");",
+                null);
+            return;
+        }
         int n = canales.size();
         int i = (zapPend >= 0 ? zapPend : indiceActual);
         for (int k = 0; k < n; k++) {
@@ -971,7 +985,9 @@ public class MainActivity extends AppCompatActivity {
     private void reproducirEnExo(Canal c) {
         ytToken++;
         mostrarEscudo(false);
-        if (enYouTubeWeb) recargarLista("window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");window.volverDelExo&&window.volverDelExo();");
+        // FIX ZAPPING: NO recargar la lista si veníamos de YouTube.
+        // Solo salir del modo YouTube sin recargar la WebView.
+        enYouTubeWeb = false;
         enExoPlayer = true;
         canalActual = c;
         reintentos = 0;
@@ -1273,7 +1289,6 @@ public class MainActivity extends AppCompatActivity {
     private void inicializarPublicidadNativa() {
         if (rotWrapper == null) return;
 
-        // Ticker: FrameLayout contenedor + TextView con scroll horizontal
         pubTickerBox = new FrameLayout(this);
         pubTickerBox.setVisibility(View.GONE);
         pubTickerBox.setBackgroundColor(0x88000000);
@@ -1296,7 +1311,6 @@ public class MainActivity extends AppCompatActivity {
         pubTickerBox.addView(pubTickerTxt);
         rotWrapper.addView(pubTickerBox);
 
-        // Modal: contenedor chico (180dp) para no saturar el decoder de Exo
         pubModal = new FrameLayout(this);
         pubModal.setVisibility(View.GONE);
         pubModal.setBackgroundColor(0xCC000000);
@@ -1537,7 +1551,6 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public boolean estaEnExo() { return enExoPlayer; }
 
-        // ---- TICKER: método con 5 args (compat) y con 6 args (con tamaño en px) ----
         @JavascriptInterface
         public void mostrarTicker(final String texto, final String badge, final int velocidad,
                                   final String colorBg, final String colorAc) {
@@ -1555,19 +1568,16 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> tickerDetener(true));
         }
 
-        // ---- MODAL: video/imagen chico, sin loop, sin freeze ----
         @JavascriptInterface
         public void mostrarModalPublicidad(final String url, final boolean esVideo, final int duracionSeg) {
             runOnUiThread(() -> {
                 if (pubModal == null) return;
 
-                // Detener reproducción previa
                 if (pubModalVid != null) {
                     try { pubModalVid.stopPlayback(); pubModalVid.setVideoURI(null); } catch (Exception ignored) {}
                 }
                 if (pubModalClose != null) pubHandler.removeCallbacks(pubModalClose);
 
-                // Tamaño chico (180dp) para no saturar el decoder
                 FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubModal.getLayoutParams();
                 lp.width = dp(180);
                 lp.height = dp(180);
@@ -1647,10 +1657,8 @@ public class MainActivity extends AppCompatActivity {
             final int gen = pubTickerGen;
             String tf = (badge != null && !badge.isEmpty()) ? (badge + "  " + texto) : String.valueOf(texto);
             pubTickerTxt.setText(tf);
-            // Tamaño en SP (respeta el tamaño que puso el admin)
             int tamSeguro = Math.max(8, Math.min(72, tamPx));
             pubTickerTxt.setTextSize(TypedValue.COMPLEX_UNIT_SP, tamSeguro);
-            // Altura dinámica del contenedor
             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubTickerBox.getLayoutParams();
             int altura = Math.max(dp(32), dp(tamSeguro + 10));
             if (lp.height != altura) { lp.height = altura; pubTickerBox.setLayoutParams(lp); }
