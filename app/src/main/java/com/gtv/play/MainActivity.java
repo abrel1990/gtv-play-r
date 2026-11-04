@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.SurfaceTexture;
+import android.graphics.Typeface;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -50,6 +51,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
+import androidx.core.content.res.ResourcesCompat;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
@@ -959,15 +961,17 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
-    // FIX ZAPPING: delega al HTML para que respete el orden global y no se trabe
+    // FIX ZAPPING: delega al HTML para que respete el orden global y no se trabe.
+    // Si el HTML no cargó (zapNativo no existe), el JS no hace nada y NO rompe.
     private void navegar(int delta) {
         if (canales.isEmpty()) return;
         if (myWebView != null) {
             myWebView.evaluateJavascript(
-                "javascript:if(window.zapNativo)window.zapNativo(" + delta + ");",
+                "javascript:if(window.zapNativo){window.zapNativo(" + delta + ");}",
                 null);
             return;
         }
+        // Fallback local (sin WebView): mueve el índice y dispara zapRun
         int n = canales.size();
         int i = (zapPend >= 0 ? zapPend : indiceActual);
         for (int k = 0; k < n; k++) {
@@ -986,13 +990,12 @@ public class MainActivity extends AppCompatActivity {
         ytToken++;
         mostrarEscudo(false);
         // FIX ZAPPING: NO recargar la lista si veníamos de YouTube.
-        // Solo salir del modo YouTube sin recargar la WebView.
+        // Solo salir del modo YouTube sin recargar la WebView (adiós trabón de 3s).
         enYouTubeWeb = false;
         enExoPlayer = true;
         canalActual = c;
         reintentos = 0;
         handler.removeCallbacks(reintentoRunnable);
-        // NO pausar timers del WebView: pubSchedulerTick sigue corriendo
         myWebView.setVisibility(View.GONE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
@@ -1424,6 +1427,26 @@ public class MainActivity extends AppCompatActivity {
         tickerArrancar(gen, prog, 150);
     }
 
+    // ===== FUENTES TIPOGRÁFICAS DEL TICKER =====
+    // Si el .ttf no existe en res/font, cae a SANS_SERIF sin romper.
+    private Typeface fuenteDe(String f) {
+        if (f == null) return Typeface.SANS_SERIF;
+        String s = f.toLowerCase().trim();
+        try {
+            switch (s) {
+                case "roboto":     return Typeface.create("sans-serif", Typeface.NORMAL);
+                case "montserrat": return ResourcesCompat.getFont(this, R.font.montserrat);
+                case "poppins":    return ResourcesCompat.getFont(this, R.font.poppins);
+                case "inter":      return ResourcesCompat.getFont(this, R.font.inter);
+                case "bebasneue":  return ResourcesCompat.getFont(this, R.font.bebasneue);
+                case "arial":
+                default:           return Typeface.SANS_SERIF;
+            }
+        } catch (Exception e) {
+            return Typeface.SANS_SERIF;
+        }
+    }
+
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
 
@@ -1554,13 +1577,21 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface
         public void mostrarTicker(final String texto, final String badge, final int velocidad,
                                   final String colorBg, final String colorAc) {
-            mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, 14);
+            mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, 14, "arial");
         }
 
         @JavascriptInterface
         public void mostrarTickerConTamano(final String texto, final String badge, final int velocidad,
                                             final String colorBg, final String colorAc, final int tamPx) {
-            mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, tamPx);
+            mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, tamPx, "arial");
+        }
+
+        // NUEVO: recibe también la fuente elegida en el panel
+        @JavascriptInterface
+        public void mostrarTickerConFuente(final String texto, final String badge, final int velocidad,
+                                            final String colorBg, final String colorAc, final int tamPx,
+                                            final String fuente) {
+            mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, tamPx, fuente);
         }
 
         @JavascriptInterface
@@ -1650,7 +1681,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void mostrarTickerImpl(final String texto, final String badge, final int velocidad,
-                                    final String colorBg, final String colorAc, final int tamPx) {
+                                    final String colorBg, final String colorAc, final int tamPx,
+                                    final String fuente) {
         runOnUiThread(() -> {
             if (pubTickerBox == null || pubTickerTxt == null) return;
             tickerDetener(false);
@@ -1659,6 +1691,8 @@ public class MainActivity extends AppCompatActivity {
             pubTickerTxt.setText(tf);
             int tamSeguro = Math.max(8, Math.min(72, tamPx));
             pubTickerTxt.setTextSize(TypedValue.COMPLEX_UNIT_SP, tamSeguro);
+            // FIX FUENTE: aplicar el Typeface elegido en el panel
+            pubTickerTxt.setTypeface(fuenteDe(fuente));
             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubTickerBox.getLayoutParams();
             int altura = Math.max(dp(32), dp(tamSeguro + 10));
             if (lp.height != altura) { lp.height = altura; pubTickerBox.setLayoutParams(lp); }
