@@ -556,9 +556,16 @@ public class MainActivity extends AppCompatActivity {
                 playerContainer.setVisibility(View.GONE);
                 myWebView.setVisibility(View.VISIBLE);
                 myWebView.onResume();
-                myWebView.resumeTimers();
                 entrarModoYouTube();
-                cargarIframeConBaseUrl(videoId);
+                myWebView.evaluateJavascript(
+                    "javascript:(function(){try{" +
+                    "var ifr=document.getElementById('ifr');" +
+                    "if(ifr){ifr.src='about:blank';}" +
+                    "setTimeout(function(){" +
+                    "  var f=document.getElementById('ifr');" +
+                    "  if(f){f.src='https://www.youtube.com/embed/" + videoId + "?autoplay=1&playsinline=1&rel=0&modestbranding=1';f.style.display='block';}" +
+                    "},120);" +
+                    "}catch(e){}})();", null);
             } catch (Exception e) {
                 Log.e(TAG, "Error cargando YouTube seguro: " + e.getMessage());
             }
@@ -990,7 +997,6 @@ public class MainActivity extends AppCompatActivity {
         handler.removeCallbacks(reintentoRunnable);
         myWebView.setVisibility(View.GONE);
         myWebView.onPause();
-        myWebView.pauseTimers();
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
         nombreCanal.setText(c.nombre);
