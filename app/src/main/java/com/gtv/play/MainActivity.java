@@ -136,7 +136,6 @@ public class MainActivity extends AppCompatActivity {
 
     private String deviceIdCache = null;
 
-    // ==== GTV Publicidad Nativa ====
     private FrameLayout pubTickerBox;
     private TextView pubTickerTxt;
     private boolean pubTickerRunning = false;
@@ -192,7 +191,6 @@ public class MainActivity extends AppCompatActivity {
                 Glide.with(MainActivity.this).load(c.logo).into(logoCanal);
             }
 
-            // FIX ZAPPING: avisar al HTML del cambio de índice ANTES de reproducir
             if (myWebView != null) {
                 myWebView.evaluateJavascript(
                     "javascript:window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");",
@@ -210,13 +208,18 @@ public class MainActivity extends AppCompatActivity {
                     ocultarControlesNativos();
                     detenerLoaderAnim();
                     ocultarLoaders();
-                    myWebView.setVisibility(View.VISIBLE);
-                    myWebView.onResume();
-                    myWebView.resumeTimers();
                 }
+                myWebView.setVisibility(View.VISIBLE);
+                myWebView.onResume();
+                myWebView.resumeTimers();
                 enYouTubeWeb = false;
                 mostrarEscudo(false);
-                irACanalWebView(indiceActual);
+
+                if (myWebView != null) {
+                    myWebView.evaluateJavascript(
+                        "javascript:if(window.irACanal)window.irACanal(" + indiceActual + ");",
+                        null);
+                }
             }
         }
     };
@@ -961,17 +964,8 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
-    // FIX ZAPPING: delega al HTML para que respete el orden global y no se trabe.
-    // Si el HTML no cargó (zapNativo no existe), el JS no hace nada y NO rompe.
     private void navegar(int delta) {
         if (canales.isEmpty()) return;
-        if (myWebView != null) {
-            myWebView.evaluateJavascript(
-                "javascript:if(window.zapNativo){window.zapNativo(" + delta + ");}",
-                null);
-            return;
-        }
-        // Fallback local (sin WebView): mueve el índice y dispara zapRun
         int n = canales.size();
         int i = (zapPend >= 0 ? zapPend : indiceActual);
         for (int k = 0; k < n; k++) {
@@ -989,14 +983,14 @@ public class MainActivity extends AppCompatActivity {
     private void reproducirEnExo(Canal c) {
         ytToken++;
         mostrarEscudo(false);
-        // FIX ZAPPING: NO recargar la lista si veníamos de YouTube.
-        // Solo salir del modo YouTube sin recargar la WebView (adiós trabón de 3s).
         enYouTubeWeb = false;
         enExoPlayer = true;
         canalActual = c;
         reintentos = 0;
         handler.removeCallbacks(reintentoRunnable);
         myWebView.setVisibility(View.GONE);
+        myWebView.onPause();
+        myWebView.pauseTimers();
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
         nombreCanal.setText(c.nombre);
@@ -1047,8 +1041,7 @@ public class MainActivity extends AppCompatActivity {
             .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
             .createMediaSource(ib.build());
     }
-
-    private void rotar() {
+        private void rotar() {
         rotado = !rotado;
         getSharedPreferences("gtv_prefs", MODE_PRIVATE).edit().putBoolean("rotado", rotado).apply();
         aplicarRotacionYouTube();
@@ -1427,8 +1420,6 @@ public class MainActivity extends AppCompatActivity {
         tickerArrancar(gen, prog, 150);
     }
 
-    // ===== FUENTES TIPOGRÁFICAS DEL TICKER =====
-    // Si el .ttf no existe en res/font, cae a SANS_SERIF sin romper.
     private Typeface fuenteDe(String f) {
         if (f == null) return Typeface.SANS_SERIF;
         String s = f.toLowerCase().trim();
@@ -1586,7 +1577,6 @@ public class MainActivity extends AppCompatActivity {
             mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, tamPx, "arial");
         }
 
-        // NUEVO: recibe también la fuente elegida en el panel
         @JavascriptInterface
         public void mostrarTickerConFuente(final String texto, final String badge, final int velocidad,
                                             final String colorBg, final String colorAc, final int tamPx,
@@ -1691,7 +1681,6 @@ public class MainActivity extends AppCompatActivity {
             pubTickerTxt.setText(tf);
             int tamSeguro = Math.max(8, Math.min(72, tamPx));
             pubTickerTxt.setTextSize(TypedValue.COMPLEX_UNIT_SP, tamSeguro);
-            // FIX FUENTE: aplicar el Typeface elegido en el panel
             pubTickerTxt.setTypeface(fuenteDe(fuente));
             FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubTickerBox.getLayoutParams();
             int altura = Math.max(dp(32), dp(tamSeguro + 10));
