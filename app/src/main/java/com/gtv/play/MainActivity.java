@@ -225,9 +225,17 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     return;
                 }
-                Map<String, String> headers = new HashMap<>();
-                headers.put("Referer", "https://gtv-portero.abrel03.workers.dev/");
-                myWebView.loadUrl(embedUrl, headers);
+                String js = "javascript:(function(){try{" +
+                    "var f=document.getElementById('ifr');" +
+                    "if(f){f.src='about:blank';}" +
+                    "setTimeout(function(){" +
+                    "  var g=document.getElementById('ifr');" +
+                    "  if(g){g.src='" + embedUrl + "';g.style.display='block';}" +
+                    "},120);" +
+                    "}catch(e){}})();";
+                myWebView.evaluateJavascript(js, null);
+                myWebView.requestFocus();
+                handler.postDelayed(() -> { if (myWebView != null) myWebView.requestFocus(); }, 1500);
             } else {
                 if (enExoPlayer) {
                     tickerDetener(true);
@@ -564,15 +572,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void cargarIframeConBaseUrl(String videoId) {
-        if (myWebView == null) return;
-        String embedUrl = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&playsinline=1&rel=0&modestbranding=1";
-        Map<String, String> headers = new HashMap<>();
-        headers.put("Referer", "https://gtv-portero.abrel03.workers.dev/");
-        headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
-        myWebView.loadUrl(embedUrl, headers);
-    }
-
     @JavascriptInterface
     public void cargarYouTubeSeguro(String videoId) {
         runOnUiThread(() -> {
@@ -583,9 +582,17 @@ public class MainActivity extends AppCompatActivity {
                 myWebView.resumeTimers();
                 entrarModoYouTube();
                 String embedUrl = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&playsinline=1&rel=0";
-                Map<String, String> headers = new HashMap<>();
-                headers.put("Referer", "https://gtv-portero.abrel03.workers.dev/");
-                myWebView.loadUrl(embedUrl, headers);
+                String js = "javascript:(function(){try{" +
+                    "var f=document.getElementById('ifr');" +
+                    "if(f){f.src='about:blank';}" +
+                    "setTimeout(function(){" +
+                    "  var g=document.getElementById('ifr');" +
+                    "  if(g){g.src='" + embedUrl + "';g.style.display='block';}" +
+                    "},120);" +
+                    "}catch(e){}})();";
+                myWebView.evaluateJavascript(js, null);
+                myWebView.requestFocus();
+                handler.postDelayed(() -> { if (myWebView != null) myWebView.requestFocus(); }, 1500);
             } catch (Exception e) {
                 Log.e(TAG, "Error cargando YouTube seguro: " + e.getMessage());
             }
@@ -596,10 +603,19 @@ public class MainActivity extends AppCompatActivity {
     public void cargarYouTubeLive(final String channelId) {
         runOnUiThread(() -> {
             try {
-                myWebView.evaluateJavascript(
-                    "javascript:if(typeof window.cargarYTEnIframe==='function')" +
-                    "window.cargarYTEnIframe('" + channelId + "');", null);
-                Log.e(TAG, "cargarYouTubeLive → HTML iframe: " + channelId);
+                String embedUrl = "https://www.youtube.com/embed/live_stream?channel=" + channelId + "&autoplay=1&playsinline=1&rel=0";
+                String js = "javascript:(function(){try{" +
+                    "var f=document.getElementById('ifr');" +
+                    "if(f){f.src='about:blank';}" +
+                    "setTimeout(function(){" +
+                    "  var g=document.getElementById('ifr');" +
+                    "  if(g){g.src='" + embedUrl + "';g.style.display='block';}" +
+                    "},120);" +
+                    "}catch(e){}})();";
+                myWebView.evaluateJavascript(js, null);
+                myWebView.requestFocus();
+                handler.postDelayed(() -> { if (myWebView != null) myWebView.requestFocus(); }, 1500);
+                Log.e(TAG, "cargarYouTubeLive → iframe directo: " + channelId);
             } catch (Exception e) {
                 Log.e(TAG, "cargarYouTubeLive error: " + e.getMessage());
             }
@@ -1151,7 +1167,9 @@ public class MainActivity extends AppCompatActivity {
                     }
                 } else if (enYouTubeWeb && url != null && url.contains("youtube.com/embed")) {
                     aplicarRotacionYouTube();
+                    myWebView.requestFocus();
                     view.postDelayed(() -> MainActivity.this.aplicarRotacionYouTube(), 1500);
+                    handler.postDelayed(() -> { if (myWebView != null) myWebView.requestFocus(); }, 1500);
                 }
             }
 
@@ -1569,16 +1587,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface public void cargarYouTubeLive(final String channelId) {
-            runOnUiThread(() -> {
-                try {
-                    myWebView.evaluateJavascript(
-                        "javascript:if(typeof window.cargarYTEnIframe==='function')" +
-                        "window.cargarYTEnIframe('" + channelId + "');", null);
-                    Log.e(TAG, "cargarYouTubeLive → HTML iframe: " + channelId);
-                } catch (Exception e) {
-                    Log.e(TAG, "cargarYouTubeLive error: " + e.getMessage());
-                }
-            });
+            MainActivity.this.cargarYouTubeLive(channelId);
         }
 
         @JavascriptInterface public void cargarYouTubeSeguro(String videoId) {
