@@ -191,14 +191,43 @@ public class MainActivity extends AppCompatActivity {
                 Glide.with(MainActivity.this).load(c.logo).into(logoCanal);
             }
 
-            if (myWebView != null) {
-                myWebView.evaluateJavascript(
-                    "javascript:window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");",
-                    null);
-            }
+            String u = c.url.toLowerCase();
+            boolean esYT = u.contains("youtube.com") || u.contains("youtu.be");
 
             if (esCanalExoPlayer(c.url)) {
                 reproducirEnExo(c);
+            } else if (esYT) {
+                if (enExoPlayer) {
+                    tickerDetener(true);
+                    enExoPlayer = false;
+                    try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+                    playerContainer.setVisibility(View.GONE);
+                    ocultarControlesNativos();
+                    detenerLoaderAnim();
+                    ocultarLoaders();
+                }
+                myWebView.setVisibility(View.VISIBLE);
+                myWebView.onResume();
+                myWebView.resumeTimers();
+                enYouTubeWeb = true;
+
+                String channelId = null, videoId = null;
+                java.util.regex.Matcher mCh = java.util.regex.Pattern.compile("channel/(UC[\\w-]{22})").matcher(c.url);
+                if (mCh.find()) channelId = mCh.group(1);
+                java.util.regex.Matcher mVid = java.util.regex.Pattern.compile("(?:watch\\?v=|youtu\\.be/)([\\w-]{11})").matcher(c.url);
+                if (mVid.find()) videoId = mVid.group(1);
+
+                String embedUrl;
+                if (channelId != null) {
+                    embedUrl = "https://www.youtube.com/embed/live_stream?channel=" + channelId + "&autoplay=1&playsinline=1&rel=0";
+                } else if (videoId != null) {
+                    embedUrl = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&playsinline=1&rel=0";
+                } else {
+                    return;
+                }
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Referer", "https://gtv-portero.abrel03.workers.dev/");
+                myWebView.loadUrl(embedUrl, headers);
             } else {
                 if (enExoPlayer) {
                     tickerDetener(true);
@@ -214,12 +243,7 @@ public class MainActivity extends AppCompatActivity {
                 myWebView.resumeTimers();
                 enYouTubeWeb = false;
                 mostrarEscudo(false);
-
-                if (myWebView != null) {
-                    myWebView.evaluateJavascript(
-                        "javascript:if(window.irACanal)window.irACanal(" + indiceActual + ");",
-                        null);
-                }
+                irACanalWebView(indiceActual);
             }
         }
     };
@@ -556,16 +580,12 @@ public class MainActivity extends AppCompatActivity {
                 playerContainer.setVisibility(View.GONE);
                 myWebView.setVisibility(View.VISIBLE);
                 myWebView.onResume();
+                myWebView.resumeTimers();
                 entrarModoYouTube();
-                myWebView.evaluateJavascript(
-                    "javascript:(function(){try{" +
-                    "var ifr=document.getElementById('ifr');" +
-                    "if(ifr){ifr.src='about:blank';}" +
-                    "setTimeout(function(){" +
-                    "  var f=document.getElementById('ifr');" +
-                    "  if(f){f.src='https://www.youtube.com/embed/" + videoId + "?autoplay=1&playsinline=1&rel=0&modestbranding=1';f.style.display='block';}" +
-                    "},120);" +
-                    "}catch(e){}})();", null);
+                String embedUrl = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&playsinline=1&rel=0";
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Referer", "https://gtv-portero.abrel03.workers.dev/");
+                myWebView.loadUrl(embedUrl, headers);
             } catch (Exception e) {
                 Log.e(TAG, "Error cargando YouTube seguro: " + e.getMessage());
             }
