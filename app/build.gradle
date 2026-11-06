@@ -56,5 +56,5 @@ dependencies {
     implementation "androidx.tvprovider:tvprovider:1.1.0"
 
     // JSON
-    implementation 'org.json:json:20240303'
+    
 }
