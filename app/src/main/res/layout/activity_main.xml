@@ -41,6 +41,26 @@
                 app:resize_mode="fit"
                 android:keepScreenOn="true" />
 
+            <SurfaceView
+                android:id="@+id/vlc_surface"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
+
+            <com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
+                android:id="@+id/youtube_player_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone"
+                app:autoPlay="true" />
+
+            <FrameLayout
+                android:id="@+id/overlay_controls"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#00000000"
+                android:focusable="false" />
+
             <!-- Sintonizando (letra amarilla, SIN halo) -->
             <TextView
                 android:id="@+id/exo_loader"
