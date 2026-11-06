@@ -1,0 +1,93 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+def buildVersionCode = (System.getenv("BUILD_VERSION_CODE") ?: "1").toInteger()
+def buildVersionName = System.getenv("BUILD_VERSION_NAME") ?: "1.0.${buildVersionCode}"
+
+android {
+    namespace 'com.gtv.play'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.gtv.play"
+        minSdk 21
+        targetSdk 34
+        versionCode buildVersionCode
+        versionName buildVersionName
+        multiDexEnabled true
+    }
+
+    signingConfigs {
+        release {
+            storeFile file(System.getenv("KEYSTORE_PATH") ?: "gtv-release.jks")
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: ""
+            keyAlias System.getenv("KEY_ALIAS") ?: "gtv-release"
+            keyPassword System.getenv("KEY_PASSWORD") ?: ""
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.webkit:webkit:1.8.0'
+    implementation 'com.github.bumptech.glide:glide:4.16.0'
+
+    // Media3: base + HLS + DASH + UI + extractores (m3u8/mpd/ts/mp4/webm)
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-dash:1.4.1'
+    implementation 'androidx.media3:media3-extractor:1.4.1'
+    implementation 'androidx.media3:media3-ui:1.4.1'
+
+    implementation 'androidx.tvprovider:tvprovider:1.0.0'
+
+    // NewPipeExtractor
+    implementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.26.4'
+
+    // OkHttp 4.x compatible con compileSdk 34
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // Desugaring (para minSdk 21)
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.0.4'
+
+    // Kotlin y RxJava para los .kt del PoToken
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
+    implementation 'io.reactivex.rxjava3:rxjava:3.1.8'
+    implementation 'io.reactivex.rxjava3:rxandroid:3.0.2'
+    implementation 'com.github.TeamNewPipe:nanojson:1d9e1aea9049fc9f85e68b43ba39fe7be1c1f751'
+}
+
+configurations.all {
+    resolutionStrategy {
+        force 'com.squareup.okhttp3:okhttp:4.12.0'
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22'
+        force 'com.squareup.okio:okio:3.9.1'
+        force 'com.squareup.okio:okio-jvm:3.9.1'
+    }
+}

@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <WebView
+        android:id="@+id/webview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <FrameLayout
+        android:id="@+id/player_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="#000000">
+
+        <View
+            android:id="@+id/btn_shield"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#00000000"
+            android:clickable="true"
+            android:focusable="false" />
+
+        <FrameLayout
+            android:id="@+id/rot_wrapper"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center">
+
+            <androidx.media3.ui.PlayerView
+                android:id="@+id/player_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:use_controller="false"
+                app:surface_type="none"
+                app:resize_mode="fit"
+                android:keepScreenOn="true" />
+
+            <!-- Sintonizando (letra amarilla, SIN halo) -->
+            <TextView
+                android:id="@+id/exo_loader"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@drawable/loader_bg"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:minWidth="130dp"
+                android:gravity="center"
+                android:text="Sintonizando..."
+                android:textColor="#FFD700"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Señal con problemas (letra roja CON halo blanco) -->
+            <TextView
+                android:id="@+id/exo_loader_error"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@drawable/loader_bg"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:minWidth="130dp"
+                android:gravity="center"
+                android:text="⚠️ Señal con problemas de origen ajenos a GTVPLAY"
+                android:textColor="#E53935"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/info_canal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/info_canal_bg"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="8dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="5dp"
+                android:paddingBottom="5dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/logo_canal"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="10dp"
+                    android:padding="2dp"
+                    android:scaleType="fitCenter" />
+
+                <TextView
+                    android:id="@+id/nombre_canal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Canal"
+                    android:textColor="#FFD700"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/numero_canal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:text="0/0"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btn_prev"
+                android:layout_width="44dp"
+                android:layout_height="60dp"
+                android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="20dp"
+                android:background="@drawable/nav_btn_bg"
+                android:text="❮"
+                android:textColor="#FFD700"
+                android:textSize="22sp"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true"
+                android:stateListAnimator="@null" />
+
+            <Button
+                android:id="@+id/btn_next"
+                android:layout_width="44dp"
+                android:layout_height="60dp"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="20dp"
+                android:background="@drawable/nav_btn_bg"
+                android:text="❯"
+                android:textColor="#FFD700"
+                android:textSize="22sp"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true"
+                android:stateListAnimator="@null" />
+
+            <Button
+                android:id="@+id/btn_close"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="bottom|end"
+                android:layout_marginEnd="20dp"
+                android:layout_marginBottom="20dp"
+                android:background="@drawable/btn_close_bg"
+                android:text="✕"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true"
+                android:stateListAnimator="@null" />
+
+            <Button
+                android:id="@+id/btn_rotate"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="bottom|end"
+                android:layout_marginEnd="20dp"
+                android:layout_marginBottom="64dp"
+                android:background="@drawable/btn_rotate_bg"
+                android:text="⟳"
+                android:textColor="#FFD700"
+                android:textSize="14sp"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true"
+                android:stateListAnimator="@null" />
+        </FrameLayout>
+    </FrameLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
