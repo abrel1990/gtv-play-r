@@ -1,20 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Red -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- Mantener pantalla/proceso activo mientras reproduce -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <!-- Instalar APK de actualización -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-
-    <!-- Watch Next (TvProvider) -->
     <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
 
-    <!-- Compatibilidad TV / touch -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen.multitouch" android:required="false" />
@@ -25,11 +17,11 @@
         android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
-        android:label="GTV Play R"
+        android:label="@string/app_name"
         android:theme="@style/Theme.AppCompat.NoActionBar">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".r.MainActivity"
             android:exported="true"
             android:screenOrientation="unspecified"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
