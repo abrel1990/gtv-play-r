@@ -1,15 +1,13 @@
-rootProject.name = "GTV Play"
-include ':app'
-
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+pluginManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://jitpack.io' }
+        gradlePluginPortal()
     }
 }
-allprojects {
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()
@@ -17,3 +15,6 @@ allprojects {
         maven { url 'https://jitpack.io' }
     }
 }
+
+rootProject.name = "GTV Play R"
+include ':app'
