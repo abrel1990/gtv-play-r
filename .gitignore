@@ -1,0 +1,16 @@
+# Keystore (nunca subir al repo)
+*.jks
+*.keystore
+
+# Build
+build/
+.gradle/
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# Android
+*.apk
+*.aab
