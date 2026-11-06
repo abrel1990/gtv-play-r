@@ -17,6 +17,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
@@ -24,12 +25,19 @@ android {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
+
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/LICENSE.txt', 'META-INF/NOTICE', 'META-INF/NOTICE.txt']
+        }
+    }
 }
 
 dependencies {
-    // ExoPlayer (Media3) - motor principal para IPTV
+    // ExoPlayer (Media3) - motor principal IPTV
     implementation 'androidx.media3:media3-exoplayer:1.4.1'
     implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-dash:1.4.1'
     implementation 'androidx.media3:media3-ui:1.4.1'
 
     // YouTubePlayerView (Soffritti) - YouTube nativo
@@ -47,9 +55,6 @@ dependencies {
     // TV Provider (WatchNext)
     implementation "androidx.tvprovider:tvprovider:1.1.0"
 
-    // NewPipe Extractor (YouTube)
-    implementation 'com.github.teamnewpipe:NewPipeExtractor:v0.26.0'
-
-    // Desugaring para NewPipe (minSdk 21 < 33)
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.1.4'
+    // JSON
+    implementation 'org.json:json:20240303'
 }
