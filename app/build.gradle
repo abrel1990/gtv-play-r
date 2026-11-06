@@ -7,7 +7,7 @@ def buildVersionCode = (System.getenv("BUILD_VERSION_CODE") ?: "1").toInteger()
 def buildVersionName = System.getenv("BUILD_VERSION_NAME") ?: "1.0.${buildVersionCode}"
 
 android {
-    namespace 'com.gtv.playr'
+    namespace 'com.gtv.play'
     compileSdk 34
 
     defaultConfig {
