@@ -351,7 +351,7 @@ public class MainActivity extends AppCompatActivity {
 
         Map<String, String> extraHeaders = new HashMap<>();
         extraHeaders.put("X-GTV-Origin", SELLO);
-        myWebView.loadUrl(WORKER_URL, extraHeaders);
+        myWebView.loadUrl("file:///android_asset/index.html");
 
         ocultarBarrasSistema();
 
