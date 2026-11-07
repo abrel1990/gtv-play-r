@@ -768,7 +768,7 @@ public class MainActivity extends AppCompatActivity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(myWebView, true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
-        myWebView.setWebViewClient(new WebViewClient() {
+          myWebView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 webViewListo = true;
@@ -778,6 +778,47 @@ public class MainActivity extends AppCompatActivity {
                     if (js != null && !enExoPlayer) ejecutarJsCuandoListo(view, js, 0);
                 }
             }
+
+            // ESTO ES LO NUEVO: Inyecta el sello en cada petición del WebView
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                try {
+                    String url = request.getUrl().toString();
+                    if (url.startsWith(WORKER_URL)) {
+                        // Clonamos los headers originales y le agregamos el sello
+                        Map<String, String> headers = new HashMap<>(request.getRequestHeaders());
+                        headers.put("X-GTV-Origin", SELLO);
+                        
+                        URL u = new URL(url);
+                        HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                        conn.setRequestMethod(request.getMethod());
+                        for (Map.Entry<String, String> entry : headers.entrySet()) {
+                            conn.setRequestProperty(entry.getKey(), entry.getValue());
+                        }
+                        conn.setConnectTimeout(15000);
+                        conn.setReadTimeout(15000);
+
+                        // Mapeamos el tipo de contenido para que el WebView lo entienda
+                        String contentType = conn.getContentType();
+                        String mimeType = "text/html";
+                        String charset = "UTF-8";
+                        if (contentType != null) {
+                            String[] partes = contentType.split(";");
+                            mimeType = partes[0].trim();
+                            for (int i = 1; i < partes.length; i++) {
+                                if (partes[i].trim().toLowerCase().startsWith("charset=")) {
+                                    charset = partes[i].trim().substring(8).replace("\"", "");
+                                }
+                            }
+                        }
+                        return new WebResourceResponse(mimeType, charset, conn.getInputStream());
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error interceptando petición: " + e.getMessage());
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 if (!url.startsWith("http://") && !url.startsWith("https://")) {
