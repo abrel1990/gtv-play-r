@@ -115,7 +115,6 @@ public class MainActivity extends AppCompatActivity {
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
     private boolean bgGuardado = false;
 
-    // YouTube nativo: un único listener registrado en onCreate
     private YouTubePlayer ytPlayer = null;
     private String ytVideoPendiente = null;
 
@@ -171,6 +170,11 @@ public class MainActivity extends AppCompatActivity {
     private static final String UPDATE_TRIES_PREFIX = "gtv_r_update_tries_";
     private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version-r";
     private static final int MAX_SKIPS = 3;
+
+    /* Persistencia de listas */
+    private static final String LISTAS_PREFS = "gtv_r_listas";
+    private static final String LISTAS_KEY = "listas_guardadas";
+    private static final String ULTIMA_LISTA_KEY = "ultima_lista";
 
     private final ExecutorService ytExec = Executors.newSingleThreadExecutor();
     private volatile int ytToken = 0;
@@ -299,7 +303,6 @@ public class MainActivity extends AppCompatActivity {
         getLifecycle().addObserver(youtubePlayerView);
         youtubePlayerView.setVisibility(View.GONE);
 
-        // Un solo listener para YouTube (onReady se dispara una única vez)
         youtubePlayerView.addYouTubePlayerListener(new AbstractYouTubePlayerListener() {
             @Override
             public void onReady(YouTubePlayer youTubePlayer) {
@@ -372,7 +375,6 @@ public class MainActivity extends AppCompatActivity {
         configurarWebView();
         configurarBotones();
 
-        // CARGAMOS EL HTML LOCAL
         myWebView.loadUrl("file:///android_asset/index.html");
 
         ocultarBarrasSistema();
@@ -382,6 +384,9 @@ public class MainActivity extends AppCompatActivity {
             try { inicializarWatchNext(); }
             catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
         }, 5000);
+
+        // Persistencia: cargar la última lista guardada
+        handler.postDelayed(this::cargarListaGuardadaAlIniciar, 1500);
     }
 
     private void inicializarVLC() {
@@ -464,7 +469,7 @@ public class MainActivity extends AppCompatActivity {
         enYouTubeNativo = true;
         canalActual = c;
         detenerMotores();
-        enYouTubeNativo = true; // detenerMotores lo apaga; lo reafirmamos
+        enYouTubeNativo = true;
         myWebView.setVisibility(View.GONE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
@@ -512,7 +517,6 @@ public class MainActivity extends AppCompatActivity {
                     detenerLoaderAnim(); ocultarLoaders();
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 } else {
-                    // el player todavía no está listo: onReady cargará este video
                     ytVideoPendiente = videoId;
                 }
             } catch (Exception e) {
@@ -1343,6 +1347,172 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
+    /* ============================================================
+       PERSISTENCIA DE LISTAS
+       ============================================================ */
+    private void guardarNuevaLista(String nombre, String contenidoM3U, String urlOriginal) {
+        try {
+            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
+            JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
+            JSONArray nuevas = new JSONArray();
+            for (int i = 0; i < listas.length(); i++) {
+                JSONObject obj = listas.getJSONObject(i);
+                if (!obj.optString("nombre").equals(nombre)) nuevas.put(obj);
+            }
+            JSONObject nueva = new JSONObject();
+            nueva.put("nombre", nombre);
+            nueva.put("contenido", contenidoM3U);
+            nueva.put("url", urlOriginal);
+            nueva.put("fecha", System.currentTimeMillis());
+            nuevas.put(nueva);
+            prefs.edit().putString(LISTAS_KEY, nuevas.toString()).commit();
+            prefs.edit().putString(ULTIMA_LISTA_KEY, nombre).commit();
+            Log.d(TAG, "Lista guardada: " + nombre + " (" + nuevas.length() + " listas)");
+        } catch (Exception e) {
+            Log.e(TAG, "Error guardando lista: " + e.getMessage());
+        }
+    }
+
+    private void cargarListaGuardadaAlIniciar() {
+        try {
+            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
+            JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
+            if (listas.length() == 0) return;
+            String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
+            JSONObject elegida = null;
+            if (ultimaNombre != null) {
+                for (int i = 0; i < listas.length(); i++) {
+                    if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
+                        elegida = listas.getJSONObject(i);
+                        break;
+                    }
+                }
+            }
+            if (elegida == null) elegida = listas.getJSONObject(0);
+            String contenido = elegida.getString("contenido");
+            ArrayList<Canal> listaParseada = parsearM3u(contenido);
+            if (!listaParseada.isEmpty()) {
+                canales.clear();
+                canales.addAll(listaParseada);
+                indiceActual = 0;
+                enviarListaAlHtml(contenido);
+                Log.d(TAG, "Lista restaurada al iniciar: " + elegida.optString("nombre") + " (" + listaParseada.size() + " canales)");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error cargando lista guardada: " + e.getMessage());
+        }
+    }
+
+    private String derivarNombreDeUrl(String url) {
+        try {
+            URL u = new URL(url);
+            String host = u.getHost();
+            if (host == null || host.isEmpty()) return "Lista externa";
+            return host.replace("www.", "");
+        } catch (Exception e) {
+            return "Lista externa";
+        }
+    }
+
+    private void registrarListaEnWorker(String url, String nombre) {
+        new Thread(() -> {
+            try {
+                URL u = new URL("https://gtv-portero.abrel03.workers.dev/api/reproductor/registrar-lista");
+                HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("X-GTV-Origin", SELLO);
+                JSONObject body = new JSONObject();
+                body.put("deviceId", generarDeviceId());
+                body.put("url", url);
+                body.put("nombre", nombre);
+                OutputStream os = conn.getOutputStream();
+                os.write(body.toString().getBytes("UTF-8"));
+                os.close();
+                conn.getResponseCode();
+                conn.disconnect();
+                Log.d(TAG, "Lista registrada en Worker (silencioso): " + url);
+            } catch (Exception e) {
+                Log.e(TAG, "Error registrando lista en Worker: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void eliminarListaGuardada(String nombre) {
+        try {
+            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
+            JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
+            JSONArray nuevas = new JSONArray();
+            for (int i = 0; i < listas.length(); i++) {
+                JSONObject obj = listas.getJSONObject(i);
+                if (!obj.optString("nombre").equals(nombre)) nuevas.put(obj);
+            }
+            prefs.edit().putString(LISTAS_KEY, nuevas.toString()).commit();
+            String ultima = prefs.getString(ULTIMA_LISTA_KEY, "");
+            if (ultima.equals(nombre)) {
+                if (nuevas.length() > 0) prefs.edit().putString(ULTIMA_LISTA_KEY, nuevas.getJSONObject(0).optString("nombre")).commit();
+                else prefs.edit().remove(ULTIMA_LISTA_KEY).commit();
+            }
+            Log.d(TAG, "Lista eliminada: " + nombre);
+        } catch (Exception e) {
+            Log.e(TAG, "Error eliminando lista: " + e.getMessage());
+        }
+    }
+
+    private String listarListasJSON() {
+        try {
+            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
+            JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
+            JSONArray out = new JSONArray();
+            for (int i = 0; i < listas.length(); i++) {
+                JSONObject obj = listas.getJSONObject(i);
+                JSONObject item = new JSONObject();
+                item.put("nombre", obj.optString("nombre"));
+                item.put("url", obj.optString("url"));
+                item.put("fecha", obj.optLong("fecha", 0));
+                String contenido = obj.optString("contenido", "");
+                int n = 0;
+                for (String line : contenido.split("\n")) if (line.startsWith("#EXTINF")) n++;
+                item.put("canales", n);
+                out.put(item);
+            }
+            return out.toString();
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+
+    private void usarListaGuardada(String nombre) {
+        try {
+            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
+            JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
+            for (int i = 0; i < listas.length(); i++) {
+                JSONObject obj = listas.getJSONObject(i);
+                if (obj.optString("nombre").equals(nombre)) {
+                    String contenido = obj.getString("contenido");
+                    ArrayList<Canal> listaParseada = parsearM3u(contenido);
+                    if (listaParseada.isEmpty()) {
+                        Toast.makeText(this, "La lista está vacía", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    canales.clear();
+                    canales.addAll(listaParseada);
+                    indiceActual = 0;
+                    enviarListaAlHtml(contenido);
+                    prefs.edit().putString(ULTIMA_LISTA_KEY, nombre).commit();
+                    Toast.makeText(this, "Lista cargada: " + listaParseada.size() + " canales", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            }
+            Toast.makeText(this, "Lista no encontrada", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Log.e(TAG, "Error usando lista: " + e.getMessage());
+        }
+    }
+
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
 
@@ -1414,6 +1584,31 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public void abrirDialogo() {
             runOnUiThread(() -> mostrarDialogoAgregarLista());
+        }
+
+        @JavascriptInterface public void abrirMenuListas() {
+            runOnUiThread(() -> {
+                avisarAlWebView("window.abrirMenuListasHTML&&window.abrirMenuListasHTML();");
+            });
+        }
+
+        @JavascriptInterface public String listarListas() {
+            return listarListasJSON();
+        }
+
+        @JavascriptInterface public void usarLista(String nombre) {
+            runOnUiThread(() -> usarListaGuardada(nombre));
+        }
+
+        @JavascriptInterface public void eliminarLista(String nombre) {
+            runOnUiThread(() -> {
+                eliminarListaGuardada(nombre);
+                Toast.makeText(MainActivity.this, "Lista eliminada", Toast.LENGTH_SHORT).show();
+            });
+        }
+
+        @JavascriptInterface public String getDeviceIdParaWorker() {
+            return generarDeviceId();
         }
 
         @JavascriptInterface public void mostrarWebView() {
@@ -1519,7 +1714,7 @@ public class MainActivity extends AppCompatActivity {
     private void mostrarDialogoAgregarLista() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("📺 Agregar Lista");
-        builder.setMessage("Pegá la URL de tu lista M3U o ingresá la palabra clave maestra:");
+        builder.setMessage("Pegá la URL de tu lista M3U o ingresá la palabra clave:");
         final EditText input = new EditText(this);
         input.setHint("https://... o palabra clave");
         LinearLayout wrapper = new LinearLayout(this);
@@ -1617,6 +1812,11 @@ public class MainActivity extends AppCompatActivity {
                     canales.addAll(lista);
                     indiceActual = 0;
                     enviarListaAlHtml(contenido);
+                    String nombre = derivarNombreDeUrl(listaUrl);
+                    guardarNuevaLista(nombre, contenido, listaUrl);
+                    if (!listaUrl.contains("/api/m3u")) {
+                        registrarListaEnWorker(listaUrl, nombre);
+                    }
                     Toast.makeText(this, "Lista cargada: " + lista.size() + " canales", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
@@ -1687,7 +1887,6 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 if (myWebView != null && webViewListo) {
                     try {
-                        // Guardamos la lista en el localStorage para que no se pierda al reiniciar
                         String js = "try{localStorage.setItem('gtv_channels', " + JSONObject.quote(json) + ");}catch(e){}"
                                   + "window.gtvSetCanales&&window.gtvSetCanales(" + JSONObject.quote(json) + ");";
                         myWebView.evaluateJavascript(js, null);
