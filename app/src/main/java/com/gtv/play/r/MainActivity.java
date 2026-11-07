@@ -1,6 +1,5 @@
 package com.gtv.play.r;
 
-import android.webkit.WebResourceResponse;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
@@ -35,6 +34,7 @@ import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -349,8 +349,7 @@ public class MainActivity extends AppCompatActivity {
         configurarWebView();
         configurarBotones();
 
-        Map<String, String> extraHeaders = new HashMap<>();
-        extraHeaders.put("X-GTV-Origin", SELLO);
+        // CARGAMOS EL HTML LOCAL
         myWebView.loadUrl("file:///android_asset/index.html");
 
         ocultarBarrasSistema();
@@ -769,24 +768,22 @@ public class MainActivity extends AppCompatActivity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(myWebView, true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
-          myWebView.setWebViewClient(new WebViewClient() {
+        
+        myWebView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 webViewListo = true;
-                if (url != null && url.startsWith(WORKER_URL)) {
-                    final String js = jsPendienteAlVolver;
-                    jsPendienteAlVolver = null;
-                    if (js != null && !enExoPlayer) ejecutarJsCuandoListo(view, js, 0);
+                if (url != null && url.startsWith("file:///android_asset/")) {
+                    // Le avisamos al HTML que el nativo está listo
+                    avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 }
             }
 
-            // ESTO ES LO NUEVO: Inyecta el sello en cada petición del WebView
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 try {
                     String url = request.getUrl().toString();
-                    if (url.startsWith(WORKER_URL)) {
-                        // Clonamos los headers originales y le agregamos el sello
+                    if (url.startsWith(WORKER_URL) || url.startsWith("https://gtv-portero.abrel03.workers.dev")) {
                         Map<String, String> headers = new HashMap<>(request.getRequestHeaders());
                         headers.put("X-GTV-Origin", SELLO);
                         
@@ -799,7 +796,6 @@ public class MainActivity extends AppCompatActivity {
                         conn.setConnectTimeout(15000);
                         conn.setReadTimeout(15000);
 
-                        // Mapeamos el tipo de contenido para que el WebView lo entienda
                         String contentType = conn.getContentType();
                         String mimeType = "text/html";
                         String charset = "UTF-8";
@@ -822,7 +818,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
                     try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) {}
                     return true;
                 }
@@ -831,19 +827,6 @@ public class MainActivity extends AppCompatActivity {
         });
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
-    }
-
-    private void ejecutarJsCuandoListo(final WebView view, final String js, final int intento) {
-        if (view == null || intento > 20) return;
-        view.evaluateJavascript(
-            "(function(){try{return typeof window.irACanal==='function';}catch(e){return false;}})()",
-            value -> {
-                if ("true".equals(value)) {
-                    view.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
-                } else {
-                    view.postDelayed(() -> ejecutarJsCuandoListo(view, js, intento + 1), 250);
-                }
-            });
     }
 
     private void avisarAlWebView(String js) {
@@ -1232,8 +1215,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ==================== WATCHNEXT ====================
-
     private boolean esTV() {
         return getPackageManager().hasSystemFeature("android.software.leanback");
     }
@@ -1600,7 +1581,7 @@ public class MainActivity extends AppCompatActivity {
                     canales.clear();
                     canales.addAll(lista);
                     indiceActual = 0;
-                    enviarListaAlHtml();
+                    enviarListaAlHtml(contenido);
                     Toast.makeText(this, "Lista cargada: " + lista.size() + " canales", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
@@ -1651,7 +1632,7 @@ public class MainActivity extends AppCompatActivity {
         return out;
     }
 
-    private void enviarListaAlHtml() {
+    private void enviarListaAlHtml(String contenidoM3U) {
         try {
             JSONArray arr = new JSONArray();
             for (Canal c : canales) {
@@ -1671,7 +1652,10 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 if (myWebView != null && webViewListo) {
                     try {
-                        myWebView.evaluateJavascript("window.gtvSetCanales&&window.gtvSetCanales(" + JSONObject.quote(json) + ");", null);
+                        // Guardamos en localStorage para que el HTML no la pierda al reiniciar
+                        String js = "localStorage.setItem('gtv_lista_cache', " + JSONObject.quote(json) + ");"
+                                  + "window.gtvSetCanales&&window.gtvSetCanales(" + JSONObject.quote(json) + ");";
+                        myWebView.evaluateJavascript(js, null);
                     } catch (Exception ignored) {}
                 }
             });
@@ -1733,7 +1717,7 @@ public class MainActivity extends AppCompatActivity {
         ytToken++;
         if (myWebView == null) { finish(); return; }
         myWebView.evaluateJavascript(
-            "(function(){try{return window.atrasNativo?window.atrasNativo():false}catch(e){return false}})()",
+            "(function(){try{return window.atrasNativo?window.atrasNativo():false}catch(e){return false}})();",
             v -> { if (!"true".equals(v)) finishAndRemoveTask(); });
     }
 
