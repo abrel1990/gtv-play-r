@@ -158,7 +158,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String UPDATE_PREFS = "gtv_update";
     private static final String UPDATE_TRIES_PREFIX = "gtv_update_tries_";
-    private static final String VERSION_URL = WORKER_URL + "api/version";
+   private static final String VERSION_URL = WORKER_URL + "api/version-r";
     private static final int MAX_SKIPS = 3;
 
     private final ExecutorService ytExec = Executors.newSingleThreadExecutor();
