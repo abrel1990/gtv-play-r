@@ -234,6 +234,9 @@ var SELLO = 'gtv_app_2026_secreto_xyz789';
 var BLOQUEO_MS = 250;
 var NUEVO_DIAS = 7;
 
+/* Embeds de terceros: se reproducen en iframe dentro del WebView */
+var EMBED_RE = /kick\.com|twitch\.tv|ok\.ru|odnoklassniki\.ru|dailymotion\.com|tokyvideo\.com/i;
+
 /* ===== HELPERS ===== */
 var ESC_MAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ESC_MAP[c]})}
@@ -270,7 +273,7 @@ var IS_ANDROID = /Android/i.test(UA);
 var IS_TV = (IS_ANDROID && (!/Mobile/i.test(UA)||/TV|BOX|PROJECT|AFT/i.test(UA)) && !(navigator.maxTouchPoints>0)) || /SMART-TV|SmartTV|Tizen|Web0S|webOS/i.test(UA);
 var lm = location.search.match(/[?&]lite=(\d)/);
 var LITE = lm ? lm[1]==='1' : (IS_TV || (navigator.hardwareConcurrency||8)<=4 || (navigator.deviceMemory||4)<=2);
-var DEBUG = /[?&debug=1]/.test(location.search) || ls.get('gtv_debug','')==='1';
+var DEBUG = /[?&]debug=1/.test(location.search) || ls.get('gtv_debug','')==='1';
 document.body.classList.toggle('tv', IS_TV);
 document.body.classList.toggle('lite', LITE);
 $('mhint').style.display = IS_TV ? '' : 'none';
@@ -477,6 +480,7 @@ function aplicarConfig(d){
   remote.mensaje=d.mensaje||'';
   remote.duracion=d.duracion||5;
   if(d.demoStart)remote.demoSrv=true;
+  aplicarConfigPub(d);
 }
 function cargarConfig(){
   return fetchW(CONFIG_URL+'?t='+Date.now(),12000).then(function(r){
@@ -542,9 +546,21 @@ function lazyObserve(root){
   for(i=0;i<l.length;i++)IO.observe(l[i]);
 }
 
+/* Envía la lista (con ocultos) al MainActivity para que zapping/reproducción nativos usen los mismos índices */
+function syncNativo(){
+  if(!hasNat('setLista'))return;
+  try{
+    var arr=S.list.map(function(c){
+      return {nombre:c.nombre||c.name,name:c.nombre||c.name,url:c.url,logo:c.logo||'',referer:c.referer||'',gain:c.gain||1.0,oculto:!!S.ocultos[c.url],esPeliculas:!!c.esPeliculas,urlPeliculasM3U:c.urlPeliculasM3U||null};
+    });
+    nat('setLista',JSON.stringify(arr));
+  }catch(e){}
+}
+
 function aplicarLista(nl){
   S.list=nl;
   renderLista();
+  syncNativo();
   var li=parseInt(ls.get('gtv_last_index','0'),10);
   if(!(li>=0&&li<nl.length))li=0;
   S.index=li;
@@ -559,7 +575,7 @@ function sincronizarEstadoCanales(){
     S.hideCargado=true;
     ls.setJ('gtv_caidos_cache',S.caidos);
     ls.setJ('gtv_ocultos_cache',S.ocultos);
-    if(S.list.length)renderLista();
+    if(S.list.length){renderLista();syncNativo()}
   }).catch(noop);
 }
 function aplicarCacheEstado(){
@@ -619,6 +635,22 @@ function ifrSet(el,src){
   el.src=src;
   el.style.display='block';
 }
+/* Convierte la URL del canal en URL embebible y elige el iframe correspondiente */
+function embedUrl(u){
+  var m;
+  if((m=u.match(/kick\.com\/([\w-]+)/i)))return 'https://player.kick.com/'+m[1];
+  if((m=u.match(/twitch\.tv\/([\w-]+)/i)))return 'https://player.twitch.tv/?channel='+m[1]+'&parent=localhost&muted=false';
+  if((m=u.match(/dailymotion\.com\/(?:embed\/video\/|video\/)?([\w]+)/i)))return 'https://www.dailymotion.com/embed/video/'+m[1];
+  if((m=u.match(/ok\.ru\/(?:videoembed|video|live)\/(\d+)/i)))return 'https://ok.ru/videoembed/'+m[1];
+  return u;
+}
+function ifrDe(u){
+  if(/kick\.com/i.test(u))return D.kickIfr;
+  if(/ok\.ru|odnoklassniki/i.test(u))return D.okIfr;
+  if(/dailymotion/i.test(u))return D.dailymotionIfr;
+  if(/tokyvideo/i.test(u))return D.tokyvideoIfr;
+  return D.ifr;
+}
 function mostrarSinSenal(ch){
   var el=$('sinSenal');if(!el)return;
   var img=$('ssLogo'),nom=$('ssNombre');
@@ -639,11 +671,12 @@ function limpiarMedia(){
   D.ld.classList.remove('active');
 }
 
-/* ===== REPRODUCIR (delegado al nativo) ===== */
+/* ===== REPRODUCIR ===== */
 function lanzar(ch,pos,total){
   limpiarModales();
   var url=ch.url;
-  var usaNat=hasNat('reproducir')&&!EMBED_RE.test(url);
+  var esEmbed=EMBED_RE.test(url);
+  var usaNat=hasNat('reproducir')&&!esEmbed;
   if(S.grid)cerrarGrid(true);
   limpiarMedia();
   setView('player');
@@ -658,7 +691,11 @@ function lanzar(ch,pos,total){
     S.nativeAt=Date.now();
     nat('reproducir',url,ch.nombre||ch.name,(posV>0?posV:1)+'/'+total,ch.logo||'',ch.referer||'',ch.gain||1.0);
   } else {
-    nat('reproducirCanal',pos);
+    /* Embeds (Kick/Twitch/OK/Dailymotion/Tokyvideo): se reproducen en iframe dentro del WebView.
+       Si venimos de un motor nativo, lo frenamos y mostramos el WebView. */
+    S.native=false;
+    if(hasNat('mostrarWebView'))nat('mostrarWebView');
+    ifrSet(ifrDe(url),embedUrl(url));
   }
   showUI();
 }
@@ -706,6 +743,7 @@ function detener(){
   var eraNativo=S.native;
   S.native=false;
   if(eraNativo&&hasNat('cerrarPlayer')){nat('cerrarPlayer');return}
+  limpiarMedia();
   if(S.view==='player'){
     setView(S.fromMovies?'movies':'list');
     setTimeout(restaurarFoco,30);
@@ -716,7 +754,7 @@ window.zapNativo=function(delta){zap(delta)};
 window.stop=detener;
 window.estoyEnPlayer=function(){return S.view==='player'};
 window._zappingEnCurso=false;
-window.volverDelExo=function(){if(S.exitAt&&Date.now()-S.exitAt<150)return;S.exitAt=Date.now();S.native=false;if(S.view==='player'){setView(S.fromMovies?'movies':'list');setTimeout(restaurarFoco,30)}else restaurarFoco()};
+window.volverDelExo=function(){if(S.exitAt&&Date.now()-S.exitAt<150)return;S.exitAt=Date.now();S.native=false;limpiarMedia();if(S.view==='player'){setView(S.fromMovies?'movies':'list');setTimeout(restaurarFoco,30)}else restaurarFoco()};
 window.sincronizarIndiceJS=function(i){if(i>=0&&i<S.list.length){S.index=i;ls.set('gtv_last_index',String(i))}};
 window.irACanal=function(i){if(i<0||i>=S.list.length)return;S.index=i;ls.set('gtv_last_index',String(i));play(i,'native')};
 window.playDesdeAndroid=function(i){if(i<0||i>=S.list.length)return;play(i,'native')};
@@ -744,6 +782,8 @@ window.gtvSetCanales=function(json){
         urlPeliculasM3U:c.urlPeliculasM3U||null
       });
     }
+    S.index=0;
+    ls.set('gtv_last_index','0');
     aplicarLista(nl);
     nat('sincronizarIndice',S.index);
   }catch(e){}
@@ -1179,8 +1219,7 @@ document.addEventListener('keyup',function(e){
 function cargarListaInicial(){
   var cached=ls.getJ('gtv_channels',null);
   if(cached&&cached.length){
-    S.list=cached;
-    aplicarLista(cached);
+    aplicarLista(cached);   // también sincroniza la lista con el nativo (setLista)
   } else {
     renderLista();
   }
