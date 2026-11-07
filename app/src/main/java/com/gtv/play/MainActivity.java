@@ -903,7 +903,8 @@ public class MainActivity extends AppCompatActivity {
                 playerContainer.bringToFront();
                 mostrarLoaderSintonizando();
                 vlcPlayer = new MediaPlayer(libVLC);
-                vlcPlayer.setVideoSurfaceView(vlcSurface);
+                vlcPlayer.getVLCVout().setVideoView(vlcSurface);
+                vlcPlayer.getVLCVout().attachViews();
                 vlcPlayer.setEventListener(event -> {
                     if (event.type == MediaPlayer.Event.Playing) {
                         runOnUiThread(() -> { detenerLoaderAnim(); ocultarLoaders(); });
