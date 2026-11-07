@@ -12,11 +12,3 @@ buildscript {
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url 'https://download.videolan.org/pub/maven' }
-        maven { url 'https://jitpack.io' }
-    }
-}
