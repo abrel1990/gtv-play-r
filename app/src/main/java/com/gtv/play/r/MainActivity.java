@@ -1712,10 +1712,10 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 URL url = new URL(urlLista);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
+               HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+               conn.setRequestMethod("GET");
+               conn.setInstanceFollowRedirects(true); // <-- AGREGAR ESTA LÍNEA
                 conn.setConnectTimeout(20000);
-                conn.setReadTimeout(20000);
                 conn.setRequestProperty("X-GTV-Origin", SELLO);
                 if (conn.getResponseCode() != 200) throw new Exception("HTTP " + conn.getResponseCode());
                 InputStream is = conn.getInputStream();
