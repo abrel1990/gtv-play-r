@@ -90,7 +90,6 @@ import java.util.concurrent.Executors;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GTV_R_DEBUG";
-
     private WebView myWebView;
     private ExoPlayer exoPlayer;
     private PlayerView playerView;
@@ -113,6 +112,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
     private static final String SELLO = "gtv_app_2026_secreto_xyz789";
     private static final String VALIDAR_URL = WORKER_URL + "api/reproductor/validar";
+    
     private boolean enYouTubeWeb = false;
     private String jsPendienteAlVolver = null;
 
@@ -158,7 +158,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String UPDATE_PREFS = "gtv_update";
     private static final String UPDATE_TRIES_PREFIX = "gtv_update_tries_";
-   private static final String VERSION_URL = WORKER_URL + "api/version-r";
+    private static final String VERSION_URL = WORKER_URL + "api/version-r"; // Actualización separada
     private static final int MAX_SKIPS = 3;
 
     private final ExecutorService ytExec = Executors.newSingleThreadExecutor();
@@ -193,48 +193,29 @@ public class MainActivity extends AppCompatActivity {
             String u = c.url.toLowerCase();
             boolean esYT = u.contains("youtube.com") || u.contains("youtu.be");
 
-            if (esCanalExoPlayer(c.url)) {
-                reproducirEnExo(c);
-            } else if (esYT) {
+            if (esYT) {
                 detenerTodoNativo();
                 myWebView.setVisibility(View.VISIBLE);
                 myWebView.onResume();
                 myWebView.resumeTimers();
                 enYouTubeWeb = true;
-
-                String channelId = null, videoId = null;
-                java.util.regex.Matcher mCh = java.util.regex.Pattern.compile("channel/(UC[\\w-]{22})").matcher(c.url);
-                if (mCh.find()) channelId = mCh.group(1);
-                java.util.regex.Matcher mVid = java.util.regex.Pattern.compile("(?:watch\\?v=|youtu\\.be/)([\\w-]{11})").matcher(c.url);
+                String videoId = null;
+                java.util.regex.Matcher mVid = java.util.regex.Pattern.compile("(?:watch\\?v=|youtu\\.be/|embed/|live/)([\\w-]{11})").matcher(c.url);
                 if (mVid.find()) videoId = mVid.group(1);
-
-                String embedUrl;
-                if (channelId != null) {
-                    embedUrl = "https://www.youtube.com/embed/live_stream?channel=" + channelId + "&autoplay=1&playsinline=1&rel=0";
-                } else if (videoId != null) {
-                    embedUrl = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&playsinline=1&rel=0";
+                if (videoId != null) {
+                    reproducirYouTubeNativo(videoId);
                 } else {
-                    return;
+                    irACanalWebView(indiceActual);
                 }
-                String js = "javascript:(function(){try{" +
-                    "var f=document.getElementById('ifr');" +
-                    "if(f){f.src='about:blank';}" +
-                    "setTimeout(function(){" +
-                    "  var g=document.getElementById('ifr');" +
-                    "  if(g){g.src='" + embedUrl + "';g.style.display='block';}" +
-                    "},120);" +
-                    "}catch(e){}})();";
-                myWebView.evaluateJavascript(js, null);
-                myWebView.requestFocus();
-                handler.postDelayed(() -> { if (myWebView != null) myWebView.requestFocus(); }, 1500);
-            } else {
+            } else if (esEmbedTercero(c.url)) {
                 detenerTodoNativo();
                 myWebView.setVisibility(View.VISIBLE);
                 myWebView.onResume();
                 myWebView.resumeTimers();
                 enYouTubeWeb = false;
-                mostrarEscudo(false);
                 irACanalWebView(indiceActual);
+            } else {
+                reproducirEnExo(c);
             }
         }
     };
@@ -406,146 +387,458 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    private boolean esTV() {
-        return getPackageManager().hasSystemFeature("android.software.leanback");
+    private void reproducirEnExo(Canal c) {
+        ytToken++;
+        mostrarEscudo(false);
+        enYouTubeWeb = false;
+        enYouTubeNativo = false;
+        enExoPlayer = true;
+        canalActual = c;
+        reintentos = 0;
+        handler.removeCallbacks(reintentoRunnable);
+        myWebView.setVisibility(View.GONE);
+        myWebView.onPause();
+        youtubePlayerView.setVisibility(View.GONE);
+        playerContainer.setVisibility(View.VISIBLE);
+        playerContainer.bringToFront();
+        nombreCanal.setText(c.nombre);
+        numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+        if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
+        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+        mostrarLoaderSintonizando();
+        exoPlayer.setMediaSource(construirMediaSource(c));
+        exoPlayer.prepare();
+        exoPlayer.play();
+        try { exoPlayer.setVolume(c.gain); } catch (Exception ignored) {}
+        programarTimeoutCanal();
+        avisarAlWebView("window.gtv&&window.gtv.onNativoIniciado&&window.gtv.onNativoIniciado();");
+        handler.postDelayed(this::actualizarWatchNext, 5000);
+        mostrarControles();
+        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
     }
 
-    private void inicializarWatchNext() {
-        if (!esTV()) return;
-        try { watchNextChannelId = obtenerOCrearCanalWatchNext(); } catch (Exception ignored) {}
-    }
-
-    private long obtenerOCrearCanalWatchNext() {
-        try {
-            Cursor cursor = getContentResolver().query(
-                TvContractCompat.Channels.CONTENT_URI,
-                new String[]{TvContractCompat.Channels._ID, TvContractCompat.Channels.COLUMN_DISPLAY_NAME},
-                null, null, null);
-            if (cursor != null) {
-                while (cursor.moveToNext()) {
-                    if (WATCH_NEXT_CHANNEL_NAME.equals(cursor.getString(1))) {
-                        long id = cursor.getLong(0);
-                        cursor.close();
-                        return id;
-                    }
-                }
-                cursor.close();
+    private void reproducirYouTubeNativo(String videoId) {
+        runOnUiThread(() -> {
+            ytToken++;
+            enExoPlayer = false;
+            enYouTubeWeb = false;
+            enYouTubeNativo = true;
+            try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+            playerContainer.setVisibility(View.GONE);
+            myWebView.setVisibility(View.GONE);
+            youtubePlayerView.setVisibility(View.VISIBLE);
+            youtubePlayerView.bringToFront();
+            if (youtubePlayer != null) {
+                youtubePlayer.loadVideo(videoId, 0);
             }
-            android.content.ContentValues values = new android.content.ContentValues();
-            values.put(TvContractCompat.Channels.COLUMN_DISPLAY_NAME, WATCH_NEXT_CHANNEL_NAME);
-            values.put(TvContractCompat.Channels.COLUMN_DESCRIPTION, "Últimos canales que viste en GTV Play R");
-            values.put(TvContractCompat.Channels.COLUMN_TYPE, TvContractCompat.Channels.TYPE_PREVIEW);
-            values.put(TvContractCompat.Channels.COLUMN_BROWSABLE, 0);
-            values.put(TvContractCompat.Channels.COLUMN_SEARCHABLE, 0);
-            values.put(TvContractCompat.Channels.COLUMN_APP_LINK_INTENT_URI, "gtvplayr://play?url=");
-            Uri channelUri = getContentResolver().insert(TvContractCompat.Channels.CONTENT_URI, values);
-            if (channelUri == null) return -1;
-            long channelId = ContentUris.parseId(channelUri);
-            try { TvContractCompat.requestChannelBrowsable(this, channelId); } catch (Exception ignored) {}
-            return channelId;
-        } catch (Exception e) { return -1; }
+            mostrarControles();
+        });
     }
 
-    private void agregarAlWatchNext(Canal canal) {
-        if (!esTV() || watchNextChannelId == -1 || canal == null || canal.url == null) return;
-        try {
-            String intentUri = "gtvplayr://play?url=" + Uri.encode(canal.url)
-                + "&nombre=" + Uri.encode(canal.nombre != null ? canal.nombre : "")
-                + "&logo=" + Uri.encode(canal.logo != null ? canal.logo : "");
-            WatchNextProgram.Builder builder = new WatchNextProgram.Builder();
-            builder.setType(TvContractCompat.WatchNextPrograms.TYPE_CLIP);
-            builder.setWatchNextType(TvContractCompat.WatchNextPrograms.WATCH_NEXT_TYPE_CONTINUE);
-            builder.setLastEngagementTimeUtcMillis(System.currentTimeMillis());
-            builder.setTitle(canal.nombre != null ? canal.nombre : "Canal");
-            builder.setDescription("GTV Play R");
-            builder.setIntentUri(Uri.parse(intentUri));
-            if (canal.logo != null && !canal.logo.isEmpty()) builder.setPosterArtUri(Uri.parse(canal.logo));
-            builder.setInternalProviderId(canal.url);
+    private MediaSource construirMediaSource(Canal c) {
+        DefaultHttpDataSource.Factory f = new DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(10000)
+            .setReadTimeoutMs(10000);
 
+        Map<String, String> h = new HashMap<>();
+        h.put("User-Agent",
+            "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+        if (c.referer != null && !c.referer.isEmpty()) {
+            h.put("Referer", c.referer);
             try {
-                getContentResolver().delete(
-                    TvContractCompat.WatchNextPrograms.CONTENT_URI,
-                    TvContractCompat.WatchNextPrograms.COLUMN_INTERNAL_PROVIDER_ID + "=?",
-                    new String[]{ canal.url });
+                URL u = new URL(c.referer);
+                h.put("Origin", u.getProtocol() + "://" + u.getHost());
             } catch (Exception ignored) {}
+        }
+        f.setDefaultRequestProperties(h);
 
-            getContentResolver().insert(
-                TvContractCompat.WatchNextPrograms.CONTENT_URI, builder.build().toContentValues());
-        } catch (Exception ignored) {}
+        DefaultExtractorsFactory extractors = new DefaultExtractorsFactory()
+            .setTsExtractorFlags(
+                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
+                    | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS);
+
+        MediaItem.Builder ib = new MediaItem.Builder().setUri(c.url);
+        String mime = mimeDe(c.url);
+        if (mime != null) ib.setMimeType(mime);
+
+        return new DefaultMediaSourceFactory(f, extractors)
+            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
+            .createMediaSource(ib.build());
     }
 
-    private void actualizarWatchNext() {
-        if (!esTV() || canales.isEmpty() || indiceActual < 0 || indiceActual >= canales.size()) return;
-        Canal c = canales.get(indiceActual);
-        if (c == null) return;
-        historialCanales.remove(c.url);
-        historialCanales.add(0, c.url);
-        while (historialCanales.size() > MAX_HISTORIAL) historialCanales.remove(historialCanales.size() - 1);
-        agregarAlWatchNext(c);
+    private String mimeDe(String u) {
+        String s = u.toLowerCase();
+        if (s.contains(".m3u8") || s.contains("type=hls") || s.contains("format=hls")
+            || s.contains("type=m3u8") || s.contains("format=m3u8")) return "application/x-mpegURL";
+        if (s.contains(".mpd")) return "application/dash+xml";
+        if (s.contains(".ts")) return "video/mp2t";
+        if (s.contains(".mp4")) return "video/mp4";
+        if (s.contains(".webm")) return "video/webm";
+        if (s.contains(".mkv")) return "video/x-matroska";
+        return null;
     }
 
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        setIntent(intent);
-        manejarIntentEntrante(intent);
+    private boolean esEmbedTercero(String url) {
+        if (url == null) return false;
+        String u = url.toLowerCase();
+        return u.contains("kick.com") || u.contains("twitch.tv") || u.contains("ok.ru")
+            || u.contains("odnoklassniki.ru") || u.contains("dailymotion.com") || u.contains("tokyvideo.com");
     }
 
-    private void manejarIntentEntrante(Intent intent) {
-        if (intent == null || intent.getData() == null) return;
-        Uri data = intent.getData();
-        if (!"gtvplayr".equals(data.getScheme())) return;
-        String url = data.getQueryParameter("url");
-        String nombre = data.getQueryParameter("nombre");
-        String logo = data.getQueryParameter("logo");
-        if (url == null || url.isEmpty()) return;
-        new Handler().postDelayed(() -> {
-            if (canales.isEmpty()) {
-                new Handler().postDelayed(() -> abrirCanalDesdeWatchNext(url, nombre, logo), 3000);
+    private void navegar(int delta) {
+        if (canales.isEmpty()) return;
+        int n = canales.size();
+        int i = (zapPend >= 0 ? zapPend : indiceActual);
+        for (int k = 0; k < n; k++) {
+            i = ((i + delta) % n + n) % n;
+            if (!canales.get(i).oculto) break;
+        }
+        zapPend = i;
+        Canal c = canales.get(i);
+        nombreCanal.setText(c.nombre);
+        numeroCanal.setText((i + 1) + "/" + n);
+        handler.removeCallbacks(zapRun);
+        handler.postDelayed(zapRun, 300);
+    }
+
+    private void rotar() {
+        rotado = !rotado;
+        getSharedPreferences("gtv_prefs", MODE_PRIVATE).edit().putBoolean("rotado", rotado).apply();
+        aplicarRotacionYouTube();
+        aplicarRotacion();
+        reposicionarBotones();
+        reiniciarTickerSiVisible();
+    }
+
+    private void aplicarRotacion() {
+        if (playerContainer.getWidth() == 0 || playerContainer.getHeight() == 0) return;
+        int w = playerContainer.getWidth(), h = playerContainer.getHeight();
+        ViewGroup.LayoutParams lp = rotWrapper.getLayoutParams();
+        if (rotado) { lp.width = h; lp.height = w; }
+        else { lp.width = ViewGroup.LayoutParams.MATCH_PARENT; lp.height = ViewGroup.LayoutParams.MATCH_PARENT; }
+        rotWrapper.setLayoutParams(lp);
+        rotWrapper.setRotation(rotado ? 90f : 0f);
+        rotWrapper.requestLayout();
+    }
+
+    private void reposicionarBotones() {
+        FrameLayout.LayoutParams lpRot = (FrameLayout.LayoutParams) btnRotate.getLayoutParams();
+        FrameLayout.LayoutParams lpClose = (FrameLayout.LayoutParams) btnClose.getLayoutParams();
+        if (rotado) {
+            lpRot.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+            lpRot.topMargin = 40; lpRot.rightMargin = 40; lpRot.bottomMargin = 0;
+            lpClose.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+            lpClose.bottomMargin = 40; lpClose.rightMargin = 40;
+        } else {
+            lpRot.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+            lpRot.bottomMargin = 160; lpRot.rightMargin = 40; lpRot.topMargin = 0;
+            lpClose.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+            lpClose.bottomMargin = 40; lpClose.rightMargin = 40;
+        }
+        btnRotate.setLayoutParams(lpRot);
+        btnClose.setLayoutParams(lpClose);
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void configurarWebView() {
+        WebSettings s = myWebView.getSettings();
+        s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(true); s.setAllowContentAccess(true);
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        s.setMediaPlaybackRequiresUserGesture(false);
+        s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        s.setLoadWithOverviewMode(true); s.setUseWideViewPort(true);
+        s.setDatabaseEnabled(true); s.setSupportZoom(false);
+        s.setSaveFormData(false); s.setGeolocationEnabled(false);
+        s.setTextZoom(100);
+        s.setAllowUniversalAccessFromFileURLs(true);
+        s.setAllowFileAccessFromFileURLs(true);
+        s.setJavaScriptCanOpenWindowsAutomatically(false);
+        s.setSupportMultipleWindows(false);
+        s.setUserAgentString("Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(myWebView, true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        myWebView.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                webViewListo = true;
+                if (enYouTubeWeb && url != null && url.contains("youtube.com/embed")) {
+                    aplicarRotacionYouTube();
+                    myWebView.requestFocus();
+                    view.postDelayed(() -> MainActivity.this.aplicarRotacionYouTube(), 1500);
+                    handler.postDelayed(() -> { if (myWebView != null) myWebView.requestFocus(); }, 1500);
+                }
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) {}
+                    return true;
+                }
+                return false;
+            }
+            @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) {}
+                    return true;
+                }
+                return false;
+            }
+        });
+        myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
+        myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
+    }
+
+    private void mostrarEscudo(boolean on) {
+        if (playerContainer == null || rotWrapper == null || playerView == null || myWebView == null) return;
+        if (on) {
+            if (!bgGuardado) {
+                bgContainerOrig = playerContainer.getBackground();
+                bgRotOrig = rotWrapper.getBackground();
+                bgGuardado = true;
+            }
+            playerContainer.setBackgroundColor(Color.TRANSPARENT);
+            rotWrapper.setBackgroundColor(Color.TRANSPARENT);
+            playerView.setVisibility(View.INVISIBLE);
+            myWebView.setFocusable(false);
+            myWebView.setFocusableInTouchMode(false);
+            playerContainer.setVisibility(View.VISIBLE);
+            playerContainer.bringToFront();
+            if (indiceActual >= 0 && indiceActual < canales.size()) {
+                Canal c = canales.get(indiceActual);
+                nombreCanal.setText(c.nombre);
+                numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+                if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
+            }
+            mostrarControles();
+            playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+        } else {
+            if (bgGuardado) {
+                playerContainer.setBackground(bgContainerOrig);
+                rotWrapper.setBackground(bgRotOrig);
+            }
+            playerView.setVisibility(View.VISIBLE);
+            myWebView.setFocusable(true);
+            myWebView.setFocusableInTouchMode(true);
+        }
+    }
+
+    private void salirDeYouTube() {
+        tickerDetener(true);
+        ytToken++;
+        enYouTubeWeb = false;
+        mostrarEscudo(false);
+        enExoPlayer = false;
+        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+        playerContainer.setVisibility(View.GONE);
+        ocultarControlesNativos();
+        detenerLoaderAnim();
+        ocultarLoaders();
+
+        myWebView.setVisibility(View.VISIBLE);
+        myWebView.onResume();
+        myWebView.resumeTimers();
+
+        String js = "window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");"
+            + "window.volverDelExo&&window.volverDelExo();";
+        myWebView.postDelayed(() -> {
+            try {
+                if (js != null && !js.isEmpty())
+                    myWebView.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
+            } catch (Exception ignored) {}
+        }, 100);
+    }
+
+    private void aplicarRotacionYouTube() {
+        if (myWebView == null || !enYouTubeWeb) return;
+        String css = rotado
+            ? "html{position:fixed!important;top:50%!important;left:50%!important;width:100vh!important;"
+              + "height:100vw!important;margin-top:-50vw!important;margin-left:-50vh!important;"
+              + "transform:rotate(90deg)!important;background:#000!important;}"
+            : "";
+        String js = "(function(){"
+            + "window.__gtvRotCss='" + css + "';"
+            + "function ap(){var s=document.getElementById('gtv-rot');"
+            + "if(!s){s=document.createElement('style');s.id='gtv-rot';(document.head||document.documentElement).appendChild(s);}"
+            + "if(s.textContent!==window.__gtvRotCss)s.textContent=window.__gtvRotCss;}"
+            + "ap();"
+            + "if(!window.__gtvRotTimer)window.__gtvRotTimer=setInterval(ap,500);"
+            + "})();";
+        myWebView.evaluateJavascript(js, null);
+    }
+
+    private void configurarBotones() {
+        btnShield.setOnClickListener(v -> mostrarControles());
+        btnNext.setOnClickListener(v -> { navegar(+1); mostrarControles(); });
+        btnPrev.setOnClickListener(v -> { navegar(-1); mostrarControles(); });
+        btnClose.setOnClickListener(v -> cerrarExoPlayer());
+        btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
+    }
+
+    private void inicializarPublicidadNativa() {
+        if (rotWrapper == null) return;
+
+        pubTickerBox = new FrameLayout(this);
+        pubTickerBox.setVisibility(View.GONE);
+        pubTickerBox.setBackgroundColor(0x88000000);
+        FrameLayout.LayoutParams boxLp = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, dp(36));
+        boxLp.gravity = Gravity.BOTTOM;
+        pubTickerBox.setLayoutParams(boxLp);
+
+        pubTickerTxt = new TextView(this);
+        pubTickerTxt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+        pubTickerTxt.setSingleLine(true);
+        pubTickerTxt.setHorizontallyScrolling(true);
+        pubTickerTxt.setEllipsize(null);
+        pubTickerTxt.setTextColor(0xFFFFFFFF);
+        pubTickerTxt.setShadowLayer(4f, 0f, 1f, 0xD9000000);
+        pubTickerTxt.setGravity(Gravity.CENTER_VERTICAL);
+        pubTickerTxt.setPadding(dp(12), 0, dp(12), 0);
+        pubTickerTxt.setLayoutParams(new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        pubTickerBox.addView(pubTickerTxt);
+        rotWrapper.addView(pubTickerBox);
+
+        pubModal = new FrameLayout(this);
+        pubModal.setVisibility(View.GONE);
+        pubModal.setBackgroundColor(0xCC000000);
+        FrameLayout.LayoutParams modalLp = new FrameLayout.LayoutParams(dp(180), dp(180));
+        modalLp.gravity = Gravity.BOTTOM | Gravity.END;
+        modalLp.setMargins(dp(16), dp(16), dp(16), dp(48));
+        pubModal.setLayoutParams(modalLp);
+
+        pubModalImg = new ImageView(this);
+        pubModalImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        pubModalImg.setLayoutParams(new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        pubModal.addView(pubModalImg);
+
+        pubModalVid = new VideoView(this);
+        pubModalVid.setVisibility(View.GONE);
+        pubModalVid.setLayoutParams(new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        pubModal.addView(pubModalVid);
+
+        rotWrapper.addView(pubModal);
+    }
+
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    private int parsearColor(String c, int def) {
+        if (c == null) return def;
+        String s = c.trim().toLowerCase();
+        if (s.isEmpty()) return def;
+        if (s.equals("transparent")) return Color.TRANSPARENT;
+        try {
+            if (s.startsWith("rgb")) {
+                int a = s.indexOf('('), z = s.indexOf(')');
+                if (a < 0 || z < 0) return def;
+                String[] p = s.substring(a + 1, z).split(",");
+                if (p.length < 3) return def;
+                int r = Math.round(Float.parseFloat(p[0].trim()));
+                int g = Math.round(Float.parseFloat(p[1].trim()));
+                int bl = Math.round(Float.parseFloat(p[2].trim()));
+                float al = p.length > 3 ? Float.parseFloat(p[3].trim()) : 1f;
+                al = Math.max(0f, Math.min(1f, al));
+                return Color.argb(Math.round(al * 255), r, g, bl);
+            }
+            if (s.startsWith("#") && s.length() == 4) {
+                s = "#" + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2) + s.charAt(3) + s.charAt(3);
+            } else if (s.startsWith("#") && s.length() == 9) {
+                s = "#" + s.substring(7, 9) + s.substring(1, 7);
+            }
+            return Color.parseColor(s);
+        } catch (Exception e) { return def; }
+    }
+
+    private final Runnable pubTickerLoop = new Runnable() {
+        @Override public void run() {
+            if (!pubTickerRunning || pubTickerBox == null) return;
+            float t = (SystemClock.uptimeMillis() - pubTickerT0) / (float) pubTickerDurMs;
+            if (t >= 1f) {
+                pubTickerRunning = false;
+                pubTickerBox.setVisibility(View.GONE);
+                avisarAlWebView("window.gtv&&window.gtv.onTickerTerminado&&window.gtv.onTickerTerminado();");
                 return;
             }
-            abrirCanalDesdeWatchNext(url, nombre, logo);
-        }, 2000);
+            if (pubTickerTxt != null)
+                pubTickerTxt.setTranslationX(pubTickerFrom + (pubTickerTo - pubTickerFrom) * t);
+            pubTickerBox.postOnAnimation(this);
+        }
+    };
+
+    private void tickerDetener(boolean ocultar) {
+        pubTickerRunning = false;
+        pubTickerGen++;
+        if (pubTickerBox != null) {
+            pubTickerBox.removeCallbacks(pubTickerLoop);
+            if (ocultar) pubTickerBox.setVisibility(View.GONE);
+        }
     }
 
-    private void abrirCanalDesdeWatchNext(String url, String nombre, String logo) {
-        int idx = -1;
-        for (int i = 0; i < canales.size(); i++) {
-            if (canales.get(i).url.equals(url)) { idx = i; break; }
-        }
-        if (idx >= 0) {
-            indiceActual = idx;
-            Canal c = canales.get(idx);
-            if (esCanalExoPlayer(c.url)) reproducirEnExo(c);
-            else irACanalWebView(idx);
-        } else {
-            Canal c = new Canal(url, nombre != null ? nombre : "Canal", logo != null ? logo : "", "", 1.0f);
-            if (esCanalExoPlayer(url)) {
-                indiceActual = -1;
-                reproducirEnExo(c);
+    private void tickerArrancar(final int gen, final float prog, long delayMs) {
+        if (pubTickerBox == null || pubTickerTxt == null) return;
+        pubTickerBox.removeCallbacks(pubTickerLoop);
+        pubTickerRunning = false;
+        pubTickerBox.setVisibility(View.INVISIBLE);
+        final int[] intentos = {0};
+        pubTickerBox.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (gen != pubTickerGen || pubTickerBox == null) return;
+                int ancho = pubTickerBox.getWidth();
+                if (ancho <= 0) { if (++intentos[0] < 50) pubTickerBox.postDelayed(this, 100); return; }
+                float anchoTexto = pubTickerTxt.getPaint().measureText(pubTickerTxt.getText().toString());
+                int anchoView = (int) Math.ceil(anchoTexto) + dp(24);
+                FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubTickerTxt.getLayoutParams();
+                if (lp.width != anchoView) { lp.width = anchoView; pubTickerTxt.setLayoutParams(lp); }
+                pubTickerFrom = ancho;
+                pubTickerTo = -anchoView;
+                pubTickerT0 = SystemClock.uptimeMillis() - (long) (prog * pubTickerDurMs);
+                pubTickerTxt.setTranslationX(pubTickerFrom + (pubTickerTo - pubTickerFrom) * prog);
+                pubTickerBox.setVisibility(View.VISIBLE);
+                pubTickerRunning = true;
+                pubTickerBox.postOnAnimation(pubTickerLoop);
             }
+        }, delayMs);
+    }
+
+    private void reiniciarTickerSiVisible() {
+        if (pubTickerBox == null || !pubTickerRunning) return;
+        float prog = (SystemClock.uptimeMillis() - pubTickerT0) / (float) pubTickerDurMs;
+        prog = Math.max(0f, Math.min(0.99f, prog));
+        int gen = ++pubTickerGen;
+        tickerArrancar(gen, prog, 150);
+    }
+
+    private Typeface fuenteDe(String f) {
+        if (f == null) return Typeface.SANS_SERIF;
+        String s = f.toLowerCase().trim();
+        try {
+            switch (s) {
+                case "roboto":     return Typeface.create("sans-serif", Typeface.NORMAL);
+                case "montserrat": return ResourcesCompat.getFont(this, R.font.montserrat);
+                case "poppins":    return ResourcesCompat.getFont(this, R.font.poppins);
+                case "inter":      return ResourcesCompat.getFont(this, R.font.inter);
+                case "bebasneue":  return ResourcesCompat.getFont(this, R.font.bebasneue);
+                case "arial":
+                default:           return Typeface.SANS_SERIF;
+            }
+        } catch (Exception e) {
+            return Typeface.SANS_SERIF;
         }
-    }
-
-    private void irACanalWebView(final int idx) {
-        irACanalWebView(idx, 0);
-    }
-
-    private void irACanalWebView(final int idx, final int intento) {
-        runOnUiThread(() -> {
-            if (myWebView == null) return;
-            myWebView.evaluateJavascript(
-                "(function(){try{return typeof window.irACanal==='function';}catch(e){return false;}})()",
-                value -> {
-                    if ("true".equals(value)) {
-                        myWebView.evaluateJavascript("window.irACanal(" + idx + ");", null);
-                    } else if (intento < 10) {
-                        handler.postDelayed(() -> irACanalWebView(idx, intento + 1), 300);
-                    } else {
-                        Log.e(TAG, "irACanal no disponible tras reintentos, idx=" + idx);
-                    }
-                });
-        });
     }
 
     private void checkForUpdates() {
@@ -775,465 +1068,7 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
-    private boolean esEmbedTercero(String url) {
-        if (url == null) return false;
-        String u = url.toLowerCase();
-        return u.contains("kick.com") || u.contains("twitch.tv") || u.contains("ok.ru")
-            || u.contains("odnoklassniki.ru") || u.contains("dailymotion.com") || u.contains("tokyvideo.com");
-    }
-
-    private String mimeDe(String u) {
-        String s = u.toLowerCase();
-        if (s.contains(".m3u8") || s.contains("type=hls") || s.contains("format=hls")
-            || s.contains("type=m3u8") || s.contains("format=m3u8")) return "application/x-mpegURL";
-        if (s.contains(".mpd")) return "application/dash+xml";
-        if (s.contains(".ts")) return "video/mp2t";
-        if (s.contains(".mp4")) return "video/mp4";
-        if (s.contains(".webm")) return "video/webm";
-        if (s.contains(".mkv")) return "video/x-matroska";
-        return null;
-    }
-
-    private void navegar(int delta) {
-        if (canales.isEmpty()) return;
-        int n = canales.size();
-        int i = (zapPend >= 0 ? zapPend : indiceActual);
-        for (int k = 0; k < n; k++) {
-            i = ((i + delta) % n + n) % n;
-            if (!canales.get(i).oculto) break;
-        }
-        zapPend = i;
-        Canal c = canales.get(i);
-        nombreCanal.setText(c.nombre);
-        numeroCanal.setText((i + 1) + "/" + n);
-        handler.removeCallbacks(zapRun);
-        handler.postDelayed(zapRun, 300);
-    }
-
-    private void reproducirEnExo(Canal c) {
-        ytToken++;
-        mostrarEscudo(false);
-        enYouTubeWeb = false;
-        enYouTubeNativo = false;
-        enExoPlayer = true;
-        canalActual = c;
-        reintentos = 0;
-        handler.removeCallbacks(reintentoRunnable);
-        myWebView.setVisibility(View.GONE);
-        myWebView.onPause();
-        youtubePlayerView.setVisibility(View.GONE);
-        playerContainer.setVisibility(View.VISIBLE);
-        playerContainer.bringToFront();
-        nombreCanal.setText(c.nombre);
-        numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
-        if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
-        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
-        mostrarLoaderSintonizando();
-        exoPlayer.setMediaSource(construirMediaSource(c));
-        exoPlayer.prepare();
-        exoPlayer.play();
-        try { exoPlayer.setVolume(c.gain); } catch (Exception ignored) {}
-        programarTimeoutCanal();
-        avisarAlWebView("window.gtv&&window.gtv.onNativoIniciado&&window.gtv.onNativoIniciado();");
-        handler.postDelayed(this::actualizarWatchNext, 5000);
-        mostrarControles();
-        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
-    }
-
-    private void reproducirYouTubeNativo(String videoId) {
-        runOnUiThread(() -> {
-            ytToken++;
-            enExoPlayer = false;
-            enYouTubeWeb = false;
-            enYouTubeNativo = true;
-            try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
-            playerContainer.setVisibility(View.GONE);
-            myWebView.setVisibility(View.GONE);
-            youtubePlayerView.setVisibility(View.VISIBLE);
-            youtubePlayerView.bringToFront();
-            if (youtubePlayer != null) {
-                youtubePlayer.loadVideo(videoId, 0);
-            }
-            mostrarControles();
-        });
-    }
-
-    private MediaSource construirMediaSource(Canal c) {
-        DefaultHttpDataSource.Factory f = new DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(10000)
-            .setReadTimeoutMs(10000);
-
-        Map<String, String> h = new HashMap<>();
-        h.put("User-Agent",
-            "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
-        if (c.referer != null && !c.referer.isEmpty()) {
-            h.put("Referer", c.referer);
-            try {
-                URL u = new URL(c.referer);
-                h.put("Origin", u.getProtocol() + "://" + u.getHost());
-            } catch (Exception ignored) {}
-        }
-        f.setDefaultRequestProperties(h);
-
-        DefaultExtractorsFactory extractors = new DefaultExtractorsFactory()
-            .setTsExtractorFlags(
-                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
-                    | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS);
-
-        MediaItem.Builder ib = new MediaItem.Builder().setUri(c.url);
-        String mime = mimeDe(c.url);
-        if (mime != null) ib.setMimeType(mime);
-
-        return new DefaultMediaSourceFactory(f, extractors)
-            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
-            .createMediaSource(ib.build());
-    }
-
-    private void rotar() {
-        rotado = !rotado;
-        getSharedPreferences("gtv_prefs", MODE_PRIVATE).edit().putBoolean("rotado", rotado).apply();
-        aplicarRotacionYouTube();
-        aplicarRotacion();
-        reposicionarBotones();
-        reiniciarTickerSiVisible();
-    }
-
-    private void aplicarRotacion() {
-        if (playerContainer.getWidth() == 0 || playerContainer.getHeight() == 0) return;
-        int w = playerContainer.getWidth(), h = playerContainer.getHeight();
-        ViewGroup.LayoutParams lp = rotWrapper.getLayoutParams();
-        if (rotado) { lp.width = h; lp.height = w; }
-        else { lp.width = ViewGroup.LayoutParams.MATCH_PARENT; lp.height = ViewGroup.LayoutParams.MATCH_PARENT; }
-        rotWrapper.setLayoutParams(lp);
-        rotWrapper.setRotation(rotado ? 90f : 0f);
-        rotWrapper.requestLayout();
-    }
-
-    private void reposicionarBotones() {
-        FrameLayout.LayoutParams lpRot = (FrameLayout.LayoutParams) btnRotate.getLayoutParams();
-        FrameLayout.LayoutParams lpClose = (FrameLayout.LayoutParams) btnClose.getLayoutParams();
-        if (rotado) {
-            lpRot.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
-            lpRot.topMargin = 40; lpRot.rightMargin = 40; lpRot.bottomMargin = 0;
-            lpClose.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
-            lpClose.bottomMargin = 40; lpClose.rightMargin = 40;
-        } else {
-            lpRot.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
-            lpRot.bottomMargin = 160; lpRot.rightMargin = 40; lpRot.topMargin = 0;
-            lpClose.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
-            lpClose.bottomMargin = 40; lpClose.rightMargin = 40;
-        }
-        btnRotate.setLayoutParams(lpRot);
-        btnClose.setLayoutParams(lpClose);
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private void configurarWebView() {
-        WebSettings s = myWebView.getSettings();
-        s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true); s.setAllowContentAccess(true);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        s.setMediaPlaybackRequiresUserGesture(false);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setLoadWithOverviewMode(true); s.setUseWideViewPort(true);
-        s.setDatabaseEnabled(true); s.setSupportZoom(false);
-        s.setSaveFormData(false); s.setGeolocationEnabled(false);
-        s.setTextZoom(100);
-        s.setAllowUniversalAccessFromFileURLs(true);
-        s.setAllowFileAccessFromFileURLs(true);
-        s.setJavaScriptCanOpenWindowsAutomatically(false);
-        s.setSupportMultipleWindows(false);
-        s.setUserAgentString("Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
-        CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(myWebView, true);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
-        myWebView.setWebViewClient(new WebViewClient() {
-            @Override public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                webViewListo = true;
-                if (enYouTubeWeb && url != null && url.contains("youtube.com/embed")) {
-                    aplicarRotacionYouTube();
-                    myWebView.requestFocus();
-                    view.postDelayed(() -> MainActivity.this.aplicarRotacionYouTube(), 1500);
-                    handler.postDelayed(() -> { if (myWebView != null) myWebView.requestFocus(); }, 1500);
-                }
-            }
-
-            @Override
-            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                return super.shouldInterceptRequest(view, request);
-            }
-
-            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString();
-                if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
-                    try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) {}
-                    return true;
-                }
-                return false;
-            }
-            @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
-                    try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) {}
-                    return true;
-                }
-                return false;
-            }
-        });
-        myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
-        myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
-    }
-
-    private void mostrarEscudo(boolean on) {
-        if (playerContainer == null || rotWrapper == null || playerView == null || myWebView == null) return;
-        if (on) {
-            if (!bgGuardado) {
-                bgContainerOrig = playerContainer.getBackground();
-                bgRotOrig = rotWrapper.getBackground();
-                bgGuardado = true;
-            }
-            playerContainer.setBackgroundColor(Color.TRANSPARENT);
-            rotWrapper.setBackgroundColor(Color.TRANSPARENT);
-            playerView.setVisibility(View.INVISIBLE);
-            myWebView.setFocusable(false);
-            myWebView.setFocusableInTouchMode(false);
-            playerContainer.setVisibility(View.VISIBLE);
-            playerContainer.bringToFront();
-            if (indiceActual >= 0 && indiceActual < canales.size()) {
-                Canal c = canales.get(indiceActual);
-                nombreCanal.setText(c.nombre);
-                numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
-                if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
-            }
-            mostrarControles();
-            playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
-        } else {
-            if (bgGuardado) {
-                playerContainer.setBackground(bgContainerOrig);
-                rotWrapper.setBackground(bgRotOrig);
-            }
-            playerView.setVisibility(View.VISIBLE);
-            myWebView.setFocusable(true);
-            myWebView.setFocusableInTouchMode(true);
-        }
-    }
-
-    private void entrarModoYouTube() {
-        enYouTubeWeb = true;
-        jsPendienteAlVolver = null;
-        mostrarEscudo(true);
-    }
-
-    private void salirDeYouTube() {
-        tickerDetener(true);
-        ytToken++;
-        enYouTubeWeb = false;
-        mostrarEscudo(false);
-        enExoPlayer = false;
-        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
-        playerContainer.setVisibility(View.GONE);
-        ocultarControlesNativos();
-        detenerLoaderAnim();
-        ocultarLoaders();
-
-        myWebView.setVisibility(View.VISIBLE);
-        myWebView.onResume();
-        myWebView.resumeTimers();
-
-        String js = "window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");"
-            + "window.volverDelExo&&window.volverDelExo();";
-        myWebView.postDelayed(() -> {
-            try {
-                if (js != null && !js.isEmpty())
-                    myWebView.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
-            } catch (Exception ignored) {}
-        }, 100);
-    }
-
-    private void aplicarRotacionYouTube() {
-        if (myWebView == null || !enYouTubeWeb) return;
-        String css = rotado
-            ? "html{position:fixed!important;top:50%!important;left:50%!important;width:100vh!important;"
-              + "height:100vw!important;margin-top:-50vw!important;margin-left:-50vh!important;"
-              + "transform:rotate(90deg)!important;background:#000!important;}"
-            : "";
-        String js = "(function(){"
-            + "window.__gtvRotCss='" + css + "';"
-            + "function ap(){var s=document.getElementById('gtv-rot');"
-            + "if(!s){s=document.createElement('style');s.id='gtv-rot';(document.head||document.documentElement).appendChild(s);}"
-            + "if(s.textContent!==window.__gtvRotCss)s.textContent=window.__gtvRotCss;}"
-            + "ap();"
-            + "if(!window.__gtvRotTimer)window.__gtvRotTimer=setInterval(ap,500);"
-            + "})();";
-        myWebView.evaluateJavascript(js, null);
-    }
-
-    private void configurarBotones() {
-        btnShield.setOnClickListener(v -> mostrarControles());
-        btnNext.setOnClickListener(v -> { navegar(+1); mostrarControles(); });
-        btnPrev.setOnClickListener(v -> { navegar(-1); mostrarControles(); });
-        btnClose.setOnClickListener(v -> cerrarExoPlayer());
-        btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
-    }
-
-    private void inicializarPublicidadNativa() {
-        if (rotWrapper == null) return;
-
-        pubTickerBox = new FrameLayout(this);
-        pubTickerBox.setVisibility(View.GONE);
-        pubTickerBox.setBackgroundColor(0x88000000);
-        FrameLayout.LayoutParams boxLp = new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, dp(36));
-        boxLp.gravity = Gravity.BOTTOM;
-        pubTickerBox.setLayoutParams(boxLp);
-
-        pubTickerTxt = new TextView(this);
-        pubTickerTxt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
-        pubTickerTxt.setSingleLine(true);
-        pubTickerTxt.setHorizontallyScrolling(true);
-        pubTickerTxt.setEllipsize(null);
-        pubTickerTxt.setTextColor(0xFFFFFFFF);
-        pubTickerTxt.setShadowLayer(4f, 0f, 1f, 0xD9000000);
-        pubTickerTxt.setGravity(Gravity.CENTER_VERTICAL);
-        pubTickerTxt.setPadding(dp(12), 0, dp(12), 0);
-        pubTickerTxt.setLayoutParams(new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        pubTickerBox.addView(pubTickerTxt);
-        rotWrapper.addView(pubTickerBox);
-
-        pubModal = new FrameLayout(this);
-        pubModal.setVisibility(View.GONE);
-        pubModal.setBackgroundColor(0xCC000000);
-        FrameLayout.LayoutParams modalLp = new FrameLayout.LayoutParams(dp(180), dp(180));
-        modalLp.gravity = Gravity.BOTTOM | Gravity.END;
-        modalLp.setMargins(dp(16), dp(16), dp(16), dp(48));
-        pubModal.setLayoutParams(modalLp);
-
-        pubModalImg = new ImageView(this);
-        pubModalImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        pubModalImg.setLayoutParams(new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        pubModal.addView(pubModalImg);
-
-        pubModalVid = new VideoView(this);
-        pubModalVid.setVisibility(View.GONE);
-        pubModalVid.setLayoutParams(new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        pubModal.addView(pubModalVid);
-
-        rotWrapper.addView(pubModal);
-    }
-
-    private int dp(int v) {
-        return Math.round(v * getResources().getDisplayMetrics().density);
-    }
-
-    private int parsearColor(String c, int def) {
-        if (c == null) return def;
-        String s = c.trim().toLowerCase();
-        if (s.isEmpty()) return def;
-        if (s.equals("transparent")) return Color.TRANSPARENT;
-        try {
-            if (s.startsWith("rgb")) {
-                int a = s.indexOf('('), z = s.indexOf(')');
-                if (a < 0 || z < 0) return def;
-                String[] p = s.substring(a + 1, z).split(",");
-                if (p.length < 3) return def;
-                int r = Math.round(Float.parseFloat(p[0].trim()));
-                int g = Math.round(Float.parseFloat(p[1].trim()));
-                int bl = Math.round(Float.parseFloat(p[2].trim()));
-                float al = p.length > 3 ? Float.parseFloat(p[3].trim()) : 1f;
-                al = Math.max(0f, Math.min(1f, al));
-                return Color.argb(Math.round(al * 255), r, g, bl);
-            }
-            if (s.startsWith("#") && s.length() == 4) {
-                s = "#" + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2) + s.charAt(3) + s.charAt(3);
-            } else if (s.startsWith("#") && s.length() == 9) {
-                s = "#" + s.substring(7, 9) + s.substring(1, 7);
-            }
-            return Color.parseColor(s);
-        } catch (Exception e) { return def; }
-    }
-
-    private final Runnable pubTickerLoop = new Runnable() {
-        @Override public void run() {
-            if (!pubTickerRunning || pubTickerBox == null) return;
-            float t = (SystemClock.uptimeMillis() - pubTickerT0) / (float) pubTickerDurMs;
-            if (t >= 1f) {
-                pubTickerRunning = false;
-                pubTickerBox.setVisibility(View.GONE);
-                avisarAlWebView("window.gtv&&window.gtv.onTickerTerminado&&window.gtv.onTickerTerminado();");
-                return;
-            }
-            if (pubTickerTxt != null)
-                pubTickerTxt.setTranslationX(pubTickerFrom + (pubTickerTo - pubTickerFrom) * t);
-            pubTickerBox.postOnAnimation(this);
-        }
-    };
-
-    private void tickerDetener(boolean ocultar) {
-        pubTickerRunning = false;
-        pubTickerGen++;
-        if (pubTickerBox != null) {
-            pubTickerBox.removeCallbacks(pubTickerLoop);
-            if (ocultar) pubTickerBox.setVisibility(View.GONE);
-        }
-    }
-
-    private void tickerArrancar(final int gen, final float prog, long delayMs) {
-        if (pubTickerBox == null || pubTickerTxt == null) return;
-        pubTickerBox.removeCallbacks(pubTickerLoop);
-        pubTickerRunning = false;
-        pubTickerBox.setVisibility(View.INVISIBLE);
-        final int[] intentos = {0};
-        pubTickerBox.postDelayed(new Runnable() {
-            @Override public void run() {
-                if (gen != pubTickerGen || pubTickerBox == null) return;
-                int ancho = pubTickerBox.getWidth();
-                if (ancho <= 0) { if (++intentos[0] < 50) pubTickerBox.postDelayed(this, 100); return; }
-                float anchoTexto = pubTickerTxt.getPaint().measureText(pubTickerTxt.getText().toString());
-                int anchoView = (int) Math.ceil(anchoTexto) + dp(24);
-                FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubTickerTxt.getLayoutParams();
-                if (lp.width != anchoView) { lp.width = anchoView; pubTickerTxt.setLayoutParams(lp); }
-                pubTickerFrom = ancho;
-                pubTickerTo = -anchoView;
-                pubTickerT0 = SystemClock.uptimeMillis() - (long) (prog * pubTickerDurMs);
-                pubTickerTxt.setTranslationX(pubTickerFrom + (pubTickerTo - pubTickerFrom) * prog);
-                pubTickerBox.setVisibility(View.VISIBLE);
-                pubTickerRunning = true;
-                pubTickerBox.postOnAnimation(pubTickerLoop);
-            }
-        }, delayMs);
-    }
-
-    private void reiniciarTickerSiVisible() {
-        if (pubTickerBox == null || !pubTickerRunning) return;
-        float prog = (SystemClock.uptimeMillis() - pubTickerT0) / (float) pubTickerDurMs;
-        prog = Math.max(0f, Math.min(0.99f, prog));
-        int gen = ++pubTickerGen;
-        tickerArrancar(gen, prog, 150);
-    }
-
-    private Typeface fuenteDe(String f) {
-        if (f == null) return Typeface.SANS_SERIF;
-        String s = f.toLowerCase().trim();
-        try {
-            switch (s) {
-                case "roboto":     return Typeface.create("sans-serif", Typeface.NORMAL);
-                case "montserrat": return ResourcesCompat.getFont(this, R.font.montserrat);
-                case "poppins":    return ResourcesCompat.getFont(this, R.font.poppins);
-                case "inter":      return ResourcesCompat.getFont(this, R.font.inter);
-                case "bebasneue":  return ResourcesCompat.getFont(this, R.font.bebasneue);
-                case "arial":
-                default:           return Typeface.SANS_SERIF;
-            }
-        } catch (Exception e) {
-            return Typeface.SANS_SERIF;
-        }
-    }
+    // ===== INICIO PARTE 2 =====
 
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
@@ -1297,51 +1132,36 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        @JavascriptInterface public void reproducir(String url, String nombre, String numero, String logo, String referer, float gainArg) {
-            final float gain = (gainArg > 0f && gainArg <= 2f) ? gainArg : 1.0f;
-            final String refererFinal = (referer != null) ? referer : "";
-            runOnUiThread(() -> {
-                int idx = -1;
-                for (int i = 0; i < canales.size(); i++) if (canales.get(i).url.equals(url)) { idx = i; break; }
-                if (idx >= 0) {
-                    indiceActual = idx;
-                    Canal c = canales.get(idx);
-                    String refFinal = (c.referer != null && !c.referer.isEmpty()) ? c.referer : refererFinal;
-                    float gainFinal = (c.gain > 0f) ? c.gain : gain;
-                    reproducirEnExo(new Canal(c.url, c.nombre, c.logo, refFinal, gainFinal, c.oculto));
-                } else reproducirEnExo(new Canal(url, nombre, logo, refererFinal, gain));
-            });
-        }
-        @JavascriptInterface public void reproducir(String url, String nombre, String numero, String logo, String referer) { reproducir(url, nombre, numero, logo, referer, 1.0f); }
-        @JavascriptInterface public void reproducir(String url, String nombre, String numero, String logo) { reproducir(url, nombre, numero, logo, "", 1.0f); }
-
+        // ESTE ES EL MÉTODO CLAVE QUE ARREGLA EL REPRODUCTOR
         @JavascriptInterface public void reproducirCanal(final int idx) {
             runOnUiThread(() -> {
                 if (idx < 0 || idx >= canales.size()) return;
                 indiceActual = idx;
                 Canal c = canales.get(idx);
-                if (esCanalExoPlayer(c.url)) {
-                    reproducirEnExo(c);
-                } else if (c.url.toLowerCase().contains("youtube.com") || c.url.toLowerCase().contains("youtu.be")) {
+                
+                // 1. YouTube va por YouTubePlayerView
+                if (c.url.toLowerCase().contains("youtube.com") || c.url.toLowerCase().contains("youtu.be")) {
                     String vid = null;
                     java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?:watch\\?v=|youtu\\.be/|embed/|live/)([\\w-]{11})").matcher(c.url);
                     if (m.find()) vid = m.group(1);
-                    if (vid != null) reproducirYouTubeNativo(vid);
-                    else irACanalWebView(idx);
-                } else if (esEmbedTercero(c.url)) {
+                    if (vid != null) { reproducirYouTubeNativo(vid); return; }
+                }
+                
+                // 2. Embeds de terceros van por WebView
+                if (esEmbedTercero(c.url)) {
                     detenerTodoNativo();
                     myWebView.setVisibility(View.VISIBLE);
                     myWebView.onResume();
                     myWebView.resumeTimers();
                     enYouTubeWeb = false;
                     irACanalWebView(idx);
-                } else {
-                    irACanalWebView(idx);
+                    return;
                 }
+                
+                // 3. TODO LO DEMÁS va por ExoPlayer (sin importar la extensión)
+                reproducirEnExo(c);
             });
         }
-
-        @JavascriptInterface public boolean esExoPlayer(String url) { return esCanalExoPlayer(url); }
 
         @JavascriptInterface public void mostrarWebView() {
             runOnUiThread(() -> {
@@ -1360,6 +1180,11 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public void abrirDialogo() {
             runOnUiThread(() -> mostrarDialogoAgregarLista());
+        }
+
+        // NUEVO: Para abrir el menú de listas desde el HTML
+        @JavascriptInterface public void abrirMenuListas() {
+            runOnUiThread(() -> mostrarDialogoMisListas());
         }
 
         @JavascriptInterface public void actualizarInfo(String nombre, String numero, String logo) {
@@ -1502,7 +1327,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void mostrarDialogoAgregarLista() {
-        // 1. Preguntamos si quiere usar palabra clave o URL
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Agregar Lista");
 
@@ -1534,8 +1358,6 @@ public class MainActivity extends AppCompatActivity {
             if (!texto.isEmpty()) validarYcargar(texto);
         });
         builder.setNegativeButton("Cancelar", null);
-        
-        // BOTÓN PARA VER MIS LISTAS GUARDADAS
         builder.setNeutralButton("Mis Listas", (dialog, which) -> {
             mostrarDialogoMisListas();
         });
@@ -1601,7 +1423,6 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
                     if (tipo.equals("maestra") || tipo.equals("externa")) {
-                        // Preguntar nombre para guardar la lista
                         pedirNombreYGuardar(urlLista);
                     } else {
                         Toast.makeText(MainActivity.this, "Respuesta inválida del servidor.", Toast.LENGTH_LONG).show();
@@ -1654,7 +1475,7 @@ public class MainActivity extends AppCompatActivity {
                 URL url = new URL(urlFinal);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
-                conn.setInstanceFollowRedirects(true); // Arregla el 301
+                conn.setInstanceFollowRedirects(true);
                 conn.setConnectTimeout(20000);
                 conn.setReadTimeout(20000);
                 conn.setRequestProperty("X-GTV-Origin", SELLO);
@@ -1681,7 +1502,6 @@ public class MainActivity extends AppCompatActivity {
                     canales.addAll(listaParseada);
                     indiceActual = 0;
                     
-                    // GUARDAR LA LISTA LOCALMENTE
                     guardarNuevaLista(nombreLista, contenido, urlLista);
                     
                     enviarListaAlHtml();
@@ -1757,35 +1577,27 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void volverAlWebViewConJS(String js) {
-        tickerDetener(true);
-        mostrarEscudo(false);
-        final boolean veniaDeYouTube = enYouTubeWeb;
-        enExoPlayer = false;
-        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
-        playerContainer.setVisibility(View.GONE);
-        ocultarControlesNativos();
-        detenerLoaderAnim(); ocultarLoaders();
-        if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
-        handler.removeCallbacks(reintentoRunnable);
-        myWebView.setVisibility(View.VISIBLE);
-        myWebView.onResume(); myWebView.resumeTimers();
-        myWebView.postDelayed(() -> {
-            try {
-                if (js != null && !js.isEmpty())
-                    myWebView.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
-            } catch (Exception ignored) {}
-        }, 100);
+    private void irACanalWebView(final int idx) {
+        irACanalWebView(idx, 0);
+    }
+
+    private void irACanalWebView(final int idx, final int intento) {
+        runOnUiThread(() -> {
+            if (myWebView == null) return;
+            myWebView.evaluateJavascript(
+                "(function(){try{return typeof window.irACanal==='function';}catch(e){return false;}})()",
+                value -> {
+                    if ("true".equals(value)) {
+                        myWebView.evaluateJavascript("window.irACanal(" + idx + ");", null);
+                    } else if (intento < 10) {
+                        handler.postDelayed(() -> irACanalWebView(idx, intento + 1), 300);
+                    }
+                });
+        });
     }
 
     private void cerrarExoPlayer() {
         if (enYouTubeWeb) { salirDeYouTube(); return; }
-        if (myWebView != null) {
-            myWebView.evaluateJavascript(
-                "(function(){try{return window._zappingEnCurso?'SI':'NO';}catch(e){return 'NO';}})()",
-                value -> ejecutarCierreExo(value != null && value.contains("SI")));
-            return;
-        }
         ejecutarCierreExo(false);
     }
 
@@ -1939,11 +1751,11 @@ public class MainActivity extends AppCompatActivity {
             SharedPreferences prefs = getSharedPreferences("gtv_prefs", MODE_PRIVATE);
             JSONArray listas = new JSONArray(prefs.getString("listas_guardadas", "[]"));
             
-            // Verificar si ya existe una lista con el mismo nombre para no duplicar
+            JSONArray nuevas = new JSONArray();
             for (int i = 0; i < listas.length(); i++) {
-                if (listas.getJSONObject(i).optString("nombre").equals(nombre)) {
-                    listas.remove(i);
-                    break;
+                JSONObject obj = listas.getJSONObject(i);
+                if (!obj.optString("nombre").equals(nombre)) {
+                    nuevas.put(obj);
                 }
             }
             
@@ -1952,10 +1764,14 @@ public class MainActivity extends AppCompatActivity {
             nueva.put("contenido", contenidoM3U);
             nueva.put("url", urlOriginal);
             nueva.put("fecha", System.currentTimeMillis());
-            listas.put(nueva);
+            nuevas.put(nueva);
             
-            prefs.edit().putString("listas_guardadas", listas.toString()).apply();
-        } catch (Exception e) {}
+            prefs.edit().putString("listas_guardadas", nuevas.toString()).commit();
+            prefs.edit().putString("ultima_lista_nombre", nombre).commit();
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Error guardando lista: " + e.getMessage());
+        }
     }
 
     private void cargarListaGuardadaAlIniciar() {
@@ -1963,10 +1779,23 @@ public class MainActivity extends AppCompatActivity {
             SharedPreferences prefs = getSharedPreferences("gtv_prefs", MODE_PRIVATE);
             JSONArray listas = new JSONArray(prefs.getString("listas_guardadas", "[]"));
             if (listas.length() > 0) {
-                // Cargar la última lista agregada
-                JSONObject ultima = listas.getJSONObject(listas.length() - 1);
-                String contenido = ultima.getString("contenido");
+                String ultimaNombre = prefs.getString("ultima_lista_nombre", null);
+                JSONObject elegida = null;
+                
+                if (ultimaNombre != null) {
+                    for (int i = 0; i < listas.length(); i++) {
+                        if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
+                            elegida = listas.getJSONObject(i);
+                            break;
+                        }
+                    }
+                }
+                
+                if (elegida == null) elegida = listas.getJSONObject(0);
+                
+                String contenido = elegida.getString("contenido");
                 ArrayList<Canal> listaParseada = parsearM3u(contenido);
+                
                 if (!listaParseada.isEmpty()) {
                     canales.clear();
                     canales.addAll(listaParseada);
@@ -1974,7 +1803,9 @@ public class MainActivity extends AppCompatActivity {
                     enviarListaAlHtml();
                 }
             }
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            Log.e(TAG, "Error cargando lista guardada: " + e.getMessage());
+        }
     }
 
     private void mostrarDialogoMisListas() {
@@ -1983,7 +1814,7 @@ public class MainActivity extends AppCompatActivity {
             JSONArray listas = new JSONArray(prefs.getString("listas_guardadas", "[]"));
             
             if (listas.length() == 0) {
-                Toast.makeText(this, "No tenés listas guardadas.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "No tenés listas guardadas. Agregá una con 'Agregar Lista'.", Toast.LENGTH_LONG).show();
                 return;
             }
 
@@ -1993,24 +1824,32 @@ public class MainActivity extends AppCompatActivity {
             }
 
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
-            builder.setTitle("Mis Listas Guardadas");
+            builder.setTitle("📋 Mis Listas");
             builder.setItems(nombres, (dialog, which) -> {
                 try {
                     JSONObject obj = listas.getJSONObject(which);
                     String contenido = obj.getString("contenido");
                     ArrayList<Canal> listaParseada = parsearM3u(contenido);
                     
+                    if (listaParseada.isEmpty()) {
+                        Toast.makeText(MainActivity.this, "La lista está vacía o dañada.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    
                     canales.clear();
                     canales.addAll(listaParseada);
                     indiceActual = 0;
                     enviarListaAlHtml();
                     
-                    Toast.makeText(MainActivity.this, "Lista cargada: " + obj.getString("nombre"), Toast.LENGTH_SHORT).show();
-                } catch (Exception e) {}
+                    prefs.edit().putString("ultima_lista_nombre", obj.getString("nombre")).commit();
+                    
+                    Toast.makeText(MainActivity.this, "Cargada: " + obj.getString("nombre") + " (" + canales.size() + " canales)", Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "Error al cargar la lista.", Toast.LENGTH_SHORT).show();
+                }
             });
             
-            // Botón para borrar una lista
-            builder.setNeutralButton("Borrar Lista", (dialog, which) -> {
+            builder.setNeutralButton("🗑 Borrar Lista", (dialog, which) -> {
                 AlertDialog.Builder delBuilder = new AlertDialog.Builder(this);
                 delBuilder.setTitle("Borrar Lista");
                 delBuilder.setItems(nombres, (d, idx) -> {
@@ -2019,7 +1858,7 @@ public class MainActivity extends AppCompatActivity {
                         for (int i = 0; i < listas.length(); i++) {
                             if (i != idx) nuevasListas.put(listas.get(i));
                         }
-                        prefs.edit().putString("listas_guardadas", nuevasListas.toString()).apply();
+                        prefs.edit().putString("listas_guardadas", nuevasListas.toString()).commit();
                         Toast.makeText(MainActivity.this, "Lista eliminada.", Toast.LENGTH_SHORT).show();
                     } catch (Exception e) {}
                 });
@@ -2029,6 +1868,8 @@ public class MainActivity extends AppCompatActivity {
             builder.setNegativeButton("Cerrar", null);
             builder.show();
 
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            Toast.makeText(this, "Error al leer las listas.", Toast.LENGTH_SHORT).show();
+        }
     }
 }
