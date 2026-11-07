@@ -157,6 +157,63 @@ body:not(.lite) .pelicula-card:focus,body:not(.lite) .ver-todos-card:focus{-webk
 @media (max-width:480px){#gcontent{grid-template-columns:repeat(2,1fr);gap:10px}.pelicula-card,.ver-todos-card{width:110px}.ver-todos-card{min-height:165px}.section-header,.slider-container{padding-left:12px;padding-right:12px}.status-bar{height:40px;font-size:11px}}
 body.tv *{animation:none!important;transition:none!important}
 body.lite .pelicula-card,body.lite .ver-todos-card{transition:none!important}
+
+/* ===== MENÚ DE LISTAS (estilo VivaPlayer) ===== */
+.listas-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.96);z-index:20000;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.listas-overlay.hidden{display:none!important}
+.listas-panel{background:#0f1216;border:2px solid #FFD700;border-radius:24px;width:100%;max-width:960px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.7)}
+.listas-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:2px solid #1e2530;background:#0b0d10;flex-shrink:0}
+.listas-header h2{font-size:20px;color:#FFD700;font-weight:800;letter-spacing:.5px;display:flex;align-items:center;gap:10px}
+.listas-header h2 .logo{font-size:26px}
+.listas-close{background:#1e2530;border:2px solid #2a323b;color:#e9edf1;width:42px;height:42px;border-radius:50%;font-size:20px;cursor:pointer;flex-shrink:0;font-weight:700}
+.listas-close:focus,.listas-close:hover{border-color:#FFD700;color:#FFD700;outline:none}
+.listas-body{padding:18px 22px 22px;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1}
+.listas-sec{margin-bottom:22px}
+.listas-sec-title{font-size:13px;color:#8b96a3;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.listas-maestra{background:linear-gradient(135deg,#2a2200,#1a1500);border:2px solid #FFD700;border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.listas-maestra .icon{font-size:32px;flex-shrink:0}
+.listas-maestra .txt{flex:1;min-width:180px}
+.listas-maestra .txt b{display:block;color:#FFD700;font-size:15px;margin-bottom:2px}
+.listas-maestra .txt small{color:#aaa;font-size:12px;display:block;line-height:1.4}
+.listas-maestra button{background:#FFD700;color:#000;border:none;padding:12px 20px;border-radius:40px;font-weight:800;font-size:14px;cursor:pointer;white-space:nowrap;min-height:44px}
+.listas-maestra button:focus,.listas-maestra button:hover{outline:3px solid #fff;transform:scale(1.03)}
+.listas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.lista-card{background:#14181d;border:2px solid #2a323b;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s}
+.lista-card:focus,.lista-card:hover{border-color:#FFD700;outline:none}
+.lista-card .top{display:flex;align-items:center;gap:10px}
+.lista-card .top .ico{font-size:24px;flex-shrink:0}
+.lista-card .top .info{flex:1;min-width:0}
+.lista-card .top .info b{display:block;font-size:15px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lista-card .top .info small{display:block;font-size:11px;color:#8b96a3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.lista-card .acts{display:flex;gap:8px;flex-wrap:wrap}
+.lista-card .acts button{flex:1;min-width:80px;padding:10px 12px;border-radius:8px;border:1px solid #2a323b;background:#1b2128;color:#e9edf1;font-size:13px;font-weight:700;cursor:pointer;min-height:40px}
+.lista-card .acts button.pri{background:#FFD700;color:#000;border-color:#FFD700}
+.lista-card .acts button.bad{background:#2a0e0e;color:#ff5d5d;border-color:#ff5d5d}
+.lista-card .acts button:focus,.lista-card .acts button:hover{border-color:#FFD700;outline:none}
+.lista-card .acts button.pri:focus,.lista-card .acts button.pri:hover{background:#e6c200}
+.listas-add{background:#14181d;border:2px dashed #2a323b;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.listas-add label{font-size:12px;color:#8b96a3;text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.listas-add input{background:#0d1014;border:1px solid #2a323b;border-radius:8px;padding:12px 14px;color:#e9edf1;font-size:14px;width:100%;min-height:44px}
+.listas-add input:focus{border-color:#FFD700;outline:none}
+.listas-add .row{display:flex;gap:8px;flex-wrap:wrap}
+.listas-add .row input{flex:1;min-width:200px}
+.listas-add button{background:#FFD700;color:#000;border:none;padding:12px 20px;border-radius:8px;font-weight:800;font-size:14px;cursor:pointer;min-height:44px}
+.listas-add button:focus,.listas-add button:hover{outline:3px solid #fff;background:#e6c200}
+.listas-empty{text-align:center;color:#8b96a3;padding:30px 12px;font-size:14px;background:#14181d;border:2px dashed #2a323b;border-radius:14px}
+.listas-footer{padding:14px 22px;border-top:2px solid #1e2530;background:#0b0d10;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;flex-shrink:0;font-size:12px;color:#8b96a3}
+.listas-footer .lic{display:flex;align-items:center;gap:8px}
+.listas-footer .lic b{color:#FFD700}
+.listas-footer button{background:#25D366;color:#fff;border:none;padding:8px 14px;border-radius:40px;font-size:12px;font-weight:700;cursor:pointer}
+.listas-footer button:focus,.listas-footer button:hover{outline:2px solid #fff}
+body.tv .lista-card:focus,body.tv .listas-close:focus,body.tv .listas-add button:focus{box-shadow:0 0 0 3px #FFD700}
+@media(max-width:600px){
+  .listas-panel{max-height:96vh;border-radius:18px}
+  .listas-header{padding:14px 16px}
+  .listas-header h2{font-size:17px}
+  .listas-body{padding:14px 16px 18px}
+  .listas-grid{grid-template-columns:1fr}
+  .listas-footer{padding:12px 16px}
+}
 </style>
 </head>
 <body>
@@ -221,6 +278,57 @@ body.lite .pelicula-card,body.lite .ver-todos-card{transition:none!important}
   </div>
   <div id="gcontent"></div>
 </div>
+
+<!-- ===== MENÚ DE LISTAS (modal) ===== -->
+<div id="listasOverlay" class="listas-overlay hidden">
+  <div class="listas-panel" role="dialog" aria-modal="true" aria-label="Mis listas">
+    <div class="listas-header">
+      <h2><span class="logo">📺</span> Mis Listas</h2>
+      <button class="listas-close" id="listasClose" tabindex="0">✕</button>
+    </div>
+    <div class="listas-body">
+      <div class="listas-sec">
+        <div class="listas-sec-title">🔑 Lista maestra</div>
+        <div class="listas-maestra">
+          <span class="icon">🔑</span>
+          <div class="txt">
+            <b>Acceso con palabra clave</b>
+            <small>Ingresá la palabra secreta en el campo de abajo. Si es correcta, se carga la lista maestra.</small>
+          </div>
+          <button id="btnMaestra" tabindex="0">Usar palabra clave</button>
+        </div>
+      </div>
+
+      <div class="listas-sec">
+        <div class="listas-sec-title">📋 Mis listas guardadas</div>
+        <div id="listasGrid" class="listas-grid">
+          <div class="listas-empty">Cargando…</div>
+        </div>
+      </div>
+
+      <div class="listas-sec">
+        <div class="listas-sec-title">➕ Agregar nueva lista</div>
+        <div class="listas-add">
+          <div>
+            <label>URL de la lista M3U o palabra clave</label>
+            <div class="row">
+              <input id="nuevaListaInput" placeholder="https://... o palabra secreta" autocomplete="off" spellcheck="false">
+              <button id="nuevaListaBtn" tabindex="0">Cargar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="listas-footer">
+      <div class="lic" id="licStatus">—</div>
+      <button id="listasWa" tabindex="0">💬 WhatsApp</button>
+    </div>
+  </div>
+</div>
+
+<!-- Botón flotante de menú de listas (visible siempre) -->
+<button id="btnMenuListasFlotante" tabindex="0" title="Mis Listas" style="position:fixed;top:56px;right:12px;z-index:150;width:46px;height:46px;border-radius:50%;background:rgba(0,0,0,.75);color:#FFD700;border:2px solid #FFD700;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.5)">☰</button>
+
 <script>
 (function(){
 'use strict';
@@ -234,7 +342,6 @@ var SELLO = 'gtv_app_2026_secreto_xyz789';
 var BLOQUEO_MS = 250;
 var NUEVO_DIAS = 7;
 
-/* Embeds de terceros: se reproducen en iframe dentro del WebView */
 var EMBED_RE = /kick\.com|twitch\.tv|ok\.ru|odnoklassniki\.ru|dailymotion\.com|tokyvideo\.com/i;
 
 /* ===== HELPERS ===== */
@@ -509,9 +616,11 @@ function visibleCerca(i){var v=canalesVisibles();if(!v.length)return -1;for(var 
 function renderLista(){
   if(!S.list.length){
     S.byUrl={};
-    D.list.innerHTML='<div class="empty"><div class="icon">📺</div><div class="title">GTV Play R</div><div class="subtitle">No tenés ninguna lista cargada todavía.<br>Agregá tu lista M3U para empezar a ver canales.</div><button id="btnAddList" tabindex="0">➕ AGREGAR LISTA</button><small>GTV Play R · Creado por Gabriel</small></div>';
+    D.list.innerHTML='<div class="empty"><div class="icon">📺</div><div class="title">GTV Play R</div><div class="subtitle">No tenés ninguna lista cargada todavía.<br>Agregá tu lista M3U o ingresá tu palabra clave.</div><button id="btnAddList" tabindex="0">➕ AGREGAR LISTA</button><button id="btnMisListas" tabindex="0" style="background:#1e2530;color:#FFD700;border:2px solid #FFD700;margin-top:12px;box-shadow:none">📋 MIS LISTAS</button><small>GTV Play R · Creado por Gabriel</small></div>';
     var btn = $('btnAddList');
     if(btn) btn.onclick = function(){ if(hasNat('abrirDialogo')) nat('abrirDialogo'); else alert('Función no disponible'); };
+    var btn2 = $('btnMisListas');
+    if(btn2) btn2.onclick = function(){ abrirMenuListasHTML(); };
     return;
   }
   var h=[],by={};
@@ -546,7 +655,6 @@ function lazyObserve(root){
   for(i=0;i<l.length;i++)IO.observe(l[i]);
 }
 
-/* Envía la lista (con ocultos) al MainActivity para que zapping/reproducción nativos usen los mismos índices */
 function syncNativo(){
   if(!hasNat('setLista'))return;
   try{
@@ -635,7 +743,6 @@ function ifrSet(el,src){
   el.src=src;
   el.style.display='block';
 }
-/* Convierte la URL del canal en URL embebible y elige el iframe correspondiente */
 function embedUrl(u){
   var m;
   if((m=u.match(/kick\.com\/([\w-]+)/i)))return 'https://player.kick.com/'+m[1];
@@ -691,8 +798,6 @@ function lanzar(ch,pos,total){
     S.nativeAt=Date.now();
     nat('reproducir',url,ch.nombre||ch.name,(posV>0?posV:1)+'/'+total,ch.logo||'',ch.referer||'',ch.gain||1.0);
   } else {
-    /* Embeds (Kick/Twitch/OK/Dailymotion/Tokyvideo): se reproducen en iframe dentro del WebView.
-       Si venimos de un motor nativo, lo frenamos y mostramos el WebView. */
     S.native=false;
     if(hasNat('mostrarWebView'))nat('mostrarWebView');
     ifrSet(ifrDe(url),embedUrl(url));
@@ -1197,7 +1302,10 @@ document.addEventListener('keydown',function(e){
   if(S.locked)return;
   var k=keyName(e);
   if(!k)return;
-  if(k==='back'){e.preventDefault();e.stopPropagation();atras();return}
+  if(k==='back'){
+    if(!listasOverlay.classList.contains('hidden')){ e.preventDefault(); e.stopPropagation(); cerrarMenuListasHTML(); return; }
+    e.preventDefault();e.stopPropagation();atras();return;
+  }
   if(S.dlg){navDialog(k,e);return}
   if(k!=='ok'&&(S.grid||S.view==='movies'||S.view==='list')&&frenar(e))return;
   if(S.grid){navGrid(k,e);return}
@@ -1219,7 +1327,7 @@ document.addEventListener('keyup',function(e){
 function cargarListaInicial(){
   var cached=ls.getJ('gtv_channels',null);
   if(cached&&cached.length){
-    aplicarLista(cached);   // también sincroniza la lista con el nativo (setLista)
+    aplicarLista(cached);
   } else {
     renderLista();
   }
@@ -1262,6 +1370,105 @@ $('goRot').onclick=function(){S.rotated=!S.rotated;ls.set('gtv_rot',String(S.rot
 $('shield').onclick=showUI;
 
 window.addEventListener('resize',function(){S.cols=0});
+
+/* ===== MENÚ DE LISTAS ===== */
+var listasOverlay = document.getElementById('listasOverlay');
+var listasGrid = document.getElementById('listasGrid');
+
+function abrirMenuListasHTML(){
+  if(!listasOverlay) return;
+  listasOverlay.classList.remove('hidden');
+  listasOverlay.style.display = 'flex';
+  cargarListasEnMenu();
+  setTimeout(function(){ var c=document.getElementById('listasClose'); if(c)c.focus(); }, 80);
+}
+window.abrirMenuListasHTML = abrirMenuListasHTML;
+
+function cerrarMenuListasHTML(){
+  if(!listasOverlay) return;
+  listasOverlay.classList.add('hidden');
+  listasOverlay.style.display = 'none';
+  if(S.view==='list'){ setTimeout(restaurarFoco, 40); }
+}
+window.cerrarMenuListasHTML = cerrarMenuListasHTML;
+
+function cargarListasEnMenu(){
+  if(!listasGrid) return;
+  listasGrid.innerHTML = '<div class="listas-empty">Cargando…</div>';
+  var json = '';
+  try { if(hasNat('listarListas')) json = nat('listarListas') || '[]'; } catch(e){ json = '[]'; }
+  var listas = [];
+  try { listas = JSON.parse(json); } catch(e){ listas = []; }
+  if(!listas.length){
+    listasGrid.innerHTML = '<div class="listas-empty">Todavía no tenés listas guardadas.<br>Agregá una abajo con su URL o palabra clave.</div>';
+  } else {
+    var h = '';
+    for(var i=0;i<listas.length;i++){
+      var l = listas[i];
+      var fecha = l.fecha ? new Date(l.fecha).toLocaleDateString('es-AR') : '';
+      var nom = esc(l.nombre || ('Lista '+(i+1)));
+      var n = l.canales || 0;
+      h += '<div class="lista-card" tabindex="0" data-nombre="'+esc(l.nombre||'')+'">'
+        + '<div class="top"><span class="ico">📋</span><div class="info"><b>'+nom+'</b><small>'+n+' canales'+(fecha?' · '+fecha:'')+'</small></div></div>'
+        + '<div class="acts">'
+        + '<button class="pri" data-acc="usar" data-nombre="'+esc(l.nombre||'')+'">▶ Usar</button>'
+        + '<button class="bad" data-acc="eliminar" data-nombre="'+esc(l.nombre||'')+'">🗑</button>'
+        + '</div></div>';
+    }
+    listasGrid.innerHTML = h;
+  }
+  var licEl = document.getElementById('licStatus');
+  if(licEl){
+    if(tieneLicencia()){
+      var p = lic.expirationDate.split('-');
+      licEl.innerHTML = '✅ <b>FULL</b> · vence '+p[2]+'/'+p[1]+'/'+p[0];
+    } else if(demoActiva()){
+      var rest=(remote.horasDemo*3600000)-(Date.now()-lic.demoStart);
+      var hh=Math.floor(rest/3600000), mm=Math.floor((rest%3600000)/60000);
+      licEl.innerHTML = '🎁 <b>DEMO</b> · '+hh+'h '+mm+'m';
+    } else {
+      licEl.innerHTML = '⚠️ <b>DEMO EXPIRADA</b>';
+    }
+  }
+}
+
+listasGrid.addEventListener('click', function(e){
+  var b = e.target.closest('button[data-acc]');
+  if(!b) return;
+  var acc = b.dataset.acc;
+  var nombre = b.dataset.nombre || '';
+  if(acc === 'usar'){
+    if(hasNat('usarLista')){ nat('usarLista', nombre); cerrarMenuListasHTML(); }
+  } else if(acc === 'eliminar'){
+    if(confirm('¿Eliminar la lista "'+nombre+'"?')){
+      if(hasNat('eliminarLista')) nat('eliminarLista', nombre);
+      setTimeout(cargarListasEnMenu, 200);
+    }
+  }
+});
+
+document.getElementById('listasClose').addEventListener('click', cerrarMenuListasHTML);
+listasOverlay.addEventListener('click', function(e){ if(e.target===listasOverlay) cerrarMenuListasHTML(); });
+
+document.getElementById('btnMaestra').addEventListener('click', function(){
+  var inp = document.getElementById('nuevaListaInput');
+  if(inp){ inp.focus(); inp.value=''; }
+});
+
+document.getElementById('nuevaListaBtn').addEventListener('click', function(){
+  var inp = document.getElementById('nuevaListaInput');
+  var txt = (inp.value||'').trim();
+  if(!txt){ alert('Ingresá una URL o la palabra clave'); return; }
+  cerrarMenuListasHTML();
+  if(hasNat('abrirDialogo')) nat('abrirDialogo');
+});
+
+document.getElementById('listasWa').addEventListener('click', function(){
+  if(typeof abrirWhatsApp === 'function') abrirWhatsApp();
+});
+
+var btnFlotante = document.getElementById('btnMenuListasFlotante');
+if(btnFlotante) btnFlotante.addEventListener('click', abrirMenuListasHTML);
 
 /* ===== ARRANQUE ===== */
 cargarLicLocal();
