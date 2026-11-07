@@ -1,4 +1,4 @@
-name: Build APK
+name: Build and Auto Release APK
 
 on:
   push:
@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Permiso crucial para crear el Release automáticamente
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,6 +28,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # 1. Extraer la versión del build.gradle
+      - name: Extract version from build.gradle
+        id: get_version
+        run: |
+          VERSION=$(grep 'versionName' app/build.gradle | head -1 | sed -E 's/.*versionName "([^"]+)".*/\1/')
+          echo "VERSION_NAME=$VERSION" >> $GITHUB_ENV
+          echo "La versión detectada es: v$VERSION"
+
       - name: Build release APK
         env:
           KEYSTORE_PATH: gtv-release.jks
@@ -33,8 +44,22 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
-      - name: Upload APK
+      # 2. Subir el APK como Artifact (opcional, para que lo veas en la pestaña Actions)
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release
           path: app/build/outputs/apk/release/*.apk
+
+      # 3. Crear el Release en GitHub y adjuntar el APK automáticamente
+      - name: Create Release and Upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}
+          name: GTV Play R v${{ env.VERSION_NAME }}
+          draft: false
+          prerelease: false
+          files: app/build/outputs/apk/release/*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
