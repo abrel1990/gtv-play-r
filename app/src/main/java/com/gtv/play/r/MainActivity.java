@@ -165,7 +165,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String UPDATE_PREFS = "gtv_r_update";
     private static final String UPDATE_TRIES_PREFIX = "gtv_r_update_tries_";
-    private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version";
+    private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version-r";
     private static final int MAX_SKIPS = 3;
 
     private final ExecutorService ytExec = Executors.newSingleThreadExecutor();
