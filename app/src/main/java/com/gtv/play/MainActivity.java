@@ -1321,7 +1321,15 @@ public class MainActivity extends AppCompatActivity {
             return Typeface.SANS_SERIF;
         }
     }
-
+    private void avisarAlWebView(String js) {
+        if (myWebView == null || !webViewListo) return;
+        myWebView.post(() -> {
+            try {
+                myWebView.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
+            } catch (Exception ignored) {}
+        });
+    }
+    
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
 
