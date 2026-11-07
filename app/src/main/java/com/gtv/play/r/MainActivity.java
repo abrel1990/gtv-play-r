@@ -774,7 +774,6 @@ public class MainActivity extends AppCompatActivity {
                 super.onPageFinished(view, url);
                 webViewListo = true;
                 if (url != null && url.startsWith("file:///android_asset/")) {
-                    // Le avisamos al HTML que el nativo está listo
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 }
             }
@@ -1652,8 +1651,8 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 if (myWebView != null && webViewListo) {
                     try {
-                        // Guardamos en localStorage para que el HTML no la pierda al reiniciar
-                        String js = "localStorage.setItem('gtv_lista_cache', " + JSONObject.quote(json) + ");"
+                        // Guardamos la lista en el localStorage para que no se pierda al reiniciar
+                        String js = "localStorage.setItem('gtv_channels', " + JSONObject.quote(json) + ");"
                                   + "window.gtvSetCanales&&window.gtvSetCanales(" + JSONObject.quote(json) + ");";
                         myWebView.evaluateJavascript(js, null);
                     } catch (Exception ignored) {}
@@ -1717,7 +1716,7 @@ public class MainActivity extends AppCompatActivity {
         ytToken++;
         if (myWebView == null) { finish(); return; }
         myWebView.evaluateJavascript(
-            "(function(){try{return window.atrasNativo?window.atrasNativo():false}catch(e){return false}})();",
+            "(function(){try{return window.atrasNativo?window.atrasNativo():false}catch(e){return false}})()",
             v -> { if (!"true".equals(v)) finishAndRemoveTask(); });
     }
 
