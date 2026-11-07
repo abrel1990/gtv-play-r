@@ -5,7 +5,6 @@ import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.ContentUris;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
@@ -35,7 +34,6 @@ import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -74,15 +72,20 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTube
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.videolan.libvlc.LibVLC;
+import org.videolan.libvlc.Media;
+import org.videolan.libvlc.MediaPlayer;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -90,12 +93,11 @@ import java.util.concurrent.Executors;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GTV_R_DEBUG";
+
     private WebView myWebView;
     private ExoPlayer exoPlayer;
     private PlayerView playerView;
     private TextureView videoTexture;
-    private YouTubePlayerView youtubePlayerView;
-    private YouTubePlayer youtubePlayer;
     private FrameLayout playerContainer;
     private FrameLayout rotWrapper;
     private LinearLayout infoCanal;
@@ -106,24 +108,28 @@ public class MainActivity extends AppCompatActivity {
     private TextView exoLoaderError;
     private Button btnPrev, btnNext, btnClose, btnRotate;
     private View btnShield;
+    private View overlayControls;
+    private YouTubePlayerView youtubePlayerView;
+    private SurfaceView vlcSurface;
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
     private boolean bgGuardado = false;
 
+    private LibVLC libVlc;
+    private MediaPlayer vlcPlayer;
+    private boolean enVlc = false;
+
     private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
+    private static final String VALIDAR_URL = "https://gtv-portero.abrel03.workers.dev/api/reproductor/validar";
     private static final String SELLO = "gtv_app_2026_secreto_xyz789";
-    private static final String VALIDAR_URL = WORKER_URL + "api/reproductor/validar";
-    
     private boolean enYouTubeWeb = false;
+    private boolean enYouTubeNativo = false;
     private String jsPendienteAlVolver = null;
 
     private final ArrayList<Canal> canales = new ArrayList<>();
     private int indiceActual = -1;
-    private boolean esPeliculas = false;
-    private String urlPeliculasM3U = null;
 
     private boolean rotado = false;
     private volatile boolean enExoPlayer = false;
-    private volatile boolean enYouTubeNativo = false;
     private boolean controlesVisibles = false;
     private final Handler handler = new Handler();
     private Runnable ocultarControlesRunnable;
@@ -156,9 +162,9 @@ public class MainActivity extends AppCompatActivity {
     private final ArrayList<String> historialCanales = new ArrayList<>();
     private static final int MAX_HISTORIAL = 10;
 
-    private static final String UPDATE_PREFS = "gtv_update";
-    private static final String UPDATE_TRIES_PREFIX = "gtv_update_tries_";
-    private static final String VERSION_URL = WORKER_URL + "api/version-r"; // Actualización separada
+    private static final String UPDATE_PREFS = "gtv_r_update";
+    private static final String UPDATE_TRIES_PREFIX = "gtv_r_update_tries_";
+    private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version";
     private static final int MAX_SKIPS = 3;
 
     private final ExecutorService ytExec = Executors.newSingleThreadExecutor();
@@ -166,6 +172,9 @@ public class MainActivity extends AppCompatActivity {
 
     private Canal canalActual;
     private int reintentos = 0;
+    private int reintentosVlc = 0;
+    private boolean probandoVlc = false;
+
     private final Runnable reintentoRunnable = new Runnable() {
         @Override public void run() {
             if (!enExoPlayer || exoPlayer == null || canalActual == null) return;
@@ -183,36 +192,24 @@ public class MainActivity extends AppCompatActivity {
             indiceActual = zapPend;
             zapPend = -1;
             Canal c = canales.get(indiceActual);
-
             nombreCanal.setText(c.nombre);
             numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
             if (c.logo != null && !c.logo.isEmpty()) {
                 Glide.with(MainActivity.this).load(c.logo).into(logoCanal);
             }
-
             String u = c.url.toLowerCase();
             boolean esYT = u.contains("youtube.com") || u.contains("youtu.be");
-
+            boolean esEmbedTercero = u.contains("kick.com") || u.contains("twitch.tv")
+                || u.contains("ok.ru") || u.contains("odnoklassniki.ru")
+                || u.contains("dailymotion.com") || u.contains("tokyvideo.com");
             if (esYT) {
-                detenerTodoNativo();
+                reproducirEnYouTube(c);
+            } else if (esEmbedTercero) {
+                if (enExoPlayer || enVlc) detenerMotores();
                 myWebView.setVisibility(View.VISIBLE);
                 myWebView.onResume();
                 myWebView.resumeTimers();
                 enYouTubeWeb = true;
-                String videoId = null;
-                java.util.regex.Matcher mVid = java.util.regex.Pattern.compile("(?:watch\\?v=|youtu\\.be/|embed/|live/)([\\w-]{11})").matcher(c.url);
-                if (mVid.find()) videoId = mVid.group(1);
-                if (videoId != null) {
-                    reproducirYouTubeNativo(videoId);
-                } else {
-                    irACanalWebView(indiceActual);
-                }
-            } else if (esEmbedTercero(c.url)) {
-                detenerTodoNativo();
-                myWebView.setVisibility(View.VISIBLE);
-                myWebView.onResume();
-                myWebView.resumeTimers();
-                enYouTubeWeb = false;
                 irACanalWebView(indiceActual);
             } else {
                 reproducirEnExo(c);
@@ -224,6 +221,8 @@ public class MainActivity extends AppCompatActivity {
         final String url, nombre, logo, referer;
         final float gain;
         boolean oculto;
+        boolean esPeliculas;
+        String urlPeliculasM3U;
 
         Canal(String url, String nombre, String logo) {
             this(url, nombre, logo, "", 1.0f, false);
@@ -265,11 +264,13 @@ public class MainActivity extends AppCompatActivity {
         btnShield = findViewById(R.id.btn_shield);
         exoLoader = findViewById(R.id.exo_loader);
         exoLoaderError = findViewById(R.id.exo_loader_error);
+        overlayControls = findViewById(R.id.overlay_controls);
         youtubePlayerView = findViewById(R.id.youtube_player_view);
+        vlcSurface = findViewById(R.id.vlc_surface);
 
         inicializarPublicidadNativa();
 
-        rotado = getSharedPreferences("gtv_prefs", MODE_PRIVATE).getBoolean("rotado", false);
+        rotado = getSharedPreferences("gtv_r_prefs", MODE_PRIVATE).getBoolean("rotado", false);
 
         DefaultRenderersFactory renderers = new DefaultRenderersFactory(this)
             .setEnableDecoderFallback(true);
@@ -285,6 +286,9 @@ public class MainActivity extends AppCompatActivity {
 
         inyectarTextureView();
         playerView.setPlayer(exoPlayer);
+
+        getLifecycle().addObserver(youtubePlayerView);
+        youtubePlayerView.setVisibility(View.GONE);
 
         exoPlayer.addListener(new Player.Listener() {
             @Override
@@ -314,7 +318,13 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 if (reintentar()) return;
-
+                if (!probandoVlc && canalActual != null) {
+                    probandoVlc = true;
+                    reintentosVlc = 0;
+                    Log.e(TAG, "ExoPlayer falló, probando LibVLC: " + canalActual.url);
+                    reproducirConVLC(canalActual);
+                    return;
+                }
                 detenerLoaderAnim();
                 mostrarLoaderError();
                 Log.e(TAG, "ExoPlayer error (" + error.errorCode + "): " + error.getMessage());
@@ -328,27 +338,19 @@ public class MainActivity extends AppCompatActivity {
         videoTexture.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
                 exoPlayer.setVideoTextureView(videoTexture);
-                Log.e(TAG, "TextureView disponible: " + w + "x" + h);
             }
             @Override public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) {}
             @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) { return true; }
             @Override public void onSurfaceTextureUpdated(SurfaceTexture st) {}
         });
 
-        youtubePlayerView.addYouTubePlayerListener(new AbstractYouTubePlayerListener() {
-            @Override
-            public void onReady(YouTubePlayer ytPlayer) {
-                youtubePlayer = ytPlayer;
-            }
-        });
-        getLifecycle().addObserver(youtubePlayerView);
-
+        inicializarVLC();
         configurarWebView();
         configurarBotones();
 
         Map<String, String> extraHeaders = new HashMap<>();
         extraHeaders.put("X-GTV-Origin", SELLO);
-        myWebView.loadUrl("file:///android_asset/index.html", extraHeaders);
+        myWebView.loadUrl(WORKER_URL, extraHeaders);
 
         ocultarBarrasSistema();
 
@@ -357,25 +359,22 @@ public class MainActivity extends AppCompatActivity {
             try { inicializarWatchNext(); }
             catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
         }, 5000);
-
-        // CARGAR LISTA GUARDADA AL INICIAR
-        cargarListaGuardadaAlIniciar();
     }
 
-    private void detenerTodoNativo() {
-        ytToken++;
-        tickerDetener(true);
-        enExoPlayer = false;
-        enYouTubeNativo = false;
-        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
-        try { if (youtubePlayer != null) youtubePlayer.pause(); } catch (Exception ignored) {}
-        playerContainer.setVisibility(View.GONE);
-        youtubePlayerView.setVisibility(View.GONE);
-        ocultarControlesNativos();
-        detenerLoaderAnim();
-        ocultarLoaders();
-        if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
-        handler.removeCallbacks(reintentoRunnable);
+    private void inicializarVLC() {
+        try {
+            ArrayList<String> args = new ArrayList<>();
+            args.add("--no-drop-late-frames");
+            args.add("--no-skip-frames");
+            args.add("--rtsp-tcp");
+            args.add("--network-caching=1500");
+            libVlc = new LibVLC(this, args);
+            vlcPlayer = new MediaPlayer(libVlc);
+            vlcPlayer.setEventListener(event -> {});
+        } catch (Throwable t) {
+            libVlc = null;
+            vlcPlayer = null;
+        }
     }
 
     private boolean reintentar() {
@@ -387,11 +386,169 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
+    private void reproducirConVLC(Canal c) {
+        if (vlcPlayer == null) { mostrarLoaderError(); return; }
+        enExoPlayer = false;
+        enVlc = true;
+        enYouTubeNativo = false;
+        enYouTubeWeb = false;
+        canalActual = c;
+        detenerLoaderAnim();
+        myWebView.setVisibility(View.GONE);
+        youtubePlayerView.setVisibility(View.GONE);
+        playerView.setVisibility(View.GONE);
+        playerContainer.setVisibility(View.VISIBLE);
+        playerContainer.bringToFront();
+        try { if (exoPlayer != null) { exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
+        nombreCanal.setText(c.nombre);
+        numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+        if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
+        vlcSurface.setVisibility(View.VISIBLE);
+        try {
+            final Media media = new Media(libVlc, Uri.parse(c.url));
+            if (c.referer != null && !c.referer.isEmpty()) media.addOption(":http-referrer=" + c.referer);
+            media.addOption(":network-caching=1500");
+            vlcPlayer.setMedia(media);
+            media.release();
+            vlcPlayer.setVolume((int)(c.gain * 100));
+            vlcPlayer.play();
+        } catch (Exception e) { mostrarLoaderError(); return; }
+        mostrarLoaderSintonizando();
+        handler.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (!enVlc) return;
+                if (vlcPlayer != null && vlcPlayer.isPlaying()) {
+                    detenerLoaderAnim(); ocultarLoaders();
+                    avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
+                } else if (reintentosVlc < 2) {
+                    reintentosVlc++;
+                    handler.postDelayed(this, 3000);
+                } else {
+                    detenerLoaderAnim(); mostrarLoaderError();
+                    avisarAlWebView("window.gtv&&window.gtv.onNativoError&&window.gtv.onNativoError();");
+                }
+            }
+        }, 2000);
+        mostrarControles();
+        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+    }
+
+    private void reproducirEnYouTube(Canal c) {
+        ytToken++;
+        enExoPlayer = false;
+        enVlc = false;
+        enYouTubeWeb = false;
+        enYouTubeNativo = true;
+        canalActual = c;
+        detenerMotores();
+        myWebView.setVisibility(View.GONE);
+        playerContainer.setVisibility(View.VISIBLE);
+        playerContainer.bringToFront();
+        playerView.setVisibility(View.GONE);
+        vlcSurface.setVisibility(View.GONE);
+        youtubePlayerView.setVisibility(View.VISIBLE);
+        nombreCanal.setText(c.nombre);
+        numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+        if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
+        mostrarLoaderSintonizando();
+        final int tok = ytToken;
+        String handle = null, channelId = null, videoId = null;
+        java.util.regex.Matcher mCh = java.util.regex.Pattern.compile("channel/(UC[\\w-]{22})").matcher(c.url);
+        if (mCh.find()) channelId = mCh.group(1);
+        java.util.regex.Matcher mVid = java.util.regex.Pattern.compile("(?:watch\\?v=|youtu\\.be/|/live/|/embed/|/shorts/)([\\w-]{11})").matcher(c.url);
+        if (mVid.find()) videoId = mVid.group(1);
+        java.util.regex.Matcher mH = java.util.regex.Pattern.compile("youtube\\.com/(@[\\w.-]+)").matcher(c.url);
+        if (mH.find()) handle = mH.group(1);
+        if (videoId != null) {
+            cargarVideoEnYoutubeNativo(videoId, tok);
+        } else if (channelId != null || handle != null) {
+            final String chId = channelId;
+            final String h = handle;
+            new Thread(() -> {
+                String vid = resolverVideoIdLive(chId, h);
+                runOnUiThread(() -> {
+                    if (tok != ytToken) return;
+                    if (vid != null) cargarVideoEnYoutubeNativo(vid, tok);
+                    else { detenerLoaderAnim(); mostrarLoaderError(); }
+                });
+            }).start();
+        } else {
+            detenerLoaderAnim(); mostrarLoaderError();
+        }
+        mostrarControles();
+        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+    }
+
+    private void cargarVideoEnYoutubeNativo(final String videoId, final int tok) {
+        runOnUiThread(() -> {
+            if (tok != ytToken) return;
+            try {
+                youtubePlayerView.addYouTubePlayerListener(new AbstractYouTubePlayerListener() {
+                    @Override
+                    public void onReady(YouTubePlayer youTubePlayer) {
+                        if (tok != ytToken) return;
+                        youTubePlayer.loadVideo(videoId, 0f);
+                        detenerLoaderAnim(); ocultarLoaders();
+                        avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
+                    }
+                });
+            } catch (Exception e) {
+                detenerLoaderAnim(); mostrarLoaderError();
+            }
+        });
+    }
+
+    private String resolverVideoIdLive(String channelId, String handle) {
+        try {
+            String url = (channelId != null)
+                ? "https://www.youtube.com/channel/" + channelId + "/live"
+                : "https://www.youtube.com/" + handle + "/live";
+            URL u = new URL(url);
+            HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                String finalUrl = conn.getURL().toString();
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("[?&]v=([\\w-]{11})").matcher(finalUrl);
+                if (m.find()) { conn.disconnect(); return m.group(1); }
+                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                br.close();
+                String html = sb.toString();
+                int idx = html.indexOf("\"videoDetails\"");
+                if (idx != -1) {
+                    String block = html.substring(idx, Math.min(idx + 5000, html.length()));
+                    java.util.regex.Matcher vm = java.util.regex.Pattern.compile("\"videoId\":\"([\\w-]{11})\"").matcher(block);
+                    java.util.regex.Matcher lm = java.util.regex.Pattern.compile("\"isLive\"\\s*:\\s*true").matcher(block);
+                    if (vm.find() && lm.find()) { conn.disconnect(); return vm.group(1); }
+                }
+            }
+            conn.disconnect();
+        } catch (Exception e) {}
+        return null;
+    }
+
+    private void detenerMotores() {
+        try { if (exoPlayer != null) { exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
+        try { if (vlcPlayer != null) { vlcPlayer.stop(); } } catch (Exception ignored) {}
+        enExoPlayer = false;
+        enVlc = false;
+        enYouTubeNativo = false;
+    }
+
     private void reproducirEnExo(Canal c) {
         ytToken++;
         mostrarEscudo(false);
         enYouTubeWeb = false;
         enYouTubeNativo = false;
+        enVlc = false;
+        probandoVlc = false;
         enExoPlayer = true;
         canalActual = c;
         reintentos = 0;
@@ -399,6 +556,8 @@ public class MainActivity extends AppCompatActivity {
         myWebView.setVisibility(View.GONE);
         myWebView.onPause();
         youtubePlayerView.setVisibility(View.GONE);
+        vlcSurface.setVisibility(View.GONE);
+        playerView.setVisibility(View.VISIBLE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
         nombreCanal.setText(c.nombre);
@@ -417,34 +576,13 @@ public class MainActivity extends AppCompatActivity {
         playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
     }
 
-    private void reproducirYouTubeNativo(String videoId) {
-        runOnUiThread(() -> {
-            ytToken++;
-            enExoPlayer = false;
-            enYouTubeWeb = false;
-            enYouTubeNativo = true;
-            try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
-            playerContainer.setVisibility(View.GONE);
-            myWebView.setVisibility(View.GONE);
-            youtubePlayerView.setVisibility(View.VISIBLE);
-            youtubePlayerView.bringToFront();
-            if (youtubePlayer != null) {
-                youtubePlayer.loadVideo(videoId, 0);
-            }
-            mostrarControles();
-        });
-    }
-
     private MediaSource construirMediaSource(Canal c) {
         DefaultHttpDataSource.Factory f = new DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(10000)
             .setReadTimeoutMs(10000);
-
         Map<String, String> h = new HashMap<>();
-        h.put("User-Agent",
-            "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+        h.put("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
         if (c.referer != null && !c.referer.isEmpty()) {
             h.put("Referer", c.referer);
             try {
@@ -453,16 +591,13 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception ignored) {}
         }
         f.setDefaultRequestProperties(h);
-
         DefaultExtractorsFactory extractors = new DefaultExtractorsFactory()
             .setTsExtractorFlags(
                 DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
                     | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS);
-
         MediaItem.Builder ib = new MediaItem.Builder().setUri(c.url);
         String mime = mimeDe(c.url);
         if (mime != null) ib.setMimeType(mime);
-
         return new DefaultMediaSourceFactory(f, extractors)
             .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
             .createMediaSource(ib.build());
@@ -480,11 +615,14 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
-    private boolean esEmbedTercero(String url) {
+    private boolean esCanalExoPlayer(String url) {
         if (url == null) return false;
         String u = url.toLowerCase();
-        return u.contains("kick.com") || u.contains("twitch.tv") || u.contains("ok.ru")
-            || u.contains("odnoklassniki.ru") || u.contains("dailymotion.com") || u.contains("tokyvideo.com");
+        if (u.contains("youtube.com") || u.contains("youtu.be")) return false;
+        if (u.contains("kick.com") || u.contains("twitch.tv")
+            || u.contains("ok.ru") || u.contains("odnoklassniki.ru")
+            || u.contains("dailymotion.com") || u.contains("tokyvideo.com")) return false;
+        return true;
     }
 
     private void navegar(int delta) {
@@ -505,11 +643,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void rotar() {
         rotado = !rotado;
-        getSharedPreferences("gtv_prefs", MODE_PRIVATE).edit().putBoolean("rotado", rotado).apply();
-        aplicarRotacionYouTube();
+        getSharedPreferences("gtv_r_prefs", MODE_PRIVATE).edit().putBoolean("rotado", rotado).apply();
         aplicarRotacion();
         reposicionarBotones();
         reiniciarTickerSiVisible();
+        avisarAlWebView("window.rotarDesdeAndroid&&window.rotarDesdeAndroid(" + rotado + ");");
     }
 
     private void aplicarRotacion() {
@@ -527,25 +665,95 @@ public class MainActivity extends AppCompatActivity {
         FrameLayout.LayoutParams lpRot = (FrameLayout.LayoutParams) btnRotate.getLayoutParams();
         FrameLayout.LayoutParams lpClose = (FrameLayout.LayoutParams) btnClose.getLayoutParams();
         if (rotado) {
-            lpRot.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+            lpRot.gravity = Gravity.TOP | Gravity.END;
             lpRot.topMargin = 40; lpRot.rightMargin = 40; lpRot.bottomMargin = 0;
-            lpClose.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+            lpClose.gravity = Gravity.BOTTOM | Gravity.END;
             lpClose.bottomMargin = 40; lpClose.rightMargin = 40;
         } else {
-            lpRot.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+            lpRot.gravity = Gravity.BOTTOM | Gravity.END;
             lpRot.bottomMargin = 160; lpRot.rightMargin = 40; lpRot.topMargin = 0;
-            lpClose.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.END;
+            lpClose.gravity = Gravity.BOTTOM | Gravity.END;
             lpClose.bottomMargin = 40; lpClose.rightMargin = 40;
         }
         btnRotate.setLayoutParams(lpRot);
         btnClose.setLayoutParams(lpClose);
     }
 
+    private void inyectarTextureView() {
+        View contentFrame = playerView.findViewById(androidx.media3.ui.R.id.exo_content_frame);
+        if (!(contentFrame instanceof ViewGroup)) return;
+        ViewGroup cf = (ViewGroup) contentFrame;
+        for (int i = cf.getChildCount() - 1; i >= 0; i--) if (cf.getChildAt(i) instanceof SurfaceView) cf.removeViewAt(i);
+        videoTexture = new TextureView(this);
+        videoTexture.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        cf.addView(videoTexture, 0);
+    }
+
+    private void irACanalWebView(final int idx) {
+        irACanalWebView(idx, 0);
+    }
+
+    private void irACanalWebView(final int idx, final int intento) {
+        runOnUiThread(() -> {
+            if (myWebView == null) return;
+            myWebView.evaluateJavascript(
+                "(function(){try{return typeof window.irACanal==='function';}catch(e){return false;}})()",
+                value -> {
+                    if ("true".equals(value)) {
+                        myWebView.evaluateJavascript("window.irACanal(" + idx + ");", null);
+                    } else if (intento < 10) {
+                        handler.postDelayed(() -> irACanalWebView(idx, intento + 1), 300);
+                    }
+                });
+        });
+    }
+
+    private void mostrarLoaderSintonizando() {
+        if (exoLoader == null) return;
+        if (exoLoaderError != null) exoLoaderError.setVisibility(View.GONE);
+        exoLoader.setVisibility(View.VISIBLE);
+        if (loaderAnim != null) loaderHandler.removeCallbacks(loaderAnim);
+        loaderPunto = 0;
+        loaderAnim = new Runnable() {
+            @Override public void run() {
+                if (exoLoader == null || exoLoader.getVisibility() != View.VISIBLE) return;
+                int paso = loaderPunto % 4;
+                String texto = "Sintonizando" + (paso == 0 ? "   " : paso == 1 ? ".  " : paso == 2 ? ".. " : "...");
+                exoLoader.setText(texto);
+                loaderPunto++;
+                loaderHandler.postDelayed(this, 400);
+            }
+        };
+        loaderHandler.post(loaderAnim);
+    }
+
+    private void mostrarLoaderError() {
+        if (exoLoader != null) exoLoader.setVisibility(View.GONE);
+        if (exoLoaderError != null) exoLoaderError.setVisibility(View.VISIBLE);
+    }
+
+    private void ocultarLoaders() {
+        if (exoLoader != null) { exoLoader.setVisibility(View.GONE); exoLoader.setText("Sintonizando..."); }
+        if (exoLoaderError != null) exoLoaderError.setVisibility(View.GONE);
+    }
+
+    private void detenerLoaderAnim() { if (loaderAnim != null) loaderHandler.removeCallbacks(loaderAnim); }
+
+    private void programarTimeoutCanal() {
+        if (timeoutCanalCaido != null) handler.removeCallbacks(timeoutCanalCaido);
+        timeoutCanalCaido = () -> {
+            if (enExoPlayer && exoPlayer != null && exoPlayer.getPlaybackState() != Player.STATE_READY) {
+                if (!reintentar()) { detenerLoaderAnim(); mostrarLoaderError(); }
+            }
+        };
+        handler.postDelayed(timeoutCanalCaido, 15000);
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private void configurarWebView() {
         WebSettings s = myWebView.getSettings();
         s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true); s.setAllowContentAccess(true);
+        s.setAllowFileAccess(false); s.setAllowContentAccess(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
@@ -553,8 +761,6 @@ public class MainActivity extends AppCompatActivity {
         s.setDatabaseEnabled(true); s.setSupportZoom(false);
         s.setSaveFormData(false); s.setGeolocationEnabled(false);
         s.setTextZoom(100);
-        s.setAllowUniversalAccessFromFileURLs(true);
-        s.setAllowFileAccessFromFileURLs(true);
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setSupportMultipleWindows(false);
         s.setUserAgentString("Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
@@ -566,29 +772,15 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 webViewListo = true;
-                if (enYouTubeWeb && url != null && url.contains("youtube.com/embed")) {
-                    aplicarRotacionYouTube();
-                    myWebView.requestFocus();
-                    view.postDelayed(() -> MainActivity.this.aplicarRotacionYouTube(), 1500);
-                    handler.postDelayed(() -> { if (myWebView != null) myWebView.requestFocus(); }, 1500);
+                if (url != null && url.startsWith(WORKER_URL)) {
+                    final String js = jsPendienteAlVolver;
+                    jsPendienteAlVolver = null;
+                    if (js != null && !enExoPlayer) ejecutarJsCuandoListo(view, js, 0);
                 }
             }
-
-            @Override
-            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                return super.shouldInterceptRequest(view, request);
-            }
-
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
-                    try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) {}
-                    return true;
-                }
-                return false;
-            }
-            @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
                     try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) {}
                     return true;
                 }
@@ -597,6 +789,61 @@ public class MainActivity extends AppCompatActivity {
         });
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
+    }
+
+    private void ejecutarJsCuandoListo(final WebView view, final String js, final int intento) {
+        if (view == null || intento > 20) return;
+        view.evaluateJavascript(
+            "(function(){try{return typeof window.irACanal==='function';}catch(e){return false;}})()",
+            value -> {
+                if ("true".equals(value)) {
+                    view.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
+                } else {
+                    view.postDelayed(() -> ejecutarJsCuandoListo(view, js, intento + 1), 250);
+                }
+            });
+    }
+
+    private void avisarAlWebView(String js) {
+        if (myWebView == null || !webViewListo) return;
+        myWebView.post(() -> {
+            try { myWebView.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null); } catch (Exception ignored) {}
+        });
+    }
+
+    private void configurarBotones() {
+        btnShield.setOnClickListener(v -> mostrarControles());
+        btnNext.setOnClickListener(v -> { navegar(+1); mostrarControles(); });
+        btnPrev.setOnClickListener(v -> { navegar(-1); mostrarControles(); });
+        btnClose.setOnClickListener(v -> cerrarExoPlayer());
+        btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
+        overlayControls.setOnClickListener(v -> mostrarControles());
+        overlayControls.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { navegar(+1); mostrarControles(); return true; }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { navegar(-1); mostrarControles(); return true; }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) { mostrarControles(); return true; }
+            }
+            return false;
+        });
+    }
+
+    private void mostrarControles() {
+        if (!enExoPlayer && !enYouTubeNativo && !enVlc) return;
+        controlesVisibles = true;
+        infoCanal.setVisibility(View.VISIBLE);
+        btnPrev.setVisibility(View.VISIBLE); btnNext.setVisibility(View.VISIBLE);
+        btnClose.setVisibility(View.VISIBLE); btnRotate.setVisibility(View.VISIBLE);
+        if (ocultarControlesRunnable != null) handler.removeCallbacks(ocultarControlesRunnable);
+        ocultarControlesRunnable = this::ocultarControlesNativos;
+        handler.postDelayed(ocultarControlesRunnable, 5000);
+    }
+
+    private void ocultarControlesNativos() {
+        controlesVisibles = false;
+        infoCanal.setVisibility(View.GONE);
+        btnPrev.setVisibility(View.GONE); btnNext.setVisibility(View.GONE);
+        btnClose.setVisibility(View.GONE); btnRotate.setVisibility(View.GONE);
     }
 
     private void mostrarEscudo(boolean on) {
@@ -614,12 +861,6 @@ public class MainActivity extends AppCompatActivity {
             myWebView.setFocusableInTouchMode(false);
             playerContainer.setVisibility(View.VISIBLE);
             playerContainer.bringToFront();
-            if (indiceActual >= 0 && indiceActual < canales.size()) {
-                Canal c = canales.get(indiceActual);
-                nombreCanal.setText(c.nombre);
-                numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
-                if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
-            }
             mostrarControles();
             playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
         } else {
@@ -633,83 +874,52 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void salirDeYouTube() {
+    private void cerrarExoPlayer() {
         tickerDetener(true);
-        ytToken++;
-        enYouTubeWeb = false;
         mostrarEscudo(false);
         enExoPlayer = false;
-        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+        enVlc = false;
+        enYouTubeNativo = false;
+        canalActual = null;
+        handler.removeCallbacks(reintentoRunnable);
+        detenerMotores();
         playerContainer.setVisibility(View.GONE);
+        youtubePlayerView.setVisibility(View.GONE);
+        vlcSurface.setVisibility(View.GONE);
+        playerView.setVisibility(View.GONE);
         ocultarControlesNativos();
-        detenerLoaderAnim();
-        ocultarLoaders();
-
+        detenerLoaderAnim(); ocultarLoaders();
+        if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
         myWebView.setVisibility(View.VISIBLE);
-        myWebView.onResume();
-        myWebView.resumeTimers();
-
-        String js = "window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");"
-            + "window.volverDelExo&&window.volverDelExo();";
+        myWebView.onResume(); myWebView.resumeTimers();
         myWebView.postDelayed(() -> {
             try {
-                if (js != null && !js.isEmpty())
-                    myWebView.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
+                myWebView.evaluateJavascript(
+                    "javascript:window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");"
+                  + "window.volverDelExo&&window.volverDelExo();", null);
             } catch (Exception ignored) {}
-        }, 100);
-    }
-
-    private void aplicarRotacionYouTube() {
-        if (myWebView == null || !enYouTubeWeb) return;
-        String css = rotado
-            ? "html{position:fixed!important;top:50%!important;left:50%!important;width:100vh!important;"
-              + "height:100vw!important;margin-top:-50vw!important;margin-left:-50vh!important;"
-              + "transform:rotate(90deg)!important;background:#000!important;}"
-            : "";
-        String js = "(function(){"
-            + "window.__gtvRotCss='" + css + "';"
-            + "function ap(){var s=document.getElementById('gtv-rot');"
-            + "if(!s){s=document.createElement('style');s.id='gtv-rot';(document.head||document.documentElement).appendChild(s);}"
-            + "if(s.textContent!==window.__gtvRotCss)s.textContent=window.__gtvRotCss;}"
-            + "ap();"
-            + "if(!window.__gtvRotTimer)window.__gtvRotTimer=setInterval(ap,500);"
-            + "})();";
-        myWebView.evaluateJavascript(js, null);
-    }
-
-    private void configurarBotones() {
-        btnShield.setOnClickListener(v -> mostrarControles());
-        btnNext.setOnClickListener(v -> { navegar(+1); mostrarControles(); });
-        btnPrev.setOnClickListener(v -> { navegar(-1); mostrarControles(); });
-        btnClose.setOnClickListener(v -> cerrarExoPlayer());
-        btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
+        }, 32);
     }
 
     private void inicializarPublicidadNativa() {
         if (rotWrapper == null) return;
-
         pubTickerBox = new FrameLayout(this);
         pubTickerBox.setVisibility(View.GONE);
         pubTickerBox.setBackgroundColor(0x88000000);
-        FrameLayout.LayoutParams boxLp = new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, dp(36));
+        FrameLayout.LayoutParams boxLp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(36));
         boxLp.gravity = Gravity.BOTTOM;
         pubTickerBox.setLayoutParams(boxLp);
-
         pubTickerTxt = new TextView(this);
         pubTickerTxt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
         pubTickerTxt.setSingleLine(true);
         pubTickerTxt.setHorizontallyScrolling(true);
-        pubTickerTxt.setEllipsize(null);
         pubTickerTxt.setTextColor(0xFFFFFFFF);
         pubTickerTxt.setShadowLayer(4f, 0f, 1f, 0xD9000000);
         pubTickerTxt.setGravity(Gravity.CENTER_VERTICAL);
         pubTickerTxt.setPadding(dp(12), 0, dp(12), 0);
-        pubTickerTxt.setLayoutParams(new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        pubTickerTxt.setLayoutParams(new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
         pubTickerBox.addView(pubTickerTxt);
         rotWrapper.addView(pubTickerBox);
-
         pubModal = new FrameLayout(this);
         pubModal.setVisibility(View.GONE);
         pubModal.setBackgroundColor(0xCC000000);
@@ -717,25 +927,18 @@ public class MainActivity extends AppCompatActivity {
         modalLp.gravity = Gravity.BOTTOM | Gravity.END;
         modalLp.setMargins(dp(16), dp(16), dp(16), dp(48));
         pubModal.setLayoutParams(modalLp);
-
         pubModalImg = new ImageView(this);
         pubModalImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        pubModalImg.setLayoutParams(new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        pubModalImg.setLayoutParams(new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         pubModal.addView(pubModalImg);
-
         pubModalVid = new VideoView(this);
         pubModalVid.setVisibility(View.GONE);
-        pubModalVid.setLayoutParams(new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        pubModalVid.setLayoutParams(new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         pubModal.addView(pubModalVid);
-
         rotWrapper.addView(pubModal);
     }
 
-    private int dp(int v) {
-        return Math.round(v * getResources().getDisplayMetrics().density);
-    }
+    private int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
 
     private int parsearColor(String c, int def) {
         if (c == null) return def;
@@ -743,18 +946,6 @@ public class MainActivity extends AppCompatActivity {
         if (s.isEmpty()) return def;
         if (s.equals("transparent")) return Color.TRANSPARENT;
         try {
-            if (s.startsWith("rgb")) {
-                int a = s.indexOf('('), z = s.indexOf(')');
-                if (a < 0 || z < 0) return def;
-                String[] p = s.substring(a + 1, z).split(",");
-                if (p.length < 3) return def;
-                int r = Math.round(Float.parseFloat(p[0].trim()));
-                int g = Math.round(Float.parseFloat(p[1].trim()));
-                int bl = Math.round(Float.parseFloat(p[2].trim()));
-                float al = p.length > 3 ? Float.parseFloat(p[3].trim()) : 1f;
-                al = Math.max(0f, Math.min(1f, al));
-                return Color.argb(Math.round(al * 255), r, g, bl);
-            }
             if (s.startsWith("#") && s.length() == 4) {
                 s = "#" + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2) + s.charAt(3) + s.charAt(3);
             } else if (s.startsWith("#") && s.length() == 9) {
@@ -774,8 +965,7 @@ public class MainActivity extends AppCompatActivity {
                 avisarAlWebView("window.gtv&&window.gtv.onTickerTerminado&&window.gtv.onTickerTerminado();");
                 return;
             }
-            if (pubTickerTxt != null)
-                pubTickerTxt.setTranslationX(pubTickerFrom + (pubTickerTo - pubTickerFrom) * t);
+            if (pubTickerTxt != null) pubTickerTxt.setTranslationX(pubTickerFrom + (pubTickerTo - pubTickerFrom) * t);
             pubTickerBox.postOnAnimation(this);
         }
     };
@@ -828,17 +1018,35 @@ public class MainActivity extends AppCompatActivity {
         String s = f.toLowerCase().trim();
         try {
             switch (s) {
-                case "roboto":     return Typeface.create("sans-serif", Typeface.NORMAL);
                 case "montserrat": return ResourcesCompat.getFont(this, R.font.montserrat);
-                case "poppins":    return ResourcesCompat.getFont(this, R.font.poppins);
-                case "inter":      return ResourcesCompat.getFont(this, R.font.inter);
-                case "bebasneue":  return ResourcesCompat.getFont(this, R.font.bebasneue);
-                case "arial":
-                default:           return Typeface.SANS_SERIF;
+                case "poppins": return ResourcesCompat.getFont(this, R.font.poppins);
+                case "inter": return ResourcesCompat.getFont(this, R.font.inter);
+                case "bebasneue": return ResourcesCompat.getFont(this, R.font.bebasneue);
+                default: return Typeface.SANS_SERIF;
             }
-        } catch (Exception e) {
-            return Typeface.SANS_SERIF;
-        }
+        } catch (Exception e) { return Typeface.SANS_SERIF; }
+    }
+
+    private void mostrarTickerImpl(final String texto, final String badge, final int velocidad,
+                                    final String colorBg, final String colorAc, final int tamPx,
+                                    final String fuente) {
+        runOnUiThread(() -> {
+            if (pubTickerBox == null || pubTickerTxt == null) return;
+            tickerDetener(false);
+            final int gen = pubTickerGen;
+            String tf = (badge != null && !badge.isEmpty()) ? (badge + "  " + texto) : String.valueOf(texto);
+            pubTickerTxt.setText(tf);
+            int tamSeguro = Math.max(8, Math.min(72, tamPx));
+            pubTickerTxt.setTextSize(TypedValue.COMPLEX_UNIT_SP, tamSeguro);
+            pubTickerTxt.setTypeface(fuenteDe(fuente));
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubTickerBox.getLayoutParams();
+            int altura = Math.max(dp(32), dp(tamSeguro + 10));
+            if (lp.height != altura) { lp.height = altura; pubTickerBox.setLayoutParams(lp); }
+            pubTickerBox.setBackgroundColor(parsearColor(colorBg, 0x88000000));
+            pubTickerTxt.setTextColor(parsearColor(colorAc, 0xFFFFFFFF));
+            pubTickerDurMs = Math.max(1, velocidad) * 1000;
+            tickerArrancar(gen, 0f, 0);
+        });
     }
 
     private void checkForUpdates() {
@@ -853,7 +1061,7 @@ public class MainActivity extends AppCompatActivity {
                 conn.setRequestProperty("X-GTV-Origin", SELLO);
                 if (conn.getResponseCode() != 200) return;
                 InputStream is = conn.getInputStream();
-                java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(is));
+                BufferedReader br = new BufferedReader(new InputStreamReader(is));
                 StringBuilder sb = new StringBuilder();
                 String line;
                 while ((line = br.readLine()) != null) sb.append(line);
@@ -904,13 +1112,12 @@ public class MainActivity extends AppCompatActivity {
         Button btnMasTarde = dialogView.findViewById(R.id.dialogBtnMasTarde);
         if (obligatorio) {
             dialogTitle.setText("⚠️ Actualización obligatoria");
-            dialogTitle.setTextColor(0xFFE53935);
             dialogSubtitle.setText("Es necesario actualizar GTV Play R");
             dialogMensaje.setText("Es necesario actualizar para seguir usando la app.");
         } else {
             dialogTitle.setText("🎉 Nueva versión disponible");
             dialogSubtitle.setText("Actualización de GTV Play R");
-            dialogMensaje.setText("Podés actualizar ahora o más tarde.\nTe quedan " + (MAX_SKIPS - skips) + " oportunidades antes de que sea obligatorio.");
+            dialogMensaje.setText("Podés actualizar ahora o más tarde.\nTe quedan " + (MAX_SKIPS - skips) + " oportunidades.");
         }
         dialogVersionActual.setText("Versión actual:  " + getCurrentVersionName());
         dialogVersionNueva.setText("Nueva versión:  " + remoteVersion);
@@ -925,16 +1132,10 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
         if (dialog.getWindow() != null) {
             int screenWidth = getResources().getDisplayMetrics().widthPixels;
-            int screenHeight = getResources().getDisplayMetrics().heightPixels;
-            int dialogWidth = (screenWidth > screenHeight) ? (int)(screenWidth * 0.55) : (int)(screenWidth * 0.90);
-            if (screenWidth <= screenHeight) {
-                int maxAnchoPx = (int)(340 * getResources().getDisplayMetrics().density);
-                if (dialogWidth > maxAnchoPx) dialogWidth = maxAnchoPx;
-            }
+            int dialogWidth = (int)(screenWidth * 0.90);
             dialog.getWindow().setLayout(dialogWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
         btnActualizar.post(() -> { btnActualizar.requestFocus(); btnActualizar.setFocusable(true); btnActualizar.setFocusableInTouchMode(true); });
-        if (!obligatorio) { btnMasTarde.setFocusable(true); btnMasTarde.setFocusableInTouchMode(true); }
     }
 
     private void descargarEInstalar(String apkUrl) {
@@ -989,124 +1190,113 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void mostrarLoaderSintonizando() {
-        if (exoLoader == null) return;
-        if (exoLoaderError != null) exoLoaderError.setVisibility(View.GONE);
-        exoLoader.setVisibility(View.VISIBLE);
-        if (loaderAnim != null) loaderHandler.removeCallbacks(loaderAnim);
-        loaderPunto = 0;
-        loaderAnim = new Runnable() {
-            @Override public void run() {
-                if (exoLoader == null || exoLoader.getVisibility() != View.VISIBLE) return;
-                int paso = loaderPunto % 4;
-                String texto = "Sintonizando" + (paso == 0 ? "   " : paso == 1 ? ".  " : paso == 2 ? ".. " : "...");
-                exoLoader.setText(texto);
-                loaderPunto++;
-                loaderHandler.postDelayed(this, 400);
+    // ==================== WATCHNEXT ====================
+
+    private boolean esTV() {
+        return getPackageManager().hasSystemFeature("android.software.leanback");
+    }
+
+    private void inicializarWatchNext() {
+        if (!esTV()) return;
+        try { watchNextChannelId = obtenerOCrearCanalWatchNext(); } catch (Exception ignored) {}
+    }
+
+    private long obtenerOCrearCanalWatchNext() {
+        try {
+            Cursor cursor = getContentResolver().query(
+                TvContractCompat.Channels.CONTENT_URI,
+                new String[]{TvContractCompat.Channels._ID, TvContractCompat.Channels.COLUMN_DISPLAY_NAME},
+                null, null, null);
+            if (cursor != null) {
+                while (cursor.moveToNext()) {
+                    if (WATCH_NEXT_CHANNEL_NAME.equals(cursor.getString(1))) {
+                        long id = cursor.getLong(0);
+                        cursor.close();
+                        return id;
+                    }
+                }
+                cursor.close();
             }
-        };
-        loaderHandler.post(loaderAnim);
+            android.content.ContentValues values = new android.content.ContentValues();
+            values.put(TvContractCompat.Channels.COLUMN_DISPLAY_NAME, WATCH_NEXT_CHANNEL_NAME);
+            values.put(TvContractCompat.Channels.COLUMN_DESCRIPTION, "Últimos canales que viste en GTV Play R");
+            values.put(TvContractCompat.Channels.COLUMN_TYPE, TvContractCompat.Channels.TYPE_PREVIEW);
+            values.put(TvContractCompat.Channels.COLUMN_BROWSABLE, 0);
+            values.put(TvContractCompat.Channels.COLUMN_SEARCHABLE, 0);
+            values.put(TvContractCompat.Channels.COLUMN_APP_LINK_INTENT_URI, "gtvplayr://play?url=");
+            Uri channelUri = getContentResolver().insert(TvContractCompat.Channels.CONTENT_URI, values);
+            if (channelUri == null) return -1;
+            long channelId = ContentUris.parseId(channelUri);
+            try { TvContractCompat.requestChannelBrowsable(this, channelId); } catch (Exception ignored) {}
+            return channelId;
+        } catch (Exception e) { return -1; }
     }
 
-    private void mostrarLoaderError() {
-        if (exoLoader != null) exoLoader.setVisibility(View.GONE);
-        if (exoLoaderError != null) exoLoaderError.setVisibility(View.VISIBLE);
+    private void agregarAlWatchNext(Canal canal) {
+        if (!esTV() || watchNextChannelId == -1 || canal == null || canal.url == null) return;
+        try {
+            String intentUri = "gtvplayr://play?url=" + Uri.encode(canal.url)
+                + "&nombre=" + Uri.encode(canal.nombre != null ? canal.nombre : "")
+                + "&logo=" + Uri.encode(canal.logo != null ? canal.logo : "");
+            WatchNextProgram.Builder builder = new WatchNextProgram.Builder();
+            builder.setType(TvContractCompat.WatchNextPrograms.TYPE_CLIP);
+            builder.setWatchNextType(TvContractCompat.WatchNextPrograms.WATCH_NEXT_TYPE_CONTINUE);
+            builder.setLastEngagementTimeUtcMillis(System.currentTimeMillis());
+            builder.setTitle(canal.nombre != null ? canal.nombre : "Canal");
+            builder.setDescription("GTV Play R");
+            builder.setIntentUri(Uri.parse(intentUri));
+            if (canal.logo != null && !canal.logo.isEmpty()) builder.setPosterArtUri(Uri.parse(canal.logo));
+            builder.setInternalProviderId(canal.url);
+            try {
+                getContentResolver().delete(
+                    TvContractCompat.WatchNextPrograms.CONTENT_URI,
+                    TvContractCompat.WatchNextPrograms.COLUMN_INTERNAL_PROVIDER_ID + "=?",
+                    new String[]{ canal.url });
+            } catch (Exception ignored) {}
+            getContentResolver().insert(TvContractCompat.WatchNextPrograms.CONTENT_URI, builder.build().toContentValues());
+        } catch (Exception ignored) {}
     }
 
-    private void ocultarLoaders() {
-        if (exoLoader != null) { exoLoader.setVisibility(View.GONE); exoLoader.setText("Sintonizando..."); }
-        if (exoLoaderError != null) exoLoaderError.setVisibility(View.GONE);
+    private void actualizarWatchNext() {
+        if (!esTV() || canales.isEmpty() || indiceActual < 0 || indiceActual >= canales.size()) return;
+        Canal c = canales.get(indiceActual);
+        if (c == null) return;
+        historialCanales.remove(c.url);
+        historialCanales.add(0, c.url);
+        while (historialCanales.size() > MAX_HISTORIAL) historialCanales.remove(historialCanales.size() - 1);
+        agregarAlWatchNext(c);
     }
 
-    private void detenerLoaderAnim() { if (loaderAnim != null) loaderHandler.removeCallbacks(loaderAnim); }
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        manejarIntentEntrante(intent);
+    }
 
-    private void programarTimeoutCanal() {
-        if (timeoutCanalCaido != null) handler.removeCallbacks(timeoutCanalCaido);
-        timeoutCanalCaido = () -> {
-            if (exoPlayer != null && exoPlayer.getPlaybackState() != Player.STATE_READY) {
-                if (!reintentar()) { detenerLoaderAnim(); mostrarLoaderError(); }
+    private void manejarIntentEntrante(Intent intent) {
+        if (intent == null || intent.getData() == null) return;
+        Uri data = intent.getData();
+        if (!"gtvplayr".equals(data.getScheme())) return;
+        String url = data.getQueryParameter("url");
+        if (url == null || url.isEmpty()) return;
+        new Handler().postDelayed(() -> {
+            int idx = -1;
+            for (int i = 0; i < canales.size(); i++) {
+                if (canales.get(i).url.equals(url)) { idx = i; break; }
             }
-        };
-        handler.postDelayed(timeoutCanalCaido, 15000);
+            if (idx >= 0) { indiceActual = idx; zapPend = idx; handler.post(zapRun); }
+        }, 2000);
     }
-
-    private String generarDeviceId() {
-        if (deviceIdCache != null) return deviceIdCache;
-        String androidId = null;
-        try { androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID); } catch (Exception ignored) {}
-        if (androidId == null || androidId.isEmpty()) androidId = "GTV_FALLBACK_" + Build.MODEL + "_" + Build.SERIAL;
-        final String ALFABETO = "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ";
-        long hash = 0;
-        for (int i = 0; i < androidId.length(); i++) hash = (hash * 31 + androidId.charAt(i)) & 0xFFFFFFFFL;
-        hash = hash ^ (hash >> 16);
-        hash = (hash * 0x45d9f3bL) & 0xFFFFFFFFL;
-        StringBuilder sb = new StringBuilder("GTV-R-");
-        long h = hash;
-        for (int i = 0; i < 6; i++) { sb.append(ALFABETO.charAt((int)(h % ALFABETO.length()))); h = h / ALFABETO.length(); h = h ^ (h >> 3); }
-        deviceIdCache = sb.toString();
-        return deviceIdCache;
-    }
-
-    private void inyectarTextureView() {
-        View contentFrame = playerView.findViewById(androidx.media3.ui.R.id.exo_content_frame);
-        if (!(contentFrame instanceof ViewGroup)) return;
-        ViewGroup cf = (ViewGroup) contentFrame;
-        for (int i = cf.getChildCount() - 1; i >= 0; i--) if (cf.getChildAt(i) instanceof SurfaceView) cf.removeViewAt(i);
-        videoTexture = new TextureView(this);
-        videoTexture.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        cf.addView(videoTexture, 0);
-    }
-
-    private boolean esCanalExoPlayer(String url) {
-        if (url == null) return false;
-        String u = url.toLowerCase();
-        if (u.contains(".m3u8") || u.contains(".mpd") || u.contains(".mp4")
-            || u.contains(".ts") || u.contains(".webm") || u.contains(".mkv")) return true;
-        if (u.contains("/hls/") || u.contains("type=hls") || u.contains("format=hls")
-            || u.contains("type=m3u8") || u.contains("format=m3u8")) return true;
-        if (u.contains("youtube.com") || u.contains("youtu.be")) return false;
-        return false;
-    }
-
-    // ===== INICIO PARTE 2 =====
 
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
-
-        @JavascriptInterface public String getSignatureHash() {
-            try {
-                android.content.pm.PackageManager pm = getPackageManager();
-                android.content.pm.PackageInfo pi;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    pi = pm.getPackageInfo(getPackageName(), android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES);
-                    android.content.pm.SigningInfo si = pi.signingInfo;
-                    if (si == null) return "";
-                    android.content.pm.Signature[] sigs = si.hasMultipleSigners() ? si.getApkContentsSigners() : si.getSigningCertificateHistory();
-                    if (sigs == null || sigs.length == 0) return "";
-                    return calcularSHA256(sigs[0].toByteArray());
-                } else {
-                    pi = pm.getPackageInfo(getPackageName(), android.content.pm.PackageManager.GET_SIGNATURES);
-                    if (pi.signatures == null || pi.signatures.length == 0) return "";
-                    return calcularSHA256(pi.signatures[0].toByteArray());
-                }
-            } catch (Exception e) { return ""; }
-        }
-
-        private String calcularSHA256(byte[] data) throws Exception {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(data);
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < hash.length; i++) { if (i > 0) sb.append(":"); sb.append(String.format("%02X", hash[i])); }
-            return sb.toString();
-        }
 
         @JavascriptInterface public void setLista(final String json) {
             runOnUiThread(() -> {
                 try {
                     JSONArray arr = new JSONArray(json);
                     canales.clear();
-                    esPeliculas = false;
-                    urlPeliculasM3U = null;
                     for (int i = 0; i < arr.length(); i++) {
                         JSONObject o = arr.getJSONObject(i);
                         String nombre = o.optString("nombre", o.optString("name", "Canal " + (i + 1)));
@@ -1114,10 +1304,10 @@ public class MainActivity extends AppCompatActivity {
                         float gain = (float) o.optDouble("gain", 1.0);
                         if (gain <= 0f || gain > 2f) gain = 1.0f;
                         boolean oculto = o.optBoolean("oculto", false);
-                        boolean esP = o.optBoolean("esPeliculas", false);
-                        String urlPM = o.optString("urlPeliculasM3U", null);
-                        if (esP && urlPM != null && !urlPM.isEmpty()) { esPeliculas = true; urlPeliculasM3U = urlPM; }
-                        canales.add(new Canal(o.getString("url"), nombre, o.optString("logo", ""), referer, gain, oculto));
+                        Canal c = new Canal(o.getString("url"), nombre, o.optString("logo", ""), referer, gain, oculto);
+                        c.esPeliculas = o.optBoolean("esPeliculas", false);
+                        c.urlPeliculasM3U = o.optString("urlPeliculasM3U", null);
+                        canales.add(c);
                     }
                 } catch (Exception ignored) {}
             });
@@ -1132,35 +1322,40 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        // ESTE ES EL MÉTODO CLAVE QUE ARREGLA EL REPRODUCTOR
-        @JavascriptInterface public void reproducirCanal(final int idx) {
+        @JavascriptInterface public void reproducir(String url, String nombre, String numero, String logo, String referer, float gainArg) {
+            final float gain = (gainArg > 0f && gainArg <= 2f) ? gainArg : 1.0f;
+            final String refererFinal = (referer != null) ? referer : "";
+            runOnUiThread(() -> {
+                int idx = -1;
+                for (int i = 0; i < canales.size(); i++) if (canales.get(i).url.equals(url)) { idx = i; break; }
+                if (idx >= 0) {
+                    indiceActual = idx;
+                    zapPend = idx;
+                    handler.post(zapRun);
+                } else {
+                    Canal c = new Canal(url, nombre, logo, refererFinal, gain);
+                    if (esCanalYouTube(url)) reproducirEnYouTube(c);
+                    else if (esEmbedTercero(url)) { enYouTubeWeb = true; irACanalWebView(indiceActual); }
+                    else reproducirEnExo(c);
+                }
+            });
+        }
+        @JavascriptInterface public void reproducir(String url, String nombre, String numero, String logo, String referer) { reproducir(url, nombre, numero, logo, referer, 1.0f); }
+        @JavascriptInterface public void reproducir(String url, String nombre, String numero, String logo) { reproducir(url, nombre, numero, logo, "", 1.0f); }
+
+        @JavascriptInterface public void reproducirCanal(int idx) {
             runOnUiThread(() -> {
                 if (idx < 0 || idx >= canales.size()) return;
                 indiceActual = idx;
-                Canal c = canales.get(idx);
-                
-                // 1. YouTube va por YouTubePlayerView
-                if (c.url.toLowerCase().contains("youtube.com") || c.url.toLowerCase().contains("youtu.be")) {
-                    String vid = null;
-                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?:watch\\?v=|youtu\\.be/|embed/|live/)([\\w-]{11})").matcher(c.url);
-                    if (m.find()) vid = m.group(1);
-                    if (vid != null) { reproducirYouTubeNativo(vid); return; }
-                }
-                
-                // 2. Embeds de terceros van por WebView
-                if (esEmbedTercero(c.url)) {
-                    detenerTodoNativo();
-                    myWebView.setVisibility(View.VISIBLE);
-                    myWebView.onResume();
-                    myWebView.resumeTimers();
-                    enYouTubeWeb = false;
-                    irACanalWebView(idx);
-                    return;
-                }
-                
-                // 3. TODO LO DEMÁS va por ExoPlayer (sin importar la extensión)
-                reproducirEnExo(c);
+                zapPend = idx;
+                handler.post(zapRun);
             });
+        }
+
+        @JavascriptInterface public boolean esExoPlayer(String url) { return esCanalExoPlayer(url); }
+
+        @JavascriptInterface public void abrirDialogo() {
+            runOnUiThread(() -> mostrarDialogoAgregarLista());
         }
 
         @JavascriptInterface public void mostrarWebView() {
@@ -1168,8 +1363,13 @@ public class MainActivity extends AppCompatActivity {
                 ytToken++;
                 tickerDetener(true);
                 enExoPlayer = false;
-                try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+                enVlc = false;
+                enYouTubeNativo = false;
+                detenerMotores();
                 playerContainer.setVisibility(View.GONE);
+                youtubePlayerView.setVisibility(View.GONE);
+                vlcSurface.setVisibility(View.GONE);
+                playerView.setVisibility(View.GONE);
                 myWebView.setVisibility(View.VISIBLE);
                 myWebView.onResume(); myWebView.resumeTimers();
                 ocultarControlesNativos();
@@ -1178,31 +1378,9 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public void cerrarPlayer() { runOnUiThread(() -> cerrarExoPlayer()); }
 
-        @JavascriptInterface public void abrirDialogo() {
-            runOnUiThread(() -> mostrarDialogoAgregarLista());
-        }
-
-        // NUEVO: Para abrir el menú de listas desde el HTML
-        @JavascriptInterface public void abrirMenuListas() {
-            runOnUiThread(() -> mostrarDialogoMisListas());
-        }
-
-        @JavascriptInterface public void actualizarInfo(String nombre, String numero, String logo) {
-            runOnUiThread(() -> {
-                nombreCanal.setText(nombre); numeroCanal.setText(numero);
-                if (logo != null && !logo.isEmpty()) Glide.with(MainActivity.this).load(logo).into(logoCanal);
-            });
-        }
-
-        @JavascriptInterface public void salirApp() {
-            runOnUiThread(() -> finishAndRemoveTask());
-        }
+        @JavascriptInterface public void salirApp() { runOnUiThread(() -> finishAndRemoveTask()); }
 
         @JavascriptInterface public boolean estaEnExo() { return enExoPlayer; }
-
-        @JavascriptInterface public void rotarDesdeAndroid(final boolean r) {
-            runOnUiThread(() -> { rotado = r; getSharedPreferences("gtv_prefs", MODE_PRIVATE).edit().putBoolean("rotado", rotado).apply(); aplicarRotacion(); });
-        }
 
         @JavascriptInterface
         public void mostrarTicker(final String texto, final String badge, final int velocidad,
@@ -1224,21 +1402,16 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface
-        public void ocultarTicker() {
-            runOnUiThread(() -> tickerDetener(true));
-        }
+        public void ocultarTicker() { runOnUiThread(() -> tickerDetener(true)); }
 
         @JavascriptInterface
         public void mostrarModalPublicidad(final String url, final boolean esVideo, final int duracionSeg) {
             runOnUiThread(() -> {
                 if (pubModal == null) return;
-                if (pubModalVid != null) {
-                    try { pubModalVid.stopPlayback(); pubModalVid.setVideoURI(null); } catch (Exception ignored) {}
-                }
+                if (pubModalVid != null) { try { pubModalVid.stopPlayback(); pubModalVid.setVideoURI(null); } catch (Exception ignored) {} }
                 if (pubModalClose != null) pubHandler.removeCallbacks(pubModalClose);
                 FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubModal.getLayoutParams();
-                lp.width = dp(180);
-                lp.height = dp(180);
+                lp.width = dp(180); lp.height = dp(180);
                 pubModal.setLayoutParams(lp);
                 pubModal.setVisibility(View.VISIBLE);
                 if (esVideo) {
@@ -1247,20 +1420,8 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         pubModalVid.setVideoURI(Uri.parse(url));
                         pubModalVid.setOnPreparedListener(mp -> {
-                            try {
-                                mp.setLooping(false);
-                                mp.setVolume(0f, 0f);
-                                mp.setVideoScalingMode(android.media.MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT);
-                            } catch (Exception ignored) {}
+                            try { mp.setLooping(false); mp.setVolume(0f, 0f); } catch (Exception ignored) {}
                             try { pubModalVid.start(); } catch (Exception ignored) {}
-                        });
-                        pubModalVid.setOnCompletionListener(mp -> {
-                            try { mp.stop(); } catch (Exception ignored) {}
-                        });
-                        pubModalVid.setOnErrorListener((mp, what, extra) -> {
-                            pubModal.setVisibility(View.GONE);
-                            avisarAlWebView("window.gtv&&window.gtv.onModalTerminado&&window.gtv.onModalTerminado();");
-                            return true;
                         });
                     } catch (Exception e) {
                         pubModal.setVisibility(View.GONE);
@@ -1271,12 +1432,7 @@ public class MainActivity extends AppCompatActivity {
                     pubModalVid.setVisibility(View.GONE);
                     pubModalImg.setVisibility(View.VISIBLE);
                     try {
-                        Glide.with(MainActivity.this)
-                            .load(url)
-                            .override(dp(180), dp(180))
-                            .centerCrop()
-                            .dontAnimate()
-                            .into(pubModalImg);
+                        Glide.with(MainActivity.this).load(url).override(dp(180), dp(180)).centerCrop().dontAnimate().into(pubModalImg);
                     } catch (Exception e) {
                         pubModal.setVisibility(View.GONE);
                         avisarAlWebView("window.gtv&&window.gtv.onModalTerminado&&window.gtv.onModalTerminado();");
@@ -1285,9 +1441,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 pubModalClose = () -> {
                     if (pubModal != null) pubModal.setVisibility(View.GONE);
-                    if (pubModalVid != null) {
-                        try { pubModalVid.stopPlayback(); pubModalVid.setVideoURI(null); } catch (Exception ignored) {}
-                    }
+                    if (pubModalVid != null) { try { pubModalVid.stopPlayback(); pubModalVid.setVideoURI(null); } catch (Exception ignored) {} }
                     avisarAlWebView("window.gtv&&window.gtv.onModalTerminado&&window.gtv.onModalTerminado();");
                 };
                 pubHandler.postDelayed(pubModalClose, Math.max(2, duracionSeg) * 1000L);
@@ -1304,72 +1458,26 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void mostrarTickerImpl(final String texto, final String badge, final int velocidad,
-                                    final String colorBg, final String colorAc, final int tamPx,
-                                    final String fuente) {
-        runOnUiThread(() -> {
-            if (pubTickerBox == null || pubTickerTxt == null) return;
-            tickerDetener(false);
-            final int gen = pubTickerGen;
-            String tf = (badge != null && !badge.isEmpty()) ? (badge + "  " + texto) : String.valueOf(texto);
-            pubTickerTxt.setText(tf);
-            int tamSeguro = Math.max(8, Math.min(72, tamPx));
-            pubTickerTxt.setTextSize(TypedValue.COMPLEX_UNIT_SP, tamSeguro);
-            pubTickerTxt.setTypeface(fuenteDe(fuente));
-            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) pubTickerBox.getLayoutParams();
-            int altura = Math.max(dp(32), dp(tamSeguro + 10));
-            if (lp.height != altura) { lp.height = altura; pubTickerBox.setLayoutParams(lp); }
-            pubTickerBox.setBackgroundColor(parsearColor(colorBg, 0x88000000));
-            pubTickerTxt.setTextColor(parsearColor(colorAc, 0xFFFFFFFF));
-            pubTickerDurMs = Math.max(1, velocidad) * 1000;
-            tickerArrancar(gen, 0f, 0);
-        });
-    }
-
     private void mostrarDialogoAgregarLista() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Agregar Lista");
-
-        LinearLayout ll = new LinearLayout(this);
-        ll.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(20);
-        ll.setPadding(pad, pad, pad, pad);
-
-        TextView tv = new TextView(this);
-        tv.setText("Ingresá la palabra clave o una URL de lista M3U:");
-        tv.setTextColor(0xFFCCCCCC);
-        tv.setTextSize(14);
-        ll.addView(tv);
-
-        final EditText et = new EditText(this);
-        et.setHint("Palabra clave o https://...");
-        et.setTextColor(0xFFFFFFFF);
-        et.setHintTextColor(0xFF888888);
-        et.setSingleLine(false);
-        LinearLayout.LayoutParams lpEt = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lpEt.topMargin = dp(12);
-        et.setLayoutParams(lpEt);
-        ll.addView(et);
-
-        builder.setView(ll);
+        builder.setTitle("📺 Agregar Lista");
+        builder.setMessage("Pegá la URL de tu lista M3U o ingresá la palabra clave maestra:");
+        final EditText input = new EditText(this);
+        input.setHint("https://... o palabra clave");
+        LinearLayout wrapper = new LinearLayout(this);
+        wrapper.setOrientation(LinearLayout.VERTICAL);
+        wrapper.setPadding(dp(20), dp(10), dp(20), 0);
+        wrapper.addView(input);
+        builder.setView(wrapper);
         builder.setPositiveButton("Cargar", (dialog, which) -> {
-            String texto = et.getText().toString().trim();
-            if (!texto.isEmpty()) validarYcargar(texto);
+            String texto = input.getText().toString().trim();
+            if (texto.isEmpty()) { Toast.makeText(this, "Ingresá una URL o palabra clave", Toast.LENGTH_SHORT).show(); return; }
+            validarYcargar(texto);
         });
-        builder.setNegativeButton("Cancelar", null);
-        builder.setNeutralButton("Mis Listas", (dialog, which) -> {
-            mostrarDialogoMisListas();
-        });
-
+        builder.setNegativeButton("Cancelar", (dialog, which) -> dialog.dismiss());
         AlertDialog dialog = builder.create();
-        dialog.setOnShowListener(d -> {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xFFFFD700);
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(0xFFFFD700);
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(0xFFFFD700);
-            et.requestFocus();
-        });
         dialog.show();
+        input.requestFocus();
     }
 
     private void validarYcargar(final String texto) {
@@ -1377,7 +1485,6 @@ public class MainActivity extends AppCompatActivity {
         progress.setMessage("Validando...");
         progress.setCancelable(false);
         progress.show();
-
         new Thread(() -> {
             try {
                 URL url = new URL(VALIDAR_URL);
@@ -1388,163 +1495,115 @@ public class MainActivity extends AppCompatActivity {
                 conn.setDoOutput(true);
                 conn.setRequestProperty("Content-Type", "application/json");
                 conn.setRequestProperty("X-GTV-Origin", SELLO);
-
                 JSONObject body = new JSONObject();
                 body.put("texto", texto);
                 body.put("deviceId", generarDeviceId());
-
-                java.io.OutputStream os = conn.getOutputStream();
+                OutputStream os = conn.getOutputStream();
                 os.write(body.toString().getBytes("UTF-8"));
-                os.flush();
                 os.close();
-
                 int code = conn.getResponseCode();
-                InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
-                java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(is));
+                InputStream is = code == 200 ? conn.getInputStream() : conn.getErrorStream();
+                BufferedReader br = new BufferedReader(new InputStreamReader(is));
                 StringBuilder sb = new StringBuilder();
                 String line;
                 while ((line = br.readLine()) != null) sb.append(line);
-                br.close(); is.close();
-
-                final JSONObject resp = new JSONObject(sb.toString());
-                runOnUiThread(() -> {
-                    progress.dismiss();
-                    String tipo = resp.optString("tipo", "");
-                    String urlLista = resp.optString("url", "");
-                    String error = resp.optString("error", "");
-                    if (!error.isEmpty()) {
-                        String msg;
-                        switch (error) {
-                            case "clave_invalida": msg = "Palabra clave incorrecta."; break;
-                            case "licencia_requerida": msg = "Necesitás una licencia activa para usar la lista maestra."; break;
-                            default: msg = "Error: " + error;
-                        }
-                        Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show();
-                        return;
-                    }
-                    if (tipo.equals("maestra") || tipo.equals("externa")) {
-                        pedirNombreYGuardar(urlLista);
-                    } else {
-                        Toast.makeText(MainActivity.this, "Respuesta inválida del servidor.", Toast.LENGTH_LONG).show();
-                    }
-                });
+                br.close();
+                JSONObject json = new JSONObject(sb.toString());
+                String error = json.optString("error", "");
+                if (!error.isEmpty()) {
+                    runOnUiThread(() -> {
+                        progress.dismiss();
+                        String msg = error.equals("clave_invalida") ? "Palabra clave incorrecta"
+                            : error.equals("licencia_requerida") ? "Necesitás una licencia activa"
+                            : "Error: " + error;
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+                    });
+                    return;
+                }
+                String listaUrl = json.optString("url", "");
+                if (listaUrl.isEmpty()) { runOnUiThread(() -> { progress.dismiss(); Toast.makeText(this, "Respuesta inválida", Toast.LENGTH_SHORT).show(); }); return; }
+                if (listaUrl.startsWith("/")) listaUrl = "https://gtv-portero.abrel03.workers.dev" + listaUrl;
+                cargarLista(listaUrl, progress);
             } catch (Exception e) {
-                runOnUiThread(() -> {
-                    progress.dismiss();
-                    Toast.makeText(MainActivity.this, "Error de conexión: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                });
+                runOnUiThread(() -> { progress.dismiss(); Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show(); });
             }
         }).start();
     }
 
-    private void pedirNombreYGuardar(final String urlLista) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Guardar Lista");
-        builder.setMessage("Ponle un nombre a esta lista:");
-
-        final EditText input = new EditText(this);
-        input.setHint("Ej: Mi Lista 1");
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(dp(20), dp(10), dp(20), dp(10));
-        input.setLayoutParams(lp);
-        builder.setView(input);
-
-        builder.setPositiveButton("Guardar y Cargar", (dialog, which) -> {
-            String nombre = input.getText().toString().trim();
-            if (nombre.isEmpty()) nombre = "Lista sin nombre";
-            cargarLista(urlLista, nombre);
-        });
-        builder.setNegativeButton("Cancelar", null);
-        builder.show();
-    }
-
-    private void cargarLista(final String urlLista, final String nombreLista) {
-        final ProgressDialog progress = new ProgressDialog(this);
-        progress.setMessage("Cargando lista...");
-        progress.setCancelable(false);
-        progress.show();
-
+    private void cargarLista(final String listaUrl, final ProgressDialog progress) {
         new Thread(() -> {
             try {
-                String urlFinal = urlLista;
-                if (!urlFinal.startsWith("http")) {
-                    urlFinal = WORKER_URL + urlFinal.replaceFirst("^/", "");
-                }
-
-                URL url = new URL(urlFinal);
+                URL url = new URL(listaUrl);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
-                conn.setInstanceFollowRedirects(true);
                 conn.setConnectTimeout(20000);
-                conn.setReadTimeout(20000);
+                conn.setReadTimeout(30000);
                 conn.setRequestProperty("X-GTV-Origin", SELLO);
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
-
-                if (conn.getResponseCode() != 200) throw new Exception("HTTP " + conn.getResponseCode());
-                InputStream is = conn.getInputStream();
-                java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(is));
+                int code = conn.getResponseCode();
+                if (code != 200) {
+                    runOnUiThread(() -> { progress.dismiss(); Toast.makeText(this, "Error al descargar lista (HTTP " + code + ")", Toast.LENGTH_LONG).show(); });
+                    return;
+                }
+                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                 StringBuilder sb = new StringBuilder();
                 String line;
                 while ((line = br.readLine()) != null) sb.append(line).append("\n");
-                br.close(); is.close();
-
+                br.close();
                 final String contenido = sb.toString();
-                final ArrayList<Canal> listaParseada = parsearM3u(contenido);
-
+                final ArrayList<Canal> lista = parsearM3u(contenido);
                 runOnUiThread(() -> {
                     progress.dismiss();
-                    if (listaParseada.isEmpty()) {
-                        Toast.makeText(MainActivity.this, "La lista está vacía o es inválida.", Toast.LENGTH_LONG).show();
-                        return;
-                    }
+                    if (lista.isEmpty()) { Toast.makeText(this, "La lista está vacía o no es válida", Toast.LENGTH_LONG).show(); return; }
                     canales.clear();
-                    canales.addAll(listaParseada);
+                    canales.addAll(lista);
                     indiceActual = 0;
-                    
-                    guardarNuevaLista(nombreLista, contenido, urlLista);
-                    
                     enviarListaAlHtml();
-                    Toast.makeText(MainActivity.this, "Lista '" + nombreLista + "' cargada: " + canales.size() + " canales", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "Lista cargada: " + lista.size() + " canales", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> {
-                    progress.dismiss();
-                    Toast.makeText(MainActivity.this, "Error al cargar lista: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                });
+                runOnUiThread(() -> { progress.dismiss(); Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show(); });
             }
         }).start();
     }
 
     private ArrayList<Canal> parsearM3u(String texto) {
         ArrayList<Canal> out = new ArrayList<>();
-        String[] lines = texto.split("\r?\n");
-        String nombre = null, logo = "", referer = "";
+        String[] lines = texto.split("\\r?\\n");
+        String nombre = "", logo = "", referer = "";
         float gain = 1.0f;
-
-        for (int i = 0; i < lines.length; i++) {
-            String l = lines[i].trim();
+        boolean esPeliculas = false;
+        String urlPeliculasM3U = null;
+        for (String l0 : lines) {
+            String l = l0.trim();
             if (l.isEmpty() || l.equals("#EXTM3U") || l.startsWith("#EXTVLCOPT")) continue;
-
             if (l.startsWith("#EXTINF")) {
-                java.util.regex.Matcher lg = java.util.regex.Pattern.compile("tvg-logo=\"([^\"]*)\"").matcher(l);
-                logo = lg.find() ? lg.group(1) : "";
-                java.util.regex.Matcher rf = java.util.regex.Pattern.compile("tvg-referer=\"([^\"]*)\"").matcher(l);
-                referer = rf.find() ? rf.group(1) : "";
-                java.util.regex.Matcher gn = java.util.regex.Pattern.compile("tvg-gain=\"([^\"]*)\"").matcher(l);
-                gain = 1.0f;
-                if (gn.find()) {
-                    try { float g = Float.parseFloat(gn.group(1)); if (g > 0f && g <= 2f) gain = g; } catch (Exception ignored) {}
+                nombre = "Canal " + (out.size() + 1);
+                logo = ""; referer = ""; gain = 1.0f; esPeliculas = false; urlPeliculasM3U = null;
+                java.util.regex.Matcher lg = java.util.regex.Pattern.compile("tvg-logo\\s*=\\s*\"([^\"]*)\"").matcher(l);
+                if (lg.find()) logo = lg.group(1);
+                java.util.regex.Matcher rf = java.util.regex.Pattern.compile("tvg-referer\\s*=\\s*\"([^\"]*)\"").matcher(l);
+                if (rf.find()) referer = rf.group(1).trim();
+                java.util.regex.Matcher gn = java.util.regex.Pattern.compile("tvg-gain\\s*=\\s*\"([^\"]*)\"").matcher(l);
+                if (gn.find()) { try { float gv = Float.parseFloat(gn.group(1)); if (gv > 0 && gv <= 2f) gain = gv; } catch (Exception ignored) {} }
+                int c = l.lastIndexOf(',');
+                if (c != -1 && c < l.length() - 1) {
+                    String n = l.substring(c + 1).trim().replaceAll("^[\"']|[\"']$", "");
+                    if (!n.isEmpty()) nombre = n;
                 }
-                int comma = l.lastIndexOf(',');
-                if (comma != -1 && comma < l.length() - 1) nombre = l.substring(comma + 1).trim();
-                else nombre = "Canal " + (out.size() + 1);
+                String up = nombre.toUpperCase();
+                if (up.contains("PELÍCULAS") || up.contains("PELICULAS") || up.contains("VIDEOTECA") || up.contains("PELIS")) esPeliculas = true;
                 continue;
             }
-
-            if (l.startsWith("http") && nombre != null) {
-                out.add(new Canal(l, nombre, logo, referer, gain, false));
-                nombre = null; logo = ""; referer = ""; gain = 1.0f;
+            if (l.startsWith("http://") || l.startsWith("https://")) {
+                if (esPeliculas) urlPeliculasM3U = l;
+                java.util.regex.Matcher pm = java.util.regex.Pattern.compile("peliculas|videoteca|peplis|/api/m3u-peliculas").matcher(l);
+                if (pm.find()) { esPeliculas = true; urlPeliculasM3U = l; }
+                Canal c = new Canal(l, nombre, logo, referer, gain);
+                c.esPeliculas = esPeliculas;
+                c.urlPeliculasM3U = urlPeliculasM3U;
+                out.add(c);
+                nombre = ""; logo = ""; referer = ""; gain = 1.0f; esPeliculas = false; urlPeliculasM3U = null;
             }
         }
         return out;
@@ -1555,112 +1614,80 @@ public class MainActivity extends AppCompatActivity {
             JSONArray arr = new JSONArray();
             for (Canal c : canales) {
                 JSONObject o = new JSONObject();
-                o.put("nombre", c.nombre);
                 o.put("name", c.nombre);
+                o.put("nombre", c.nombre);
                 o.put("url", c.url);
-                o.put("logo", c.logo != null ? c.logo : "");
-                o.put("referer", c.referer != null ? c.referer : "");
+                o.put("logo", c.logo);
+                o.put("referer", c.referer);
                 o.put("gain", c.gain);
                 o.put("oculto", c.oculto);
+                if (c.esPeliculas) o.put("esPeliculas", true);
+                if (c.urlPeliculasM3U != null) o.put("urlPeliculasM3U", c.urlPeliculasM3U);
                 arr.put(o);
             }
             final String json = arr.toString();
             runOnUiThread(() -> {
-                if (myWebView != null) {
-                    myWebView.evaluateJavascript(
-                        "javascript:(function(){try{window.gtvSetCanales(" + json + ");}catch(e){}})();",
-                        null);
+                if (myWebView != null && webViewListo) {
+                    try {
+                        myWebView.evaluateJavascript("window.gtvSetCanales&&window.gtvSetCanales(" + JSONObject.quote(json) + ");", null);
+                    } catch (Exception ignored) {}
                 }
             });
-        } catch (Exception e) {
-            Log.e(TAG, "Error enviando lista al HTML: " + e.getMessage());
-        }
+        } catch (Exception e) {}
     }
 
-    private void irACanalWebView(final int idx) {
-        irACanalWebView(idx, 0);
+    private boolean esCanalYouTube(String url) {
+        if (url == null) return false;
+        String u = url.toLowerCase();
+        return u.contains("youtube.com") || u.contains("youtu.be");
     }
 
-    private void irACanalWebView(final int idx, final int intento) {
-        runOnUiThread(() -> {
-            if (myWebView == null) return;
-            myWebView.evaluateJavascript(
-                "(function(){try{return typeof window.irACanal==='function';}catch(e){return false;}})()",
-                value -> {
-                    if ("true".equals(value)) {
-                        myWebView.evaluateJavascript("window.irACanal(" + idx + ");", null);
-                    } else if (intento < 10) {
-                        handler.postDelayed(() -> irACanalWebView(idx, intento + 1), 300);
-                    }
-                });
-        });
+    private boolean esEmbedTercero(String url) {
+        if (url == null) return false;
+        String u = url.toLowerCase();
+        return u.contains("kick.com") || u.contains("twitch.tv")
+            || u.contains("ok.ru") || u.contains("odnoklassniki.ru")
+            || u.contains("dailymotion.com") || u.contains("tokyvideo.com");
     }
 
-    private void cerrarExoPlayer() {
-        if (enYouTubeWeb) { salirDeYouTube(); return; }
-        ejecutarCierreExo(false);
-    }
-
-    private void ejecutarCierreExo(boolean esZapping) {
-        tickerDetener(true);
-        mostrarEscudo(false);
-        enExoPlayer = false;
-        enYouTubeNativo = false;
-        canalActual = null;
-        handler.removeCallbacks(reintentoRunnable);
-        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
-        try { if (youtubePlayer != null) youtubePlayer.pause(); } catch (Exception ignored) {}
-        playerContainer.setVisibility(View.GONE);
-        youtubePlayerView.setVisibility(View.GONE);
-        ocultarControlesNativos();
-        detenerLoaderAnim(); ocultarLoaders();
-        if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
-        myWebView.setVisibility(View.VISIBLE);
-        myWebView.onResume(); myWebView.resumeTimers();
-        if (!esZapping) myWebView.postDelayed(() -> {
-            try {
-                myWebView.evaluateJavascript(
-                    "javascript:window.sincronizarIndiceJS&&window.sincronizarIndiceJS(" + indiceActual + ");"
-                  + "window.volverDelExo&&window.volverDelExo();", null);
-            } catch (Exception ignored) {}
-        }, 32);
-    }
-
-    private void ocultarControlesNativos() {
-        controlesVisibles = false;
-        infoCanal.setVisibility(View.GONE);
-        btnPrev.setVisibility(View.GONE); btnNext.setVisibility(View.GONE);
-        btnClose.setVisibility(View.GONE); btnRotate.setVisibility(View.GONE);
-    }
-
-    private void mostrarControles() {
-        if (!enExoPlayer && !enYouTubeWeb && !enYouTubeNativo) return;
-        controlesVisibles = true;
-        infoCanal.setVisibility(View.VISIBLE);
-        btnPrev.setVisibility(View.VISIBLE); btnNext.setVisibility(View.VISIBLE);
-        btnClose.setVisibility(View.VISIBLE); btnRotate.setVisibility(View.VISIBLE);
-        if (ocultarControlesRunnable != null) handler.removeCallbacks(ocultarControlesRunnable);
-        ocultarControlesRunnable = this::ocultarControlesNativos;
-        handler.postDelayed(ocultarControlesRunnable, 5000);
+    private String generarDeviceId() {
+        if (deviceIdCache != null) return deviceIdCache;
+        String androidId = null;
+        try { androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID); } catch (Exception ignored) {}
+        if (androidId == null || androidId.isEmpty()) androidId = "GTVR_FALLBACK_" + Build.MODEL + "_" + Build.SERIAL;
+        final String ALFABETO = "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ";
+        long hash = 0;
+        for (int i = 0; i < androidId.length(); i++) hash = (hash * 31 + androidId.charAt(i)) & 0xFFFFFFFFL;
+        hash = hash ^ (hash >> 16);
+        hash = (hash * 0x45d9f3bL) & 0xFFFFFFFFL;
+        StringBuilder sb = new StringBuilder("GTV-R-");
+        long h = hash;
+        for (int i = 0; i < 6; i++) { sb.append(ALFABETO.charAt((int)(h % ALFABETO.length()))); h = h / ALFABETO.length(); h = h ^ (h >> 3); }
+        deviceIdCache = sb.toString();
+        return deviceIdCache;
     }
 
     @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (playerContainer.getVisibility() == View.VISIBLE || youtubePlayerView.getVisibility() == View.VISIBLE) {
+        if (playerContainer.getVisibility() == View.VISIBLE) {
             switch (keyCode) {
-                case KeyEvent.KEYCODE_DPAD_RIGHT: navegar(+1); return true;
-                case KeyEvent.KEYCODE_DPAD_LEFT: navegar(-1); return true;
+                case KeyEvent.KEYCODE_DPAD_RIGHT: navegar(+1); mostrarControles(); return true;
+                case KeyEvent.KEYCODE_DPAD_LEFT: navegar(-1); mostrarControles(); return true;
                 case KeyEvent.KEYCODE_DPAD_CENTER: case KeyEvent.KEYCODE_ENTER:
                 case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_DPAD_DOWN:
-                    if (enYouTubeWeb || enYouTubeNativo) mostrarControles();
-                    return true;
+                    mostrarControles(); return true;
             }
         }
         return super.onKeyDown(keyCode, event);
     }
 
     @Override public void onBackPressed() {
-        if (enYouTubeWeb) { salirDeYouTube(); return; }
-        if (enExoPlayer || enYouTubeNativo) { ytToken++; cerrarExoPlayer(); return; }
+        if (enYouTubeWeb) {
+            enYouTubeWeb = false;
+            mostrarEscudo(false);
+            cerrarExoPlayer();
+            return;
+        }
+        if (enExoPlayer || enVlc || enYouTubeNativo) { ytToken++; cerrarExoPlayer(); return; }
         ytToken++;
         if (myWebView == null) { finish(); return; }
         myWebView.evaluateJavascript(
@@ -1672,19 +1699,17 @@ public class MainActivity extends AppCompatActivity {
 
     @Override protected void onStart() {
         super.onStart();
-        if (enExoPlayer && exoPlayer != null) {
-            try { exoPlayer.play(); } catch (Exception ignored) {}
-        }
+        if (enExoPlayer && exoPlayer != null) { try { exoPlayer.play(); } catch (Exception ignored) {} }
     }
 
     @Override protected void onPause() {
         super.onPause();
-        if (myWebView != null && !enExoPlayer && !enYouTubeNativo) { myWebView.onPause(); myWebView.pauseTimers(); }
+        if (myWebView != null && !enExoPlayer) { myWebView.onPause(); myWebView.pauseTimers(); }
     }
 
     @Override protected void onResume() {
         super.onResume();
-        if (myWebView != null && !enExoPlayer && !enYouTubeNativo) { myWebView.onResume(); myWebView.resumeTimers(); }
+        if (myWebView != null && !enExoPlayer) { myWebView.onResume(); myWebView.resumeTimers(); }
     }
 
     @Override protected void onStop() {
@@ -1702,7 +1727,9 @@ public class MainActivity extends AppCompatActivity {
         handler.removeCallbacks(zapRun);
         try { File f = new File(getCacheDir(), "update.apk"); if (f.exists()) f.delete(); } catch (Exception ignored) {}
         if (exoPlayer != null) { try { exoPlayer.release(); } catch (Exception ignored) {} exoPlayer = null; }
-        try { if (youtubePlayerView != null) youtubePlayerView.release(); } catch (Exception ignored) {}
+        if (vlcPlayer != null) { try { vlcPlayer.release(); } catch (Exception ignored) {} vlcPlayer = null; }
+        if (libVlc != null) { try { libVlc.release(); } catch (Exception ignored) {} libVlc = null; }
+        if (youtubePlayerView != null) { try { youtubePlayerView.release(); } catch (Exception ignored) {} }
         if (myWebView != null) {
             try {
                 myWebView.loadUrl("about:blank");
@@ -1733,143 +1760,5 @@ public class MainActivity extends AppCompatActivity {
                 | View.SYSTEM_UI_FLAG_FULLSCREEN);
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-    }
-
-    private void avisarAlWebView(String js) {
-        if (myWebView == null || !webViewListo) return;
-        myWebView.post(() -> {
-            try {
-                myWebView.evaluateJavascript("javascript:(function(){try{" + js + "}catch(e){}})();", null);
-            } catch (Exception ignored) {}
-        });
-    }
-
-    // --- ADMINISTRACIÓN DE LISTAS GUARDADAS ---
-
-    private void guardarNuevaLista(String nombre, String contenidoM3U, String urlOriginal) {
-        try {
-            SharedPreferences prefs = getSharedPreferences("gtv_prefs", MODE_PRIVATE);
-            JSONArray listas = new JSONArray(prefs.getString("listas_guardadas", "[]"));
-            
-            JSONArray nuevas = new JSONArray();
-            for (int i = 0; i < listas.length(); i++) {
-                JSONObject obj = listas.getJSONObject(i);
-                if (!obj.optString("nombre").equals(nombre)) {
-                    nuevas.put(obj);
-                }
-            }
-            
-            JSONObject nueva = new JSONObject();
-            nueva.put("nombre", nombre);
-            nueva.put("contenido", contenidoM3U);
-            nueva.put("url", urlOriginal);
-            nueva.put("fecha", System.currentTimeMillis());
-            nuevas.put(nueva);
-            
-            prefs.edit().putString("listas_guardadas", nuevas.toString()).commit();
-            prefs.edit().putString("ultima_lista_nombre", nombre).commit();
-            
-        } catch (Exception e) {
-            Log.e(TAG, "Error guardando lista: " + e.getMessage());
-        }
-    }
-
-    private void cargarListaGuardadaAlIniciar() {
-        try {
-            SharedPreferences prefs = getSharedPreferences("gtv_prefs", MODE_PRIVATE);
-            JSONArray listas = new JSONArray(prefs.getString("listas_guardadas", "[]"));
-            if (listas.length() > 0) {
-                String ultimaNombre = prefs.getString("ultima_lista_nombre", null);
-                JSONObject elegida = null;
-                
-                if (ultimaNombre != null) {
-                    for (int i = 0; i < listas.length(); i++) {
-                        if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
-                            elegida = listas.getJSONObject(i);
-                            break;
-                        }
-                    }
-                }
-                
-                if (elegida == null) elegida = listas.getJSONObject(0);
-                
-                String contenido = elegida.getString("contenido");
-                ArrayList<Canal> listaParseada = parsearM3u(contenido);
-                
-                if (!listaParseada.isEmpty()) {
-                    canales.clear();
-                    canales.addAll(listaParseada);
-                    indiceActual = 0;
-                    enviarListaAlHtml();
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error cargando lista guardada: " + e.getMessage());
-        }
-    }
-
-    private void mostrarDialogoMisListas() {
-        try {
-            SharedPreferences prefs = getSharedPreferences("gtv_prefs", MODE_PRIVATE);
-            JSONArray listas = new JSONArray(prefs.getString("listas_guardadas", "[]"));
-            
-            if (listas.length() == 0) {
-                Toast.makeText(this, "No tenés listas guardadas. Agregá una con 'Agregar Lista'.", Toast.LENGTH_LONG).show();
-                return;
-            }
-
-            String[] nombres = new String[listas.length()];
-            for (int i = 0; i < listas.length(); i++) {
-                nombres[i] = listas.getJSONObject(i).getString("nombre");
-            }
-
-            AlertDialog.Builder builder = new AlertDialog.Builder(this);
-            builder.setTitle("📋 Mis Listas");
-            builder.setItems(nombres, (dialog, which) -> {
-                try {
-                    JSONObject obj = listas.getJSONObject(which);
-                    String contenido = obj.getString("contenido");
-                    ArrayList<Canal> listaParseada = parsearM3u(contenido);
-                    
-                    if (listaParseada.isEmpty()) {
-                        Toast.makeText(MainActivity.this, "La lista está vacía o dañada.", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    
-                    canales.clear();
-                    canales.addAll(listaParseada);
-                    indiceActual = 0;
-                    enviarListaAlHtml();
-                    
-                    prefs.edit().putString("ultima_lista_nombre", obj.getString("nombre")).commit();
-                    
-                    Toast.makeText(MainActivity.this, "Cargada: " + obj.getString("nombre") + " (" + canales.size() + " canales)", Toast.LENGTH_SHORT).show();
-                } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "Error al cargar la lista.", Toast.LENGTH_SHORT).show();
-                }
-            });
-            
-            builder.setNeutralButton("🗑 Borrar Lista", (dialog, which) -> {
-                AlertDialog.Builder delBuilder = new AlertDialog.Builder(this);
-                delBuilder.setTitle("Borrar Lista");
-                delBuilder.setItems(nombres, (d, idx) -> {
-                    try {
-                        JSONArray nuevasListas = new JSONArray();
-                        for (int i = 0; i < listas.length(); i++) {
-                            if (i != idx) nuevasListas.put(listas.get(i));
-                        }
-                        prefs.edit().putString("listas_guardadas", nuevasListas.toString()).commit();
-                        Toast.makeText(MainActivity.this, "Lista eliminada.", Toast.LENGTH_SHORT).show();
-                    } catch (Exception e) {}
-                });
-                delBuilder.show();
-            });
-            
-            builder.setNegativeButton("Cerrar", null);
-            builder.show();
-
-        } catch (Exception e) {
-            Toast.makeText(this, "Error al leer las listas.", Toast.LENGTH_SHORT).show();
-        }
     }
 }
