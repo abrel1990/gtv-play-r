@@ -134,7 +134,6 @@ button{font-family:inherit;cursor:pointer}
       <div id="tab-listas" class="tab-content active">
         <div class="section-title">Agregar Lista</div>
         <div class="input-group">
-          <!-- SIN MENCIONAR PALABRA CLAVE -->
           <input type="text" id="inputNuevaLista" placeholder="Ingresá la URL de la lista..." autocomplete="off" spellcheck="false" tabindex="0">
           <button class="btn-primary" id="btnCargarLista" tabindex="0">Cargar</button>
         </div>
@@ -334,9 +333,18 @@ $('goBack').onclick = detener;
 
 // Manejo de botón "Atrás" físico (Control Remoto)
 document.addEventListener('keydown', function(e){
-  if(e.keyCode === 4 || e.key === 'Escape' || e.key === 'Backspace'){
-    if(!$('settingsModal').classList.contains('hidden')){ cerrarSettings(); e.preventDefault(); return; }
-    if($('player').classList.contains('active')){ detener(); e.preventDefault(); return; }
+  var isBack = (e.keyCode === 4 || e.keyCode === 8 || e.key === 'Escape' || e.key === 'Backspace');
+  if(isBack) {
+    if(!$('settingsModal').classList.contains('hidden')) {
+      cerrarSettings(); 
+      e.preventDefault(); 
+      return; 
+    }
+    if($('player').classList.contains('active')) {
+      detener(); 
+      e.preventDefault(); 
+      return;
+    }
   }
 });
 
