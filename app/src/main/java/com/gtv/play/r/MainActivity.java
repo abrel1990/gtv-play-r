@@ -39,7 +39,6 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -115,6 +114,7 @@ public class MainActivity extends AppCompatActivity {
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
     private boolean bgGuardado = false;
 
+    // YouTube nativo: un único listener registrado en onCreate
     private YouTubePlayer ytPlayer = null;
     private String ytVideoPendiente = null;
 
@@ -301,6 +301,7 @@ public class MainActivity extends AppCompatActivity {
         getLifecycle().addObserver(youtubePlayerView);
         youtubePlayerView.setVisibility(View.GONE);
 
+        // Un solo listener para YouTube (onReady se dispara una única vez)
         youtubePlayerView.addYouTubePlayerListener(new AbstractYouTubePlayerListener() {
             @Override
             public void onReady(YouTubePlayer youTubePlayer) {
@@ -319,6 +320,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPlaybackStateChanged(int state) {
                 if (exoLoader == null) return;
+                // Si el motor activo no es Exo (ej. pasamos a YouTube), ignoramos sus eventos
+                // para que no pisen el loader del otro motor.
+                if (!enExoPlayer) return;
                 if (state == Player.STATE_READY) {
                     reintentos = 0;
                     detenerLoaderAnim();
@@ -338,6 +342,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onPlayerError(PlaybackException error) {
+                if (!enExoPlayer) return;
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     try { exoPlayer.seekToDefaultPosition(); exoPlayer.prepare(); } catch (Exception e) {}
                     return;
@@ -373,6 +378,7 @@ public class MainActivity extends AppCompatActivity {
         configurarWebView();
         configurarBotones();
 
+        // CARGAMOS EL HTML LOCAL
         myWebView.loadUrl("file:///android_asset/index.html");
 
         ocultarBarrasSistema();
@@ -383,7 +389,8 @@ public class MainActivity extends AppCompatActivity {
             catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
         }, 5000);
 
-        handler.postDelayed(this::cargarListaGuardadaAlIniciar, 1500);
+        // Restaura la última lista guardada (espera a que el WebView esté listo)
+        handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 1000);
     }
 
     private void inicializarVLC() {
@@ -460,13 +467,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void reproducirEnYouTube(Canal c) {
         ytToken++;
-        enExoPlayer = false;
-        enVlc = false;
+        handler.removeCallbacks(reintentoRunnable);
+        if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
+        detenerMotores();          // apaga Exo/VLC/YouTube anterior (y deja los flags en false)
         enYouTubeWeb = false;
-        enYouTubeNativo = true;
+        enYouTubeNativo = true;    // se reafirma después de detenerMotores
         canalActual = c;
-        detenerMotores();
-        enYouTubeNativo = true;
         myWebView.setVisibility(View.GONE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
@@ -514,6 +520,7 @@ public class MainActivity extends AppCompatActivity {
                     detenerLoaderAnim(); ocultarLoaders();
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 } else {
+                    // el player todavía no está listo: onReady cargará este video
                     ytVideoPendiente = videoId;
                 }
             } catch (Exception e) {
@@ -559,18 +566,25 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void detenerMotores() {
-        try { if (exoPlayer != null) { exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
-        try { if (vlcPlayer != null) { vlcPlayer.stop(); } } catch (Exception ignored) {}
-        try { if (ytPlayer != null) { ytPlayer.pause(); } } catch (Exception ignored) {}
-        ytVideoPendiente = null;
+        // Primero bajamos los flags para que los eventos tardíos de Exo no pisen al motor siguiente
         enExoPlayer = false;
         enVlc = false;
         enYouTubeNativo = false;
+        try { if (exoPlayer != null) { exoPlayer.setPlayWhenReady(false); exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
+        try { if (vlcPlayer != null) { vlcPlayer.stop(); } } catch (Exception ignored) {}
+        try { if (ytPlayer != null) { ytPlayer.pause(); } } catch (Exception ignored) {}
+        ytVideoPendiente = null;
     }
 
     private void reproducirEnExo(Canal c) {
         ytToken++;
         mostrarEscudo(false);
+        handler.removeCallbacks(reintentoRunnable);
+        if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
+        // Apaga VLC / YouTube antes de arrancar Exo
+        try { if (vlcPlayer != null) vlcPlayer.stop(); } catch (Exception ignored) {}
+        try { if (ytPlayer != null) ytPlayer.pause(); } catch (Exception ignored) {}
+        ytVideoPendiente = null;
         enYouTubeWeb = false;
         enYouTubeNativo = false;
         enVlc = false;
@@ -578,10 +592,6 @@ public class MainActivity extends AppCompatActivity {
         enExoPlayer = true;
         canalActual = c;
         reintentos = 0;
-        handler.removeCallbacks(reintentoRunnable);
-        try { if (vlcPlayer != null) vlcPlayer.stop(); } catch (Exception ignored) {}
-        try { if (ytPlayer != null) ytPlayer.pause(); } catch (Exception ignored) {}
-        ytVideoPendiente = null;
         myWebView.setVisibility(View.GONE);
         myWebView.onPause();
         youtubePlayerView.setVisibility(View.GONE);
@@ -596,6 +606,7 @@ public class MainActivity extends AppCompatActivity {
         mostrarLoaderSintonizando();
         exoPlayer.setMediaSource(construirMediaSource(c));
         exoPlayer.prepare();
+        exoPlayer.setPlayWhenReady(true);
         exoPlayer.play();
         try { exoPlayer.setVolume(c.gain); } catch (Exception ignored) {}
         programarTimeoutCanal();
@@ -1106,6 +1117,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // ===== ACTUALIZACIÓN AUTOMÁTICA (por versionCode) =====
     private void checkForUpdates() {
         if (!hayInternet()) return;
         new Thread(() -> {
@@ -1124,11 +1136,11 @@ public class MainActivity extends AppCompatActivity {
                 while ((line = br.readLine()) != null) sb.append(line);
                 br.close(); is.close();
                 JSONObject json = new JSONObject(sb.toString());
-                
+
                 int remoteVersionCode = json.optInt("versionCode", 0);
                 String apkUrl = json.optString("apkUrl", "");
                 int currentVersionCode = getCurrentVersionCode();
-                
+
                 if (remoteVersionCode > currentVersionCode && !apkUrl.isEmpty()) {
                     final int rv = remoteVersionCode;
                     runOnUiThread(() -> mostrarDialogoUpdate(rv, apkUrl));
@@ -1145,6 +1157,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) { return false; }
     }
 
+    @SuppressWarnings("deprecation")
     private int getCurrentVersionCode() {
         try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; }
         catch (Exception e) { return 0; }
@@ -1348,6 +1361,7 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
+    // ===== LISTAS GUARDADAS =====
     private void guardarNuevaLista(String nombre, String contenidoM3U, String urlOriginal) {
         try {
             SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
@@ -1363,15 +1377,22 @@ public class MainActivity extends AppCompatActivity {
             nueva.put("url", urlOriginal);
             nueva.put("fecha", System.currentTimeMillis());
             nuevas.put(nueva);
-            prefs.edit().putString(LISTAS_KEY, nuevas.toString()).commit();
-            prefs.edit().putString(ULTIMA_LISTA_KEY, nombre).commit();
+            prefs.edit()
+                .putString(LISTAS_KEY, nuevas.toString())
+                .putString(ULTIMA_LISTA_KEY, nombre)
+                .commit();
             Log.d(TAG, "Lista guardada: " + nombre + " (" + nuevas.length() + " listas)");
         } catch (Exception e) {
             Log.e(TAG, "Error guardando lista: " + e.getMessage());
         }
     }
 
-    private void cargarListaGuardadaAlIniciar() {
+    private void cargarListaGuardadaAlIniciar(final int intento) {
+        // Esperamos a que el WebView termine de cargar para poder entregarle la lista
+        if (!webViewListo && intento < 20) {
+            handler.postDelayed(() -> cargarListaGuardadaAlIniciar(intento + 1), 500);
+            return;
+        }
         try {
             SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
             JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
@@ -1448,12 +1469,13 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject obj = listas.getJSONObject(i);
                 if (!obj.optString("nombre").equals(nombre)) nuevas.put(obj);
             }
-            prefs.edit().putString(LISTAS_KEY, nuevas.toString()).commit();
+            SharedPreferences.Editor ed = prefs.edit().putString(LISTAS_KEY, nuevas.toString());
             String ultima = prefs.getString(ULTIMA_LISTA_KEY, "");
             if (ultima.equals(nombre)) {
-                if (nuevas.length() > 0) prefs.edit().putString(ULTIMA_LISTA_KEY, nuevas.getJSONObject(0).optString("nombre")).commit();
-                else prefs.edit().remove(ULTIMA_LISTA_KEY).commit();
+                if (nuevas.length() > 0) ed.putString(ULTIMA_LISTA_KEY, nuevas.getJSONObject(0).optString("nombre"));
+                else ed.remove(ULTIMA_LISTA_KEY);
             }
+            ed.commit();
             Log.d(TAG, "Lista eliminada: " + nombre);
         } catch (Exception e) {
             Log.e(TAG, "Error eliminando lista: " + e.getMessage());
@@ -1511,6 +1533,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // ===== PUENTE JS <-> NATIVO =====
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
 
@@ -1580,7 +1603,7 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public boolean esExoPlayer(String url) { return esCanalExoPlayer(url); }
 
-        // ESTE ES EL NUEVO MÉTODO PARA EL MODAL DEL HTML
+        // Carga de listas desde el menú del HTML
         @JavascriptInterface public void cargarListaDesdeHtml(final String texto) {
             runOnUiThread(() -> validarYcargar(texto));
         }
@@ -1589,11 +1612,11 @@ public class MainActivity extends AppCompatActivity {
             return listarListasJSON();
         }
 
-        @JavascriptInterface public void usarLista(String nombre) {
+        @JavascriptInterface public void usarLista(final String nombre) {
             runOnUiThread(() -> usarListaGuardada(nombre));
         }
 
-        @JavascriptInterface public void eliminarLista(String nombre) {
+        @JavascriptInterface public void eliminarLista(final String nombre) {
             runOnUiThread(() -> {
                 eliminarListaGuardada(nombre);
                 Toast.makeText(MainActivity.this, "Lista eliminada", Toast.LENGTH_SHORT).show();
@@ -1608,9 +1631,8 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 ytToken++;
                 tickerDetener(true);
-                enExoPlayer = false;
-                enVlc = false;
-                enYouTubeNativo = false;
+                handler.removeCallbacks(zapRun);
+                zapPend = -1;
                 detenerMotores();
                 playerContainer.setVisibility(View.GONE);
                 youtubePlayerView.setVisibility(View.GONE);
@@ -1858,6 +1880,7 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 if (myWebView != null && webViewListo) {
                     try {
+                        // Guardamos la lista en el localStorage para que no se pierda al reiniciar
                         String js = "try{localStorage.setItem('gtv_channels', " + JSONObject.quote(json) + ");}catch(e){}"
                                   + "window.gtvSetCanales&&window.gtvSetCanales(" + JSONObject.quote(json) + ");";
                         myWebView.evaluateJavascript(js, null);
