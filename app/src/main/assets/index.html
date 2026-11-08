@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>GTV Play R</title>
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Montserrat:wght@400;700&family=Poppins:wght@400;700&family=Inter:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;width:100%;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;-webkit-user-select:none;user-select:none}
@@ -12,113 +12,99 @@ html,body{height:100%;width:100%;background:#000;color:#fff;font-family:Arial,He
 .hidden{display:none!important}
 button{font-family:inherit;cursor:pointer}
 
-/* BARRA SUPERIOR (Moderno) */
-.top-bar{position:fixed;top:0;left:0;right:0;height:64px;padding:0 20px;display:flex;justify-content:space-between;align-items:center;z-index:100;background:linear-gradient(to bottom, #111 0%, rgba(17,17,17,0) 100%);border-bottom:1px solid rgba(255,255,255,0.05);pointer-events:none}
+/* BARRA SUPERIOR */
+.top-bar{position:fixed;top:0;left:0;right:0;height:56px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;z-index:100;background:#0a0a0a;border-bottom:2px solid #FFD700;pointer-events:none}
 .top-bar *{pointer-events:auto}
-.top-left{display:flex;align-items:center;gap:12px}
-.app-title{font-family:'Montserrat',sans-serif;font-size:20px;font-weight:800;color:#fff;letter-spacing:1px}
-.lic-badge{font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;text-transform:uppercase}
+.top-left{display:flex;align-items:center;gap:10px}
+.app-title{font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:#fff;letter-spacing:.5px}
+.lic-badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;text-transform:uppercase}
 .lic-badge.full{background:rgba(0,255,102,.15);color:#00ff66;border:1px solid #00ff66}
 .lic-badge.demo{background:rgba(255,215,0,.15);color:#FFD700;border:1px solid #FFD700}
-.btn-settings{background:rgba(255,255,255,.1);color:#fff;border:2px solid transparent;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;transition:all .2s}
+.btn-settings{background:rgba(255,255,255,.1);color:#fff;border:2px solid transparent;padding:6px 12px;border-radius:6px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;transition:all .2s}
 .btn-settings:focus{border-color:#FFD700;background:rgba(255,215,0,.2);transform:scale(1.05)}
 
-/* LISTA DE CANALES */
-.view-list{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:80px 16px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));grid-auto-rows:110px;gap:12px;background:#000}
-.card{background:#141414;border:2px solid transparent;border-radius:12px;padding:8px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;transition:transform .1s}
-.card img{width:100%;height:50px;object-fit:contain;margin-bottom:6px;pointer-events:none}
-.card span{font-size:11px;color:#ddd;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;pointer-events:none;line-height:1.2}
-.card:focus{border-color:#FFD700;background:#222;transform:scale(1.05);z-index:2;box-shadow:0 0 15px rgba(255,215,0,0.3)}
+/* LISTA DE CANALES (Diseño Original Chico) */
+.view-list{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:64px 8px 8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(85px,1fr));grid-auto-rows:90px;gap:6px;background:#000}
+.card{background:#111;border:2px solid transparent;border-radius:6px;padding:5px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;transition:transform .1s}
+.card img{width:100%;height:40px;object-fit:contain;margin-bottom:4px;pointer-events:none}
+.card span{font-size:10px;color:#ccc;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;pointer-events:none}
+.card:focus{border-color:#FFD700;background:#222;transform:scale(1.05);z-index:2}
 .card.off{display:none}
-.card.caido{opacity:.4;filter:grayscale(1);cursor:not-allowed}
-.card.caido:focus{border-color:#666;background:#1a1a1a;transform:none;box-shadow:none}
+.card.caido{opacity:.35;filter:grayscale(1);cursor:not-allowed}
+.card.caido:focus{border-color:#666;background:#1a1a1a;transform:none}
 
 /* ESTADO VACÍO */
 .empty{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:50px 20px;height:100%;margin-top:-40px}
-.empty .icon{font-size:80px;margin-bottom:20px;filter:drop-shadow(0 0 20px rgba(255,215,0,0.5))}
-.empty h2{font-family:'Montserrat',sans-serif;font-size:24px;color:#fff;margin-bottom:10px}
-.empty p{font-size:15px;color:#aaa;margin-bottom:30px;line-height:1.5;max-width:400px}
-.empty button{background:#FFD700;color:#000;border:3px solid transparent;padding:14px 40px;border-radius:50px;font-weight:800;font-size:16px;box-shadow:0 4px 16px rgba(255,215,0,.3);transition:all .2s}
-.empty button:focus{outline:none;border-color:#fff;transform:scale(1.05)}
+.empty .icon{font-size:60px;margin-bottom:15px;color:#FFD700}
+.empty h2{font-size:20px;color:#fff;margin-bottom:10px}
+.empty p{font-size:13px;color:#aaa;margin-bottom:20px;line-height:1.5}
+.empty button{background:#FFD700;color:#000;border:2px solid transparent;padding:10px 24px;border-radius:40px;font-weight:700;font-size:14px;transition:all .2s}
+.empty button:focus{border-color:#fff;transform:scale(1.05)}
 
-/* MENÚ SETTINGS (MODAL GRANDE) */
-.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(5px);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
-.modal-box{background:#1a1a1a;border:1px solid #333;border-radius:20px;width:100%;max-width:700px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.8);overflow:hidden}
-.modal-header{display:flex;justify-content:space-between;align-items:center;padding:20px 24px;border-bottom:1px solid #333;background:#111}
-.modal-header h2{font-family:'Montserrat',sans-serif;font-size:22px;color:#fff;display:flex;align-items:center;gap:10px}
-.btn-close{background:rgba(255,255,255,0.1);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;font-weight:bold;display:flex;align-items:center;justify-content:center;transition:background .2s}
-.btn-close:focus{background:#ff3333;outline:2px solid #fff}
-
-/* TABS */
-.tabs{display:flex;background:#111;border-bottom:1px solid #333}
-.tab{flex:1;padding:16px;background:none;border:none;border-bottom:3px solid transparent;color:#888;font-size:16px;font-weight:700;text-align:center;transition:all .2s}
-.tab:focus{background:rgba(255,255,255,0.05);color:#fff;outline:none}
-.tab.active{color:#FFD700;border-bottom-color:#FFD700}
-
-/* CONTENIDO TABS */
-.modal-body{padding:24px;overflow-y:auto;flex:1}
-.tab-content{display:none}
-.tab-content.active{display:block}
-
-/* FORMULARIO Y LISTAS */
-.section-title{font-size:14px;color:#FFD700;font-weight:800;letter-spacing:1px;margin-bottom:16px;display:flex;align-items:center;gap:8px;text-transform:uppercase}
-.input-group{display:flex;gap:10px;margin-bottom:24px}
-.input-group input{flex:1;background:#000;border:2px solid #444;color:#fff;padding:14px 16px;border-radius:10px;font-size:16px;transition:border .2s}
-.input-group input:focus{border-color:#FFD700;outline:none;background:#111}
-.btn-primary{background:#FFD700;color:#000;border:2px solid transparent;padding:0 24px;border-radius:10px;font-size:16px;font-weight:800;transition:all .2s}
-.btn-primary:focus{border-color:#fff;transform:scale(1.02);outline:none}
-
-.listas-grid{display:flex;flex-direction:column;gap:12px}
-.lista-item{display:flex;align-items:center;justify-content:space-between;background:#222;padding:16px;border-radius:12px;border:2px solid transparent;transition:all .2s}
-.lista-item:focus,.lista-item:hover{border-color:#FFD700;background:#2a2a2a;outline:none}
-.lista-item .info h4{font-size:16px;color:#fff;margin-bottom:4px}
-.lista-item .info p{font-size:13px;color:#aaa}
-.btn-danger{background:rgba(255,50,50,0.2);color:#ff3333;border:1px solid #ff3333;padding:10px 16px;border-radius:8px;font-weight:700;margin-left:10px}
-.btn-danger:focus{background:#ff3333;color:#fff;outline:none}
-
-/* LICENCIA */
-.lic-box{background:#111;border:2px solid #333;border-radius:16px;padding:24px;text-align:center;margin-bottom:20px}
-.lic-box h3{font-size:18px;color:#fff;margin-bottom:12px}
-.lic-id{background:#000;padding:16px;border-radius:12px;font-family:monospace;font-size:20px;color:#FFD700;letter-spacing:2px;border:1px solid #444;margin-bottom:16px;word-break:break-all}
-.lic-status{font-size:16px;font-weight:700;margin-bottom:20px}
-.btn-wa{background:#25D366;color:#fff;border:none;padding:14px 24px;border-radius:50px;font-size:16px;font-weight:700;width:100%;display:flex;align-items:center;justify-content:center;gap:10px}
-.btn-wa:focus{outline:3px solid #fff}
-
-/* REPRODUCTOR Y MODALES DE ERROR (Igual que antes) */
+/* REPRODUCTOR */
 .view-play{position:fixed;top:0;left:0;right:0;bottom:0;background:#000;display:none;z-index:2000}
 .view-play.active{display:block}
 .wrapper{position:absolute;top:0;left:0;width:100%;height:100%;background:#000}
-.wrapper.rotated{top:50%;left:50%;width:100vh;height:100vw;transform:translate(-50%,-50%) rotate(90deg)}
 .ui{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .2s}
 .ui.show{opacity:1;pointer-events:auto}
-.float-btn{position:absolute;right:20px;width:50px;height:50px;border-radius:50%;background:rgba(0,0,0,.8);color:#FFD700;border:2px solid #FFD700;font-size:24px;display:flex;align-items:center;justify-content:center}
-.btn-back{bottom:20px;background:#a00;border-color:#fff;color:#fff}
-.btn-rot{bottom:80px}
-.loader{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.9);padding:12px 24px;border-radius:30px;border:2px solid #FFD700;color:#FFD700;font-weight:bold;display:none;z-index:30;font-size:16px}
+.float-btn{position:absolute;right:15px;width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.7);color:#FFD700;border:2px solid #FFD700;font-size:22px;display:flex;align-items:center;justify-content:center}
+.btn-back{bottom:15px;background:#a00;border-color:#fff;color:#fff}
+.btn-rot{bottom:70px}
+.loader{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.9);padding:10px 20px;border-radius:30px;border:2px solid #FFD700;color:#FFD700;font-weight:bold;display:none;z-index:30}
 .loader.active{display:block}
 
-/* DIÁLOGOS DE INFO (Viejos) */
-.info-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.96);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
-.info-container{background:#141414;border:2px solid #FFD700;border-radius:24px;padding:20px;max-width:92%;width:400px;text-align:center;margin:auto}
+/* MODAL SETTINGS */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-box{background:#141414;border:2px solid #FFD700;border-radius:16px;width:100%;max-width:500px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+.modal-header{display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid #333;background:#0a0a0a}
+.modal-header h2{font-size:18px;color:#FFD700;display:flex;align-items:center;gap:8px}
+.btn-close{background:#222;border:2px solid transparent;color:#fff;width:32px;height:32px;border-radius:50%;font-size:16px;display:flex;align-items:center;justify-content:center}
+.btn-close:focus{border-color:#FFD700;background:#333}
+
+.tabs{display:flex;background:#0a0a0a;border-bottom:1px solid #333}
+.tab{flex:1;padding:12px;background:none;border:none;border-bottom:3px solid transparent;color:#888;font-size:14px;font-weight:700}
+.tab:focus{background:rgba(255,255,255,0.05);color:#fff;outline:none}
+.tab.active{color:#FFD700;border-bottom-color:#FFD700}
+
+.modal-body{padding:16px;overflow-y:auto;flex:1}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+.section-title{font-size:13px;color:#FFD700;font-weight:700;margin-bottom:10px;text-transform:uppercase}
+.input-group{display:flex;gap:8px;margin-bottom:20px}
+.input-group input{flex:1;background:#000;border:1px solid #444;color:#fff;padding:10px 12px;border-radius:6px;font-size:14px}
+.input-group input:focus{border-color:#FFD700;outline:none}
+.btn-primary{background:#FFD700;color:#000;border:none;padding:10px 16px;border-radius:6px;font-size:14px;font-weight:700}
+.btn-primary:focus{outline:2px solid #fff}
+
+.listas-grid{display:flex;flex-direction:column;gap:8px}
+.lista-item{display:flex;align-items:center;justify-content:space-between;background:#222;padding:12px;border-radius:8px;border:2px solid transparent}
+.lista-item:focus{border-color:#FFD700;outline:none}
+.lista-item .info h4{font-size:14px;color:#fff;margin-bottom:2px}
+.lista-item .info p{font-size:11px;color:#aaa}
+.btn-danger{background:rgba(255,50,50,0.2);color:#ff3333;border:1px solid #ff3333;padding:8px 12px;border-radius:6px;font-weight:700;font-size:12px}
+.btn-danger:focus{background:#ff3333;color:#fff;outline:none}
+
+.lic-box{background:#0a0a0a;border:1px solid #333;border-radius:12px;padding:16px;text-align:center}
+.lic-box h3{font-size:15px;color:#fff;margin-bottom:8px}
+.lic-id{background:#000;padding:12px;border-radius:8px;font-family:monospace;font-size:16px;color:#FFD700;border:1px solid #444;margin-bottom:12px;word-break:break-all}
+.lic-status{font-size:14px;font-weight:700;margin-bottom:12px}
+.btn-wa{background:#25D366;color:#fff;border:none;padding:10px;border-radius:40px;font-size:14px;font-weight:700;width:100%;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-wa:focus{outline:2px solid #fff}
 </style>
 </head>
 <body>
 
-<!-- BARRA SUPERIOR MODERNA -->
 <div class="top-bar" id="topBar">
   <div class="top-left">
     <span class="app-title">GTV PLAY R</span>
     <span class="lic-badge demo" id="topLicBadge">DEMO</span>
   </div>
-  <button class="btn-settings" id="btnOpenSettings" tabindex="0">
-    <span>⚙️</span> Menú
-  </button>
+  <button class="btn-settings" id="btnOpenSettings" tabindex="0">⚙️ Menú</button>
 </div>
 
-<!-- LISTA DE CANALES -->
 <div id="list" class="view-list"></div>
 
-<!-- REPRODUCTOR -->
 <div id="player" class="view-play">
   <div class="wrapper" id="wrap">
     <iframe id="ifr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
@@ -132,7 +118,6 @@ button{font-family:inherit;cursor:pointer}
   </div>
 </div>
 
-<!-- MODAL DE AJUSTES -->
 <div id="settingsModal" class="modal-overlay hidden">
   <div class="modal-box" role="dialog" aria-modal="true">
     <div class="modal-header">
@@ -146,21 +131,18 @@ button{font-family:inherit;cursor:pointer}
     </div>
 
     <div class="modal-body">
-      <!-- PESTAÑA: LISTAS -->
       <div id="tab-listas" class="tab-content active">
-        <div class="section-title">➕ Agregar Lista o Clave</div>
+        <div class="section-title">Agregar Lista</div>
         <div class="input-group">
-          <input type="text" id="inputNuevaLista" placeholder="URL de la lista o palabra clave..." autocomplete="off" spellcheck="false" tabindex="0">
+          <!-- SIN MENCIONAR PALABRA CLAVE -->
+          <input type="text" id="inputNuevaLista" placeholder="Ingresá la URL de la lista..." autocomplete="off" spellcheck="false" tabindex="0">
           <button class="btn-primary" id="btnCargarLista" tabindex="0">Cargar</button>
         </div>
 
-        <div class="section-title" style="margin-top:30px;">📋 Listas Guardadas</div>
-        <div class="listas-grid" id="listasGrid">
-          <!-- Se llena por JS -->
-        </div>
+        <div class="section-title" style="margin-top:20px;">Listas Guardadas</div>
+        <div class="listas-grid" id="listasGrid"></div>
       </div>
 
-      <!-- PESTAÑA: LICENCIA -->
       <div id="tab-licencia" class="tab-content">
         <div class="lic-box">
           <h3>Tu ID de Dispositivo</h3>
@@ -177,11 +159,7 @@ button{font-family:inherit;cursor:pointer}
 (function(){
 'use strict';
 
-var WORKER = 'https://gtv-portero.abrel03.workers.dev/api/';
-var BAN_URL = 'https://gtv-portero.abrel03.workers.dev';
 var SELLO = 'gtv_app_2026_secreto_xyz789';
-var EMBED_RE = /kick\.com|twitch\.tv|ok\.ru|odnoklassniki\.ru|dailymotion\.com|tokyvideo\.com/i;
-
 function $(id){return document.getElementById(id)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 var ls = {
@@ -190,21 +168,11 @@ var ls = {
   getJ: function(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v||d}catch(e){return d}},
   setJ: function(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 };
-function fetchW(url,ms,opts){
-  opts=opts||{};
-  opts.headers=Object.assign({'X-GTV-Origin':SELLO},opts.headers||{});
-  return fetch(url,opts);
-}
 function ap(){return window.AndroidPlayer||null}
 function hasNat(n){var a=ap();return !!(a&&a[n])}
 function nat(n){var a=ap();if(!a||!a[n])return undefined;try{return a[n].apply(a,Array.prototype.slice.call(arguments,1))}catch(e){return undefined}}
 
-var S = {
-  list: [], index: 0, view: 'list',
-  native: false, locked: false,
-  dlg: null,
-  caidos: {}, ocultos: {}
-};
+var S = { list: [], index: 0, view: 'list', caidos: {}, ocultos: {} };
 var lic = { hasLicense: false, expirationDate: null, demoStart: null };
 var remote = { horasDemo: 24, whatsapp: '5491133550182' };
 var deviceId = '';
@@ -274,7 +242,7 @@ function cargarListasGuardadas(){
     h += '<div class="lista-item" tabindex="0">' +
            '<div class="info"><h4>'+esc(l.nombre)+'</h4><p>'+l.canales+' canales</p></div>' +
            '<div>' +
-             '<button class="btn-primary" onclick="usarLista(\''+esc(l.nombre)+'\')" style="padding:10px 20px;">Usar</button>' +
+             '<button class="btn-primary" onclick="usarLista(\''+esc(l.nombre)+'\')" style="padding:8px 16px;">Usar</button>' +
              '<button class="btn-danger" onclick="borrarLista(\''+esc(l.nombre)+'\')">🗑</button>' +
            '</div>' +
          '</div>';
@@ -297,12 +265,11 @@ $('btnCargarLista').onclick = function(){
   var txt = $('inputNuevaLista').value.trim();
   if(!txt) return;
   
-  // ACÁ ESTÁ EL CAMBIO: Llama directo a cargarListaDesdeHtml, sin abrir el de Java
+  // Llama directo al nativo sin abrir el cartel feo de Java
   if(hasNat('cargarListaDesdeHtml')) {
       nat('cargarListaDesdeHtml', txt);
       cerrarSettings();
   } else {
-      // Fallback por si el nativo no tiene el método
       if(hasNat('abrirDialogo')) nat('abrirDialogo'); 
   }
 };
@@ -315,7 +282,7 @@ function actualizarLicenciaUI(){
   
   if(lic.expirationDate && lic.expirationDate >= hoy){
     activa = true;
-    txt = '✅ Licencia FULL activa (Vence: '+lic.expirationDate+')';
+    txt = '✅ FULL activa (Vence: '+lic.expirationDate+')';
     color = '#00ff66';
   } else if(lic.demoStart && (Date.now() - lic.demoStart < remote.horasDemo * 3600000)){
     activa = true;
@@ -356,12 +323,22 @@ function play(i, origin){
   $('list').classList.add('hidden');
   nat('reproducirCanal', i);
 }
+
 function detener(){
   $('player').classList.remove('active');
   $('list').classList.remove('hidden');
-  if(hasNat('cerrarPlayer')) nat('cerrarPlayer');
+  // Llama al nativo para que apague el player correctamente y vuelva a mostrar el WebView
+  if(hasNat('mostrarWebView')) nat('mostrarWebView');
 }
 $('goBack').onclick = detener;
+
+// Manejo de botón "Atrás" físico (Control Remoto)
+document.addEventListener('keydown', function(e){
+  if(e.keyCode === 4 || e.key === 'Escape' || e.key === 'Backspace'){
+    if(!$('settingsModal').classList.contains('hidden')){ cerrarSettings(); e.preventDefault(); return; }
+    if($('player').classList.contains('active')){ detener(); e.preventDefault(); return; }
+  }
+});
 
 window.gtvSetCanales = function(json){
   try {
