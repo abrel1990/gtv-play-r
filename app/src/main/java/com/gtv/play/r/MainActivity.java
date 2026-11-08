@@ -1124,9 +1124,11 @@ public class MainActivity extends AppCompatActivity {
                 while ((line = br.readLine()) != null) sb.append(line);
                 br.close(); is.close();
                 JSONObject json = new JSONObject(sb.toString());
+                
                 int remoteVersionCode = json.optInt("versionCode", 0);
                 String apkUrl = json.optString("apkUrl", "");
                 int currentVersionCode = getCurrentVersionCode();
+                
                 if (remoteVersionCode > currentVersionCode && !apkUrl.isEmpty()) {
                     final int rv = remoteVersionCode;
                     runOnUiThread(() -> mostrarDialogoUpdate(rv, apkUrl));
