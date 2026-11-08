@@ -22,15 +22,12 @@ jobs:
       - name: Bump Version
         id: bump
         run: |
-          # Busca la última versión en GitHub (si es v2, saca el 2)
           LAST_TAG=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/abrel1990/gtv-play-r/releases/latest | grep -oP '"tag_name":\s*"v\K[0-9.]+')
           
           if [ -z "$LAST_TAG" ]; then
-            # Si no hay release, arranca en 10
             NEW_CODE=10
             NEW_NAME="0.10"
           else
-            # Si la última fue 2, el código es 2. Si fue 0.10, el código es 10.
             if [[ "$LAST_TAG" == *.* ]]; then
               NEW_CODE=$(echo "$LAST_TAG" | tr -d '.')
             else
@@ -40,18 +37,12 @@ jobs:
             NEW_NAME="0.${NEW_CODE}"
           fi
 
-          # Modifica el build.gradle
           sed -i "s/versionCode [0-9]*/versionCode $NEW_CODE/" app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"$NEW_NAME\"/" app/build.gradle
           
           echo "NEW_CODE=$NEW_CODE" >> $GITHUB_ENV
           echo "NEW_NAME=$NEW_NAME" >> $GITHUB_ENV
           echo "Generando versión: v$NEW_NAME (Code: $NEW_CODE)"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: 8.7
 
       - name: Decode Keystore
         run: |
