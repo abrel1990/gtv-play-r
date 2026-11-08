@@ -1,65 +1,63 @@
-name: Build and Auto Release APK
-
+name: Build APK
 on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Permiso crucial para crear el Release automáticamente
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Decode keystore
+      # MAGIA: Suma +1 al versionCode automáticamente
+      - name: Bump Version Code
+        id: bump
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/gtv-release.jks
+          # Lee el número actual
+          CURRENT_CODE=$(grep -oP 'versionCode \K\d+' app/build.gradle)
+          # Suma 1
+          NEW_CODE=$((CURRENT_CODE + 1))
+          # Lo reemplaza en el archivo
+          sed -i "s/versionCode $CURRENT_CODE/versionCode $NEW_CODE/" app/build.gradle
+          # Guarda el número para usarlo después como tag de versión
+          echo "NEW_CODE=$NEW_CODE" >> $GITHUB_ENV
+          echo "Nueva versión: v$NEW_CODE"
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.7
 
-      # 1. Extraer la versión del build.gradle
-      - name: Extract version from build.gradle
-        id: get_version
+      - name: Decode Keystore
         run: |
-          VERSION=$(grep 'versionName' app/build.gradle | head -1 | sed -E 's/.*versionName "([^"]+)".*/\1/')
-          echo "VERSION_NAME=$VERSION" >> $GITHUB_ENV
-          echo "La versión detectada es: v$VERSION"
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/gtv-play-r.jks
+          echo "KEYSTORE_PATH=app/gtv-play-r.jks" >> $GITHUB_ENV
 
-      - name: Build release APK
+      - name: Build Release APK
+        run: chmod +x gradlew && ./gradlew assembleRelease
         env:
-          KEYSTORE_PATH: gtv-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
 
-      # 2. Subir el APK como Artifact (opcional, para que lo veas en la pestaña Actions)
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: app/build/outputs/apk/release/*.apk
-
-      # 3. Crear el Release en GitHub y adjuntar el APK automáticamente
-      - name: Create Release and Upload APK
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION_NAME }}
-          name: GTV Play R v${{ env.VERSION_NAME }}
+          # Acá usa el número nuevo que calculamos arriba (v2, v3, v4...)
+          tag_name: v${{ env.NEW_CODE }}
+          name: GTV Play R v${{ env.NEW_CODE }}
+          files: app/build/outputs/apk/release/app-release.apk
           draft: false
           prerelease: false
-          files: app/build/outputs/apk/release/*.apk
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
