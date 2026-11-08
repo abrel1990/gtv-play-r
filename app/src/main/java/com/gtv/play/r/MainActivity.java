@@ -127,7 +127,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String SELLO = "gtv_app_2026_secreto_xyz789";
     private boolean enYouTubeWeb = false;
     private boolean enYouTubeNativo = false;
-    private String jsPendienteAlVolver = null;
 
     private final ArrayList<Canal> canales = new ArrayList<>();
     private int indiceActual = -1;
@@ -171,7 +170,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String VERSION_URL = "https://gtv-portero.abrel03.workers.dev/api/version-r";
     private static final int MAX_SKIPS = 3;
 
-    /* Persistencia de listas */
     private static final String LISTAS_PREFS = "gtv_r_listas";
     private static final String LISTAS_KEY = "listas_guardadas";
     private static final String ULTIMA_LISTA_KEY = "ultima_lista";
@@ -385,7 +383,6 @@ public class MainActivity extends AppCompatActivity {
             catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
         }, 5000);
 
-        // Persistencia: cargar la última lista guardada
         handler.postDelayed(this::cargarListaGuardadaAlIniciar, 1500);
     }
 
@@ -1109,7 +1106,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-        private void checkForUpdates() {
+    private void checkForUpdates() {
         if (!hayInternet()) return;
         new Thread(() -> {
             try {
@@ -1127,14 +1124,9 @@ public class MainActivity extends AppCompatActivity {
                 while ((line = br.readLine()) != null) sb.append(line);
                 br.close(); is.close();
                 JSONObject json = new JSONObject(sb.toString());
-                
                 int remoteVersionCode = json.optInt("versionCode", 0);
                 String apkUrl = json.optString("apkUrl", "");
-                
-                int currentVersionCode = 0;
-                try { currentVersionCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; } catch (Exception ignored) {}
-                
-                // Si el remoto es mayor al actual, salta el cartel
+                int currentVersionCode = getCurrentVersionCode();
                 if (remoteVersionCode > currentVersionCode && !apkUrl.isEmpty()) {
                     final int rv = remoteVersionCode;
                     runOnUiThread(() -> mostrarDialogoUpdate(rv, apkUrl));
@@ -1151,9 +1143,9 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) { return false; }
     }
 
-    private String getCurrentVersionName() {
-        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
-        catch (Exception e) { return "0"; }
+    private int getCurrentVersionCode() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; }
+        catch (Exception e) { return 0; }
     }
 
     private int getSkipsForVersion(String version) {
@@ -1165,8 +1157,8 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit().putInt(UPDATE_TRIES_PREFIX + version, prefs.getInt(UPDATE_TRIES_PREFIX + version, 0) + 1).apply();
     }
 
-    private void mostrarDialogoUpdate(String remoteVersion, String apkUrl) {
-        int skips = getSkipsForVersion(remoteVersion);
+    private void mostrarDialogoUpdate(int remoteVersionCode, String apkUrl) {
+        int skips = getSkipsForVersion(String.valueOf(remoteVersionCode));
         boolean obligatorio = skips >= MAX_SKIPS;
         LayoutInflater inflater = getLayoutInflater();
         View dialogView = inflater.inflate(R.layout.dialog_update, null);
@@ -1186,8 +1178,8 @@ public class MainActivity extends AppCompatActivity {
             dialogSubtitle.setText("Actualización de GTV Play R");
             dialogMensaje.setText("Podés actualizar ahora o más tarde.\nTe quedan " + (MAX_SKIPS - skips) + " oportunidades.");
         }
-        dialogVersionActual.setText("Versión actual:  " + getCurrentVersionName());
-        dialogVersionNueva.setText("Nueva versión:  " + remoteVersion);
+        dialogVersionActual.setText("Versión actual:  v" + getCurrentVersionCode());
+        dialogVersionNueva.setText("Nueva versión:  v" + remoteVersionCode);
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setView(dialogView);
         builder.setCancelable(!obligatorio);
@@ -1195,7 +1187,7 @@ public class MainActivity extends AppCompatActivity {
         if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         btnActualizar.setOnClickListener(v -> { dialog.dismiss(); descargarEInstalar(apkUrl); });
         if (obligatorio) btnMasTarde.setVisibility(View.GONE);
-        else btnMasTarde.setOnClickListener(v -> { incrementSkipsForVersion(remoteVersion); dialog.dismiss(); });
+        else btnMasTarde.setOnClickListener(v -> { incrementSkipsForVersion(String.valueOf(remoteVersionCode)); dialog.dismiss(); });
         dialog.show();
         if (dialog.getWindow() != null) {
             int screenWidth = getResources().getDisplayMetrics().widthPixels;
@@ -1354,9 +1346,6 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
-    /* ============================================================
-       PERSISTENCIA DE LISTAS
-       ============================================================ */
     private void guardarNuevaLista(String nombre, String contenidoM3U, String urlOriginal) {
         try {
             SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
@@ -1589,14 +1578,9 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public boolean esExoPlayer(String url) { return esCanalExoPlayer(url); }
 
-        @JavascriptInterface public void abrirDialogo() {
-            runOnUiThread(() -> mostrarDialogoAgregarLista());
-        }
-
-        @JavascriptInterface public void abrirMenuListas() {
-            runOnUiThread(() -> {
-                avisarAlWebView("window.abrirMenuListasHTML&&window.abrirMenuListasHTML();");
-            });
+        // ESTE ES EL NUEVO MÉTODO PARA EL MODAL DEL HTML
+        @JavascriptInterface public void cargarListaDesdeHtml(final String texto) {
+            runOnUiThread(() -> validarYcargar(texto));
         }
 
         @JavascriptInterface public String listarListas() {
@@ -1716,28 +1700,6 @@ public class MainActivity extends AppCompatActivity {
                 if (pubModalClose != null) pubHandler.removeCallbacks(pubModalClose);
             });
         }
-    }
-
-    private void mostrarDialogoAgregarLista() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("📺 Agregar Lista");
-        builder.setMessage("Pegá la URL de tu lista M3U o ingresá la palabra clave:");
-        final EditText input = new EditText(this);
-        input.setHint("https://... o palabra clave");
-        LinearLayout wrapper = new LinearLayout(this);
-        wrapper.setOrientation(LinearLayout.VERTICAL);
-        wrapper.setPadding(dp(20), dp(10), dp(20), 0);
-        wrapper.addView(input);
-        builder.setView(wrapper);
-        builder.setPositiveButton("Cargar", (dialog, which) -> {
-            String texto = input.getText().toString().trim();
-            if (texto.isEmpty()) { Toast.makeText(this, "Ingresá una URL o palabra clave", Toast.LENGTH_SHORT).show(); return; }
-            validarYcargar(texto);
-        });
-        builder.setNegativeButton("Cancelar", (dialog, which) -> dialog.dismiss());
-        AlertDialog dialog = builder.create();
-        dialog.show();
-        input.requestFocus();
     }
 
     private void validarYcargar(final String texto) {
@@ -1921,7 +1883,7 @@ public class MainActivity extends AppCompatActivity {
         if (deviceIdCache != null) return deviceIdCache;
         String androidId = null;
         try { androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID); } catch (Exception ignored) {}
-        if (androidId == null || androidId.isEmpty()) androidId = "GTVR_FALLBACK_" + Build.MODEL + "_" + Build.SERIAL;
+        if (androidId == null || androidId.isEmpty()) androidId = "GTVR_FALLBACK_" + Build.MODEL + Build.SERIAL;
         final String ALFABETO = "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ";
         long hash = 0;
         for (int i = 0; i < androidId.length(); i++) hash = (hash * 31 + androidId.charAt(i)) & 0xFFFFFFFFL;
