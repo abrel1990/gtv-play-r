@@ -118,7 +118,7 @@ button{font-family:inherit;cursor:pointer}
 <!-- LISTA DE CANALES -->
 <div id="list" class="view-list"></div>
 
-<!-- REPRODUCTOR (SIN CAMBIOS) -->
+<!-- REPRODUCTOR -->
 <div id="player" class="view-play">
   <div class="wrapper" id="wrap">
     <iframe id="ifr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
@@ -132,7 +132,7 @@ button{font-family:inherit;cursor:pointer}
   </div>
 </div>
 
-<!-- MODAL DE AJUSTES (LISTAS Y LICENCIA) -->
+<!-- MODAL DE AJUSTES -->
 <div id="settingsModal" class="modal-overlay hidden">
   <div class="modal-box" role="dialog" aria-modal="true">
     <div class="modal-header">
@@ -150,7 +150,6 @@ button{font-family:inherit;cursor:pointer}
       <div id="tab-listas" class="tab-content active">
         <div class="section-title">➕ Agregar Lista o Clave</div>
         <div class="input-group">
-          <!-- ACÁ VA EL INPUT ÚNICO SIN CARTELES ACLARATORIOS -->
           <input type="text" id="inputNuevaLista" placeholder="URL de la lista o palabra clave..." autocomplete="off" spellcheck="false" tabindex="0">
           <button class="btn-primary" id="btnCargarLista" tabindex="0">Cargar</button>
         </div>
@@ -200,11 +199,10 @@ function ap(){return window.AndroidPlayer||null}
 function hasNat(n){var a=ap();return !!(a&&a[n])}
 function nat(n){var a=ap();if(!a||!a[n])return undefined;try{return a[n].apply(a,Array.prototype.slice.call(arguments,1))}catch(e){return undefined}}
 
-// ESTADO GLOBAL
 var S = {
   list: [], index: 0, view: 'list',
   native: false, locked: false,
-  dlg: null, // Para el modal de settings
+  dlg: null,
   caidos: {}, ocultos: {}
 };
 var lic = { hasLicense: false, expirationDate: null, demoStart: null };
@@ -213,7 +211,6 @@ var deviceId = '';
 if(hasNat('getDeviceId')){try{deviceId=nat('getDeviceId')}catch(e){}}
 if(!deviceId){ deviceId = ls.get('gtv_device_id','GTV-R-XXXXXX'); ls.set('gtv_device_id',deviceId); }
 
-// --- RENDERIZADO DE LISTA ---
 function renderLista(){
   var D = $('list');
   if(!S.list.length){
@@ -230,14 +227,12 @@ function renderLista(){
     h += '<div class="'+cls+'" tabindex="0" data-i="'+i+'"><img src="'+(c.logo||'')+'"><span>'+esc(c.nombre||c.name)+'</span></div>';
   }
   D.innerHTML = h;
-  // Lógica de click y foco
   var cards = D.querySelectorAll('.card');
   cards.forEach(function(card){
     card.addEventListener('click', function(){ play(parseInt(this.dataset.i), 'user'); });
   });
 }
 
-// --- LÓGICA DEL MENÚ (TABS) ---
 function abrirSettings(){
   $('settingsModal').classList.remove('hidden');
   $('btnCloseSettings').focus();
@@ -252,7 +247,6 @@ function cerrarSettings(){
 $('btnOpenSettings').onclick = abrirSettings;
 $('btnCloseSettings').onclick = cerrarSettings;
 
-// Navegación de Tabs
 var tabs = document.querySelectorAll('.tab');
 tabs.forEach(function(tab){
   tab.addEventListener('click', function(){
@@ -263,7 +257,6 @@ tabs.forEach(function(tab){
   });
 });
 
-// --- LÓGICA DE LISTAS GUARDADAS ---
 function cargarListasGuardadas(){
   var grid = $('listasGrid');
   grid.innerHTML = '<div style="color:#aaa;text-align:center;">Cargando...</div>';
@@ -303,18 +296,17 @@ window.borrarLista = function(nombre){
 $('btnCargarLista').onclick = function(){
   var txt = $('inputNuevaLista').value.trim();
   if(!txt) return;
-  cerrarSettings();
-  // Pasamos la URL o Clave al nativo, que decide si validar como clave o descargar como URL
-  // PERO, MainActivity tiene un diálogo nativo para esto. 
-  // Mejor, disparamos la descarga directo.
-  if(hasNat('abrirDialogo')) {
-      // Hack rápido: si es URL lo mandamos directo al nativo si tuvieramos un método,
-      // pero como el MainActivity usa el diálogo, lo abrimos.
-      nat('abrirDialogo'); 
+  
+  // ACÁ ESTÁ EL CAMBIO: Llama directo a cargarListaDesdeHtml, sin abrir el de Java
+  if(hasNat('cargarListaDesdeHtml')) {
+      nat('cargarListaDesdeHtml', txt);
+      cerrarSettings();
+  } else {
+      // Fallback por si el nativo no tiene el método
+      if(hasNat('abrirDialogo')) nat('abrirDialogo'); 
   }
 };
 
-// --- LÓGICA DE LICENCIA ---
 function actualizarLicenciaUI(){
   var hoy = new Date().toISOString().split('T')[0];
   var activa = false;
@@ -337,7 +329,6 @@ function actualizarLicenciaUI(){
   $('licStatusText').textContent = txt;
   $('licStatusText').style.color = color;
   
-  // Actualizar badge arriba
   var badge = $('topLicBadge');
   if(lic.expirationDate) {
       badge.textContent = 'FULL';
@@ -352,17 +343,15 @@ $('btnWa').onclick = function(){
   window.open('https://wa.me/'+remote.whatsapp+'?text='+encodeURIComponent('Hola, necesito activar mi licencia GTV Play R. Mi ID es: '+deviceId), '_blank');
 };
 
-// --- LÓGICA DEL REPRODUCTOR ---
 function play(i, origin){
   if(i < 0 || i >= S.list.length) return;
   var c = S.list[i];
-  if(S.caidos[c.url]) return; // Bloqueado si está caído
+  if(S.caidos[c.url]) return;
   
   S.index = i;
   nat('sincronizarIndice', i);
   ls.set('gtv_last_index', String(i));
   
-  // Mostrar reproductor
   $('player').classList.add('active');
   $('list').classList.add('hidden');
   nat('reproducirCanal', i);
@@ -374,7 +363,6 @@ function detener(){
 }
 $('goBack').onclick = detener;
 
-// --- RECIBIR DATOS DEL NATIVO ---
 window.gtvSetCanales = function(json){
   try {
     var arr = JSON.parse(json);
@@ -383,15 +371,11 @@ window.gtvSetCanales = function(json){
   } catch(e) {}
 };
 
-// --- INICIO ---
-// Si no viene lista del nativo, cargamos la de localStorage por las dudas
 var cached = ls.getJ('gtv_channels', null);
 if(cached) S.list = cached;
 renderLista();
 
-// Simulamos carga de licencia (esto lo hace el nativo usualmente)
-// En tu MainActivity, esto se maneja con avisarAlWebView o similar, pero acá lo forzamos
-lic.expirationDate = "2026-12-31"; // Simulación para que se vea lindo hasta que conectes el Worker
+lic.expirationDate = "2026-12-31";
 actualizarLicenciaUI();
 
 })();
