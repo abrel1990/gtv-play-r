@@ -23,13 +23,9 @@ jobs:
       - name: Bump Version Code
         id: bump
         run: |
-          # Lee el número actual
           CURRENT_CODE=$(grep -oP 'versionCode \K\d+' app/build.gradle)
-          # Suma 1
           NEW_CODE=$((CURRENT_CODE + 1))
-          # Lo reemplaza en el archivo
           sed -i "s/versionCode $CURRENT_CODE/versionCode $NEW_CODE/" app/build.gradle
-          # Guarda el número para usarlo después como tag de versión
           echo "NEW_CODE=$NEW_CODE" >> $GITHUB_ENV
           echo "Nueva versión: v$NEW_CODE"
 
@@ -41,7 +37,8 @@ jobs:
       - name: Decode Keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/gtv-play-r.jks
-          echo "KEYSTORE_PATH=app/gtv-play-r.jks" >> $GITHUB_ENV
+          # Le decimos a Gradle que el keystore está en la misma carpeta 'app/'
+          echo "KEYSTORE_PATH=gtv-play-r.jks" >> $GITHUB_ENV
 
       - name: Build Release APK
         run: chmod +x gradlew && ./gradlew assembleRelease
@@ -53,7 +50,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          # Acá usa el número nuevo que calculamos arriba (v2, v3, v4...)
+          # Usa el número nuevo que calculamos arriba (v2, v3, v4...)
           tag_name: v${{ env.NEW_CODE }}
           name: GTV Play R v${{ env.NEW_CODE }}
           files: app/build/outputs/apk/release/app-release.apk
