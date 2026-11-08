@@ -4,365 +4,1369 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>GTV Play R</title>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Montserrat:wght@400;700&family=Poppins:wght@400;700&family=Inter:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;width:100%;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;-webkit-user-select:none;user-select:none}
+input{-webkit-user-select:text;user-select:text}
 :focus{outline:none}
 .hidden{display:none!important}
-button{font-family:inherit;cursor:pointer}
+button{font-family:inherit}
 
-/* BARRA SUPERIOR */
-.top-bar{position:fixed;top:0;left:0;right:0;height:56px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;z-index:100;background:#0a0a0a;border-bottom:2px solid #FFD700;pointer-events:none}
-.top-bar *{pointer-events:auto}
-.top-left{display:flex;align-items:center;gap:10px}
-.app-title{font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:#fff;letter-spacing:.5px}
-.lic-badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;text-transform:uppercase}
-.lic-badge.full{background:rgba(0,255,102,.15);color:#00ff66;border:1px solid #00ff66}
-.lic-badge.demo{background:rgba(255,215,0,.15);color:#FFD700;border:1px solid #FFD700}
-.btn-settings{background:rgba(255,255,255,.1);color:#fff;border:2px solid transparent;padding:6px 12px;border-radius:6px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;transition:all .2s}
-.btn-settings:focus{border-color:#FFD700;background:rgba(255,215,0,.2);transform:scale(1.05)}
+/* STATUS BAR */
+.status-bar{position:fixed;top:0;left:0;right:0;height:48px;padding:0 12px;display:flex;justify-content:space-between;align-items:center;z-index:100;font-size:12px;background:#0b0b0b;border-bottom:2px solid #FFD700;cursor:pointer}
+.status-bar:focus{background:#2a2400;border-bottom-color:#fff}
+.status-bar.ocultar{display:none}
+.status-left{display:flex;align-items:center;gap:8px}
+.status-right{display:flex;align-items:center;gap:8px}
+.status-text{font-weight:bold}
+.status-demo{color:#FFD700}.status-full{color:#00ff66}.status-expiring{color:#ff6600}
+.status-time{font-family:monospace;font-size:11px;background:rgba(255,255,255,.08);padding:4px 8px;border-radius:20px}
+.btn-menu{background:rgba(255,255,255,.1);color:#fff;border:2px solid transparent;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:bold;cursor:pointer}
+.btn-menu:focus{border-color:#FFD700;background:rgba(255,215,0,.25)}
 
-/* LISTA DE CANALES (Diseño Original Chico) */
-.view-list{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:64px 8px 8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(85px,1fr));grid-auto-rows:90px;gap:6px;background:#000}
-.card{background:#111;border:2px solid transparent;border-radius:6px;padding:5px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;transition:transform .1s}
+/* LISTA DE CANALES */
+.view-list{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:56px 8px 8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(85px,1fr));grid-auto-rows:90px;gap:6px;background:#000}
+.view-list.bar-hidden{padding-top:8px}
+.card{background:#111;border:2px solid transparent;border-radius:6px;padding:5px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;contain:layout style paint}
+.card:active{background:#222}
+.card:focus{border-color:#FFD700;background:#222}
 .card img{width:100%;height:40px;object-fit:contain;margin-bottom:4px;pointer-events:none}
-.card span{font-size:10px;color:#ccc;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;pointer-events:none}
-.card:focus{border-color:#FFD700;background:#222;transform:scale(1.05);z-index:2}
+.card span{font-size:10px;color:#ccc;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;pointer-events:none;max-width:100%}
 .card.off{display:none}
-.card.caido{opacity:.35;filter:grayscale(1);cursor:not-allowed}
-.card.caido:focus{border-color:#666;background:#1a1a1a;transform:none}
+.card.caido{opacity:.35;cursor:default}
+.card.caido:focus{border-color:#666;background:#1a1a1a}
 
 /* ESTADO VACÍO */
-.empty{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:50px 20px;height:100%;margin-top:-40px}
-.empty .icon{font-size:60px;margin-bottom:15px;color:#FFD700}
-.empty h2{font-size:20px;color:#fff;margin-bottom:10px}
-.empty p{font-size:13px;color:#aaa;margin-bottom:20px;line-height:1.5}
-.empty button{background:#FFD700;color:#000;border:2px solid transparent;padding:10px 24px;border-radius:40px;font-weight:700;font-size:14px;transition:all .2s}
-.empty button:focus{border-color:#fff;transform:scale(1.05)}
+.empty{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:50px 20px;color:#FFD700;height:100%}
+.empty .icon{font-size:60px;margin-bottom:20px}
+.empty .title{font-size:20px;font-weight:bold;margin-bottom:12px;letter-spacing:1px}
+.empty .subtitle{font-size:13px;color:#aaa;margin-bottom:30px;line-height:1.5;max-width:320px}
+.empty button{background:#FFD700;color:#000;border:none;padding:14px 32px;border-radius:50px;font-weight:bold;font-size:15px;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.4)}
+.empty button:focus{outline:3px solid #fff;background:#e6c200;transform:scale(1.05)}
+.empty button:active{transform:scale(0.98)}
+.empty small{color:#666;margin-top:20px;font-size:11px}
 
-/* REPRODUCTOR */
-.view-play{position:fixed;top:0;left:0;right:0;bottom:0;background:#000;display:none;z-index:2000}
+/* PLAYER */
+.view-play{position:fixed;top:0;left:0;right:0;bottom:0;background:#000;display:none;z-index:1000}
 .view-play.active{display:block}
 .wrapper{position:absolute;top:0;left:0;width:100%;height:100%;background:#000}
-.ui{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .2s}
+.wrapper.rotated{top:50%;left:50%;width:100vh;height:100vw;-webkit-transform:translate(-50%,-50%) rotate(90deg);transform:translate(-50%,-50%) rotate(90deg)}
+#ifr,#kickIfr,#okIfr,#dailymotionIfr,#tokyvideoIfr{position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000;display:none}
+.shield{position:absolute;top:0;left:0;right:0;bottom:0;z-index:10}
+.ui{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;pointer-events:none;opacity:0}
 .ui.show{opacity:1;pointer-events:auto}
-.float-btn{position:absolute;right:15px;width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.7);color:#FFD700;border:2px solid #FFD700;font-size:22px;display:flex;align-items:center;justify-content:center}
+.nav-btn{position:absolute;top:50%;margin-top:-40px;width:60px;height:80px;background:rgba(0,0,0,.6);color:#FFD700;border:2px solid #FFD700;border-radius:10px;font-size:34px;cursor:pointer;pointer-events:auto}
+.nav-btn.l{left:10px}.nav-btn.r{right:10px}
+.nav-btn:active,.float-btn:active{background:#FFD700;color:#000}
+.ui.single .nav-btn{display:none}
+.float-btn{position:absolute;right:15px;width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.7);color:#FFD700;border:2px solid #FFD700;font-size:22px;cursor:pointer;pointer-events:auto}
 .btn-back{bottom:15px;background:#a00;border-color:#fff;color:#fff}
 .btn-rot{bottom:70px}
-.loader{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.9);padding:10px 20px;border-radius:30px;border:2px solid #FFD700;color:#FFD700;font-weight:bold;display:none;z-index:30}
+.modal{position:absolute;top:20px;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);background:rgba(0,0,0,.8);padding:8px 16px;border-radius:30px;border:1px solid #FFD700;display:flex;align-items:center;gap:10px;pointer-events:none;white-space:nowrap;max-width:90%}
+.modal img{height:30px;width:auto;border-radius:5px}
+.modal-name{font-size:13px;font-weight:bold;color:#FFD700;overflow:hidden;text-overflow:ellipsis}
+.modal-count{font-size:10px;color:#ccc}
+.loader{position:absolute;top:50%;left:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);background:rgba(0,0,0,.9);padding:10px 20px;border-radius:30px;border:2px solid #FFD700;color:#FFD700;font-weight:bold;display:none;z-index:30;white-space:nowrap;font-size:14px}
 .loader.active{display:block}
+.sin-senal{position:absolute;top:0;left:0;right:0;bottom:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:35;text-align:center;padding:24px;pointer-events:none}
+.sin-senal.hidden{display:none!important}
+.sin-senal img{max-height:80px;max-width:220px;margin-bottom:22px;object-fit:contain;opacity:.95}
+.sin-senal .ss-nombre{font-size:24px;font-weight:bold;color:#FFD700;margin-bottom:14px;letter-spacing:.5px;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sin-senal .ss-msg{font-size:16px;color:#fff;margin-bottom:8px;line-height:1.5;max-width:80%}
+.sin-senal .ss-hint{font-size:12px;color:#888;margin-top:6px}
 
-/* MODAL SETTINGS */
-.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px}
-.modal-box{background:#141414;border:2px solid #FFD700;border-radius:16px;width:100%;max-width:500px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
-.modal-header{display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid #333;background:#0a0a0a}
-.modal-header h2{font-size:18px;color:#FFD700;display:flex;align-items:center;gap:8px}
-.btn-close{background:#222;border:2px solid transparent;color:#fff;width:32px;height:32px;border-radius:50%;font-size:16px;display:flex;align-items:center;justify-content:center}
-.btn-close:focus{border-color:#FFD700;background:#333}
+/* INFO DIALOG */
+.info-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.96);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
+.info-container{background:#141414;border:2px solid #FFD700;border-radius:24px;padding:20px;max-width:92%;width:400px;text-align:center;margin:auto}
+.info-container h2{color:#FFD700;margin-bottom:12px;font-size:20px}
+.info-id{background:#000;color:#FFD700;font-family:monospace;font-size:18px;font-weight:bold;padding:12px;border-radius:16px;letter-spacing:1px;margin:12px 0;border:1px solid #FFD700;word-break:break-all}
+.info-pill{display:inline-block;background:rgba(255,215,0,.12);border:1px solid rgba(255,215,0,.3);border-radius:14px;padding:8px 14px;margin:4px;font-size:13px}
+.info-pill .num{color:#FFD700;font-weight:bold;font-size:16px}
+.info-pill .lbl{color:#ccc;font-size:11px;display:block;margin-top:2px}
+.info-pill.green{background:rgba(46,204,113,.12);border-color:rgba(46,204,113,.4)}.info-pill.green .num{color:#2ecc71}
+.info-pill.orange{background:rgba(230,126,34,.12);border-color:rgba(230,126,34,.4)}.info-pill.orange .num{color:#e67e22}
+.info-tip{font-size:12px;color:#bbb;margin-top:10px;line-height:1.5}.info-tip strong{color:#FFD700}
+.whatsapp-number-tv{background:rgba(37,211,102,.15);border:2px solid #25D366;border-radius:16px;padding:12px;margin:12px 0}
+.whatsapp-number-tv .label{color:#25D366;font-size:11px;font-weight:bold;letter-spacing:1px;margin-bottom:6px}
+.whatsapp-number-tv .number{color:#fff;font-size:22px;font-weight:bold;font-family:monospace;letter-spacing:2px}
+.button-group{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:15px}
+.info-container button,.popup-box button,.toast-blocked button{background:#FFD700;color:#000;border:none;padding:10px 16px;border-radius:40px;font-weight:bold;font-size:13px;cursor:pointer;min-width:90px}
+.info-container button:focus,.popup-box button:focus,.toast-blocked button:focus{outline:3px solid #fff;background:#e6c200}
+.close-info,.close-toast{background:#333!important;color:#fff!important}
+.whatsapp-btn{background:#25D366!important;color:#fff!important}
+.toast-blocked{position:fixed;bottom:90px;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);background:#000;border:2px solid #FFD700;border-radius:30px;padding:12px 20px;z-index:10001;display:flex;gap:12px;align-items:center;font-size:13px;white-space:nowrap}
+.toast-blocked span{color:#FFD700}
+.popup-box{background:#141414;border:3px solid #FFD700;border-radius:24px;padding:26px 30px;max-width:550px;width:90%;max-height:85vh;text-align:center}
+.popup-box .ptitle{font-size:13px;color:#FFD700;font-weight:bold;letter-spacing:2px;margin-bottom:14px}
+.popup-box .ptext{color:#e0e0e0;font-size:15px;line-height:1.7;max-height:55vh;overflow-y:auto}
+.popup-box button{margin-top:18px;padding:11px 40px}
 
-.tabs{display:flex;background:#0a0a0a;border-bottom:1px solid #333}
-.tab{flex:1;padding:12px;background:none;border:none;border-bottom:3px solid transparent;color:#888;font-size:14px;font-weight:700}
-.tab:focus{background:rgba(255,255,255,0.05);color:#fff;outline:none}
-.tab.active{color:#FFD700;border-bottom-color:#FFD700}
+/* MENÚ DE CONFIGURACIÓN (listas) */
+.set-box{text-align:left;max-height:92vh;overflow-y:auto}
+.set-box h2{text-align:center}
+.set-sec{font-size:12px;color:#FFD700;font-weight:bold;letter-spacing:1px;margin:14px 0 8px;text-transform:uppercase}
+.set-row{display:flex;gap:8px;align-items:center}
+.set-input{flex:1;min-width:0;background:#000;color:#fff;border:2px solid #444;border-radius:10px;padding:10px 12px;font-size:14px}
+.set-input:focus{border-color:#FFD700}
+.set-empty{color:#888;font-size:12px;text-align:center;padding:10px 0}
+.s-item{display:flex;align-items:center;gap:8px;background:#1f1f1f;border-radius:12px;padding:8px 10px;margin-bottom:6px}
+.s-info{flex:1;min-width:0}
+.s-info b{display:block;font-size:13px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s-info small{font-size:11px;color:#aaa}
+.info-container .s-item button{min-width:0;padding:8px 12px}
+.info-container .s-del{background:#7a1010;color:#fff}
+.info-container .s-del:focus{background:#c0392b}
 
-.modal-body{padding:16px;overflow-y:auto;flex:1}
-.tab-content{display:none}
-.tab-content.active{display:block}
+/* BLOCK SCREEN */
+.block-screen{position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:99999;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;overflow-y:auto}
+.block-screen .box{max-width:320px;width:100%}
+.block-screen button{background:#25D366;color:#fff;border:none;padding:12px 20px;border-radius:50px;font-size:14px;font-weight:bold;cursor:pointer;margin:6px 0;width:100%;max-width:230px}
+.block-screen button:focus{outline:3px solid #fff}
+.block-screen button.alt{background:#FFD700;color:#000}
 
-.section-title{font-size:13px;color:#FFD700;font-weight:700;margin-bottom:10px;text-transform:uppercase}
-.input-group{display:flex;gap:8px;margin-bottom:20px}
-.input-group input{flex:1;background:#000;border:1px solid #444;color:#fff;padding:10px 12px;border-radius:6px;font-size:14px}
-.input-group input:focus{border-color:#FFD700;outline:none}
-.btn-primary{background:#FFD700;color:#000;border:none;padding:10px 16px;border-radius:6px;font-size:14px;font-weight:700}
-.btn-primary:focus{outline:2px solid #fff}
+/* GPLIS CINEMA (PELÍCULAS) */
+#movies{display:none;width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#0a0a0a}
+#movies.active{display:block}
+.peliculas-header{position:sticky;top:0;background:#050505;padding:0 20px;z-index:99;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(229,9,20,.4);height:56px}
+.peliculas-logo{font-size:18px;font-weight:800;color:#fff;cursor:pointer;padding:6px 10px;border-radius:10px;border:2px solid transparent}
+.peliculas-counter{background:linear-gradient(135deg,#f1c40f,#e67e22);padding:5px 14px;border-radius:40px;font-size:13px;font-weight:800;color:#000;cursor:pointer;border:2px solid transparent}
+.peliculas-logo:focus,.peliculas-counter:focus{border-color:#FFD700;background-color:#2a1a1a}
+.peliculas-counter:focus{background:#FFD700}
+.hint{font-size:10px;color:#777;position:absolute;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);pointer-events:none}
+#mcontent{padding:10px 0 30px}
+.msg{text-align:center;padding:60px 20px;color:#FFD700}.msg.err{color:#E50914}
+.peliculas-section{margin:14px 0 8px}
+.section-header{padding:0 20px 8px}
+.section-title{font-size:17px;font-weight:700;position:relative;display:inline-block;padding-bottom:6px}
+.section-title:after{content:'';position:absolute;bottom:0;left:0;width:40px;height:3px;background:#E50914;border-radius:2px}
+.slider-container{overflow-x:auto;padding:6px 20px 14px;scrollbar-width:none}
+.slider-container::-webkit-scrollbar{display:none}
+.cards-slider{display:flex;gap:10px}
+.pelicula-card,.ver-todos-card{width:140px;flex-shrink:0;position:relative;border-radius:10px;overflow:hidden;cursor:pointer;background:#1a1a1a;border:2px solid transparent}
+.pelicula-card:focus,.ver-todos-card:focus{border-color:#FFD700}
+body:not(.lite) .pelicula-card,body:not(.lite) .ver-todos-card{transition:-webkit-transform .15s;transition:transform .15s}
+body:not(.lite) .pelicula-card:focus,body:not(.lite) .ver-todos-card:focus{-webkit-transform:scale(1.05);transform:scale(1.05)}
+.pelicula-card-img{position:relative;height:0;padding-bottom:150%;overflow:hidden;background:#111}
+.pelicula-card-img img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
+.pelicula-card-img:after{content:'';position:absolute;bottom:0;left:0;right:0;height:55%;background:linear-gradient(to top,rgba(0,0,0,.95),transparent);pointer-events:none}
+.pelicula-year-badge{position:absolute;top:8px;right:8px;background:#E50914;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;z-index:3}
+.pelicula-type-badge{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.7);padding:3px 8px;border-radius:20px;font-size:9px;z-index:3}
+.pelicula-new-badge{position:absolute;top:34px;left:8px;background:#2ecc71;color:#000;font-size:8px;font-weight:800;padding:2px 8px;border-radius:20px;z-index:4}
+.pelicula-card-info{position:absolute;bottom:0;left:0;right:0;padding:30px 10px 10px;z-index:3}
+.pelicula-card-title{font-size:12px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pelicula-fav-btn{position:absolute;bottom:46px;left:8px;background:rgba(0,0,0,.6);color:#f1c40f;width:28px;height:28px;line-height:28px;text-align:center;border-radius:50%;font-size:14px;z-index:5}
+.pelicula-fav-btn.active{background:#e67e22;color:#fff}
+.delete-history-btn{position:absolute;top:32px;right:8px;background:rgba(0,0,0,.7);width:24px;height:24px;line-height:24px;text-align:center;border-radius:50%;font-size:12px;z-index:5}
+.ver-todos-card{background:#101020;border-color:#E50914;display:flex;align-items:center;justify-content:center;flex-direction:column;min-height:210px}
+.ver-todos-card .ico{font-size:32px;margin-bottom:6px}
+.ver-todos-card .txt{font-size:12px;font-weight:700;color:#E50914}
+.ver-todos-card .cnt{font-size:9px;color:#777;margin-top:4px}
 
-.listas-grid{display:flex;flex-direction:column;gap:8px}
-.lista-item{display:flex;align-items:center;justify-content:space-between;background:#222;padding:12px;border-radius:8px;border:2px solid transparent}
-.lista-item:focus{border-color:#FFD700;outline:none}
-.lista-item .info h4{font-size:14px;color:#fff;margin-bottom:2px}
-.lista-item .info p{font-size:11px;color:#aaa}
-.btn-danger{background:rgba(255,50,50,0.2);color:#ff3333;border:1px solid #ff3333;padding:8px 12px;border-radius:6px;font-weight:700;font-size:12px}
-.btn-danger:focus{background:#ff3333;color:#fff;outline:none}
+/* GRID (ver todos) */
+#grid{position:fixed;top:0;left:0;right:0;bottom:0;background:#0a0a0a;z-index:2000;overflow-y:auto;display:none;padding:70px 15px 30px;-webkit-overflow-scrolling:touch}
+#grid.active{display:block}
+.grid-header{position:fixed;top:0;left:0;right:0;background:#050505;padding:0 20px;height:56px;display:flex;justify-content:space-between;align-items:center;z-index:2001;border-bottom:1px solid rgba(229,9,20,.4)}
+.grid-header h3{font-size:17px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:10px}
+.grid-close{background:#E50914;border:2px solid transparent;color:#fff;width:38px;height:38px;border-radius:50%;font-size:18px;cursor:pointer;flex-shrink:0}
+.grid-close:focus{border-color:#FFD700}
+#gcontent{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;padding:10px 0}
+#gcontent .pelicula-card{width:auto}
 
-.lic-box{background:#0a0a0a;border:1px solid #333;border-radius:12px;padding:16px;text-align:center}
-.lic-box h3{font-size:15px;color:#fff;margin-bottom:8px}
-.lic-id{background:#000;padding:12px;border-radius:8px;font-family:monospace;font-size:16px;color:#FFD700;border:1px solid #444;margin-bottom:12px;word-break:break-all}
-.lic-status{font-size:14px;font-weight:700;margin-bottom:12px}
-.btn-wa{background:#25D366;color:#fff;border:none;padding:10px;border-radius:40px;font-size:14px;font-weight:700;width:100%;display:flex;align-items:center;justify-content:center;gap:8px}
-.btn-wa:focus{outline:2px solid #fff}
+/* RESPONSIVE */
+@media (max-width:480px){#gcontent{grid-template-columns:repeat(2,1fr);gap:10px}.pelicula-card,.ver-todos-card{width:110px}.ver-todos-card{min-height:165px}.section-header,.slider-container{padding-left:12px;padding-right:12px}.status-bar{height:40px;font-size:11px}}
+body.tv *{animation:none!important;transition:none!important}
+body.lite .pelicula-card,body.lite .ver-todos-card{transition:none!important}
 </style>
 </head>
 <body>
 
-<div class="top-bar" id="topBar">
-  <div class="top-left">
-    <span class="app-title">GTV PLAY R</span>
-    <span class="lic-badge demo" id="topLicBadge">DEMO</span>
+<!-- STATUS BAR -->
+<div class="status-bar" id="statusBar" tabindex="0">
+  <div class="status-left">
+    <span id="statusIcon">🎬</span>
+    <span class="status-text" id="statusText">GTV Play R</span>
   </div>
-  <button class="btn-settings" id="btnOpenSettings" tabindex="0">⚙️ Menú</button>
+  <div class="status-right">
+    <span class="status-time" id="statusTime"></span>
+    <button class="btn-menu" id="btnMenu" tabindex="0">⚙️ Menú</button>
+  </div>
 </div>
 
+<!-- LISTA DE CANALES -->
 <div id="list" class="view-list"></div>
 
+<!-- PLAYER -->
 <div id="player" class="view-play">
   <div class="wrapper" id="wrap">
     <iframe id="ifr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
     <iframe id="kickIfr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
     <iframe id="okIfr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
+    <iframe id="dailymotionIfr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
+    <iframe id="tokyvideoIfr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
+    <div class="shield" id="shield"></div>
     <div class="ui" id="ui">
       <div class="loader" id="ld">Sintonizando...</div>
-      <button class="float-btn btn-back" id="goBack" tabindex="0">✕</button>
-      <button class="float-btn btn-rot" id="goRot" tabindex="0">⟳</button>
-    </div>
-  </div>
-</div>
-
-<div id="settingsModal" class="modal-overlay hidden">
-  <div class="modal-box" role="dialog" aria-modal="true">
-    <div class="modal-header">
-      <h2><span>⚙️</span> Configuración</h2>
-      <button class="btn-close" id="btnCloseSettings" tabindex="0">✕</button>
-    </div>
-    
-    <div class="tabs">
-      <button class="tab active" data-tab="tab-listas" tabindex="0">📺 Mis Listas</button>
-      <button class="tab" data-tab="tab-licencia" tabindex="0">🎫 Mi Licencia</button>
-    </div>
-
-    <div class="modal-body">
-      <div id="tab-listas" class="tab-content active">
-        <div class="section-title">Agregar Lista</div>
-        <div class="input-group">
-          <input type="text" id="inputNuevaLista" placeholder="Ingresá la URL de la lista..." autocomplete="off" spellcheck="false" tabindex="0">
-          <button class="btn-primary" id="btnCargarLista" tabindex="0">Cargar</button>
-        </div>
-
-        <div class="section-title" style="margin-top:20px;">Listas Guardadas</div>
-        <div class="listas-grid" id="listasGrid"></div>
+      <div id="sinSenal" class="sin-senal hidden">
+        <img id="ssLogo" src="" alt="">
+        <div class="ss-nombre" id="ssNombre"></div>
+        <div class="ss-msg">📡 En este momento no está transmitiendo en vivo</div>
+        <div class="ss-hint">Probá de nuevo más tarde</div>
       </div>
-
-      <div id="tab-licencia" class="tab-content">
-        <div class="lic-box">
-          <h3>Tu ID de Dispositivo</h3>
-          <div class="lic-id" id="licDeviceId">Cargando...</div>
-          <div class="lic-status" id="licStatusText">...</div>
-          <button class="btn-wa" id="btnWa" tabindex="0">💬 Contactar por WhatsApp</button>
-        </div>
+      <button class="nav-btn l" id="goPrev" tabindex="-1">❮</button>
+      <button class="nav-btn r" id="goNext" tabindex="-1">❯</button>
+      <button class="float-btn btn-back" id="goBack" tabindex="-1">✕</button>
+      <button class="float-btn btn-rot" id="goRot" tabindex="-1">⟳</button>
+      <div class="modal">
+        <img id="mImg" src="" alt="">
+        <span class="modal-name" id="mName"></span>
+        <span class="modal-count" id="mCount"></span>
       </div>
     </div>
   </div>
 </div>
 
+<!-- GPLIS CINEMA -->
+<div id="movies">
+  <div class="peliculas-header">
+    <div class="peliculas-logo" id="mback" tabindex="0">◀ 🎬 GPLIS CINEMA</div>
+    <span class="hint" id="mhint">Mantené OK = ⭐ favorito</span>
+    <div class="peliculas-counter" id="mcount" tabindex="0">0 TÍTULOS</div>
+  </div>
+  <div id="mcontent"></div>
+</div>
+
+<!-- GRID -->
+<div id="grid">
+  <div class="grid-header">
+    <h3 id="gtitle"></h3>
+    <button class="grid-close" id="gclose" tabindex="0">✕</button>
+  </div>
+  <div id="gcontent"></div>
+</div>
 <script>
 (function(){
 'use strict';
 
+/* ===== CONSTANTES ===== */
+var WORKER = 'https://gtv-portero.abrel03.workers.dev/api/';
+var CONFIG_URL = WORKER + 'config';
+var ESTADO_URL = WORKER + 'estado-canales';
+var BAN_URL = 'https://gtv-portero.abrel03.workers.dev';
 var SELLO = 'gtv_app_2026_secreto_xyz789';
+var BLOQUEO_MS = 250;
+var NUEVO_DIAS = 7;
+
+/* Embeds de terceros: se reproducen en iframe dentro del WebView */
+var EMBED_RE = /kick\.com|twitch\.tv|ok\.ru|odnoklassniki\.ru|dailymotion\.com|tokyvideo\.com/i;
+
+/* ===== HELPERS ===== */
+var ESC_MAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ESC_MAP[c]})}
 function $(id){return document.getElementById(id)}
-function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function noop(){}
+function hnum(s){var h=0;for(var i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h=h&h}return h}
+function hashUrl(u){return Math.abs(hnum(u)).toString(16).slice(0,8)}
+function shuffle(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
 var ls = {
   get: function(k,d){try{var v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},
   set: function(k,v){try{localStorage.setItem(k,v)}catch(e){}},
   getJ: function(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v||d}catch(e){return d}},
   setJ: function(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 };
+function svgUri(w,h,txt,bg,fg){return 'data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'"><rect width="'+w+'" height="'+h+'" fill="'+bg+'"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="'+fg+'" font-family="Arial" font-size="'+Math.round(w/4)+'">'+txt+'</text></svg>')}
+var FB_LOGO = svgUri(40,40,'TV','#333','#fff');
+var FB_POSTER = svgUri(300,450,'GPLIS','#1a1a1a','#E50914');
+function hoyStr(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
+function fetchW(url,ms,opts){
+  opts=opts||{};
+  opts.headers=Object.assign({'X-GTV-Origin':SELLO},opts.headers||{});
+  var tid=null;
+  if(ms&&window.AbortController){
+    var c=new AbortController();
+    opts.signal=c.signal;
+    tid=setTimeout(function(){c.abort()},ms);
+  }
+  return fetch(url,opts).then(function(r){clearTimeout(tid);return r},function(e){clearTimeout(tid);throw e});
+}
+
+/* ===== DETECCIÓN DE DISPOSITIVO ===== */
+var UA = navigator.userAgent;
+var IS_ANDROID = /Android/i.test(UA);
+var IS_TV = (IS_ANDROID && (!/Mobile/i.test(UA)||/TV|BOX|PROJECT|AFT/i.test(UA)) && !(navigator.maxTouchPoints>0)) || /SMART-TV|SmartTV|Tizen|Web0S|webOS/i.test(UA);
+var lm = location.search.match(/[?&]lite=(\d)/);
+var LITE = lm ? lm[1]==='1' : (IS_TV || (navigator.hardwareConcurrency||8)<=4 || (navigator.deviceMemory||4)<=2);
+document.body.classList.toggle('tv', IS_TV);
+document.body.classList.toggle('lite', LITE);
+$('mhint').style.display = IS_TV ? '' : 'none';
+
+/* ===== BRIDGE NATIVO ===== */
 function ap(){return window.AndroidPlayer||null}
 function hasNat(n){var a=ap();return !!(a&&a[n])}
 function nat(n){var a=ap();if(!a||!a[n])return undefined;try{return a[n].apply(a,Array.prototype.slice.call(arguments,1))}catch(e){return undefined}}
 
-var S = { list: [], index: 0, view: 'list', caidos: {}, ocultos: {} };
-var lic = { hasLicense: false, expirationDate: null, demoStart: null };
-var remote = { horasDemo: 24, whatsapp: '5491133550182' };
+/* ===== DEVICE ID ===== */
 var deviceId = '';
-if(hasNat('getDeviceId')){try{deviceId=nat('getDeviceId')}catch(e){}}
-if(!deviceId){ deviceId = ls.get('gtv_device_id','GTV-R-XXXXXX'); ls.set('gtv_device_id',deviceId); }
+if(hasNat('getDeviceId')){try{deviceId=nat('getDeviceId')||''}catch(e){}}
+if(!deviceId){
+  deviceId = ls.get('gtv_device_id','');
+  if(!deviceId){
+    var chars='123456789ABCDEFGHIJKLMNPQRSTUVWXYZ', r='';
+    for(var i=0;i<6;i++) r+=chars.charAt(Math.floor(Math.random()*chars.length));
+    deviceId='GTV-R-'+r;
+    ls.set('gtv_device_id',deviceId);
+  }
+}
+
+/* ===== ESTADO GLOBAL ===== */
+var S = {
+  list: [], index: 0, raw: '', view: 'list',
+  fromMovies: false, native: false, nativeAt: 0, exitAt: 0,
+  lastI: -1, lastU: '', lastAt: 0, backAt: 0,
+  rotated: ls.get('gtv_rot','false')==='true',
+  uiTimer: null, dlg: null, grid: false, gridOpener: null,
+  locked: false,
+  okDown: null, okFired: false, okTimer: null, suppressClick: 0,
+  pelisDirty: false, lastMovieUrl: '',
+  caidos: {}, ocultos: {}, hideCargado: false, byUrl: {},
+  cols: 0, focoIdx: 0
+};
+
+/* ===== REFERENCIAS DOM ===== */
+var D = {
+  bar: $('statusBar'), btnMenu: $('btnMenu'), list: $('list'), player: $('player'), wrap: $('wrap'),
+  ifr: $('ifr'), kickIfr: $('kickIfr'), okIfr: $('okIfr'),
+  dailymotionIfr: $('dailymotionIfr'), tokyvideoIfr: $('tokyvideoIfr'),
+  ui: $('ui'), ld: $('ld'), movies: $('movies'), mc: $('mcontent'),
+  grid: $('grid'), gc: $('gcontent'), gt: $('gtitle')
+};
+
+/* ===== LICENCIAS ===== */
+var lic = {hasLicense:false, expirationDate:null, demoStart:null, miCuenta:null};
+var remote = {horasDemo:24, canalesDemo:[], licencias:{}, cuentas:[], maxGlobal:5, whatsapp:'5491133550182', mensaje:'', duracion:5, demoSrv:false};
+
+var _licSrc = '';
+function guardarLic(){var c=Object.assign({},lic);if(remote.demoSrv)delete c.demoStart;var t=JSON.stringify(c);if(t===_licSrc)return;_licSrc=t;ls.set('gtv_license',t)}
+function cargarLicLocal(){var s=ls.getJ('gtv_license',null);if(s)Object.assign(lic,s);if(!remote.demoSrv&&!lic.demoStart){lic.demoStart=Date.now();guardarLic()}}
+function tieneLicencia(){
+  var hoy=hoyStr();
+  var cargado=(remote.cuentas&&remote.cuentas.length)||Object.keys(remote.licencias).length;
+  if(cargado){
+    for(var i=0;i<remote.cuentas.length;i++){
+      var c=remote.cuentas[i];
+      if(Array.isArray(c.dispositivos)&&c.dispositivos.map(function(d){return String(d).trim()}).indexOf(deviceId)>=0&&c.vence&&c.vence>=hoy){
+        lic.hasLicense=true;lic.expirationDate=c.vence;lic.miCuenta=c;guardarLic();return true;
+      }
+    }
+    var re=remote.licencias[deviceId];
+    if(re&&re>=hoy){lic.hasLicense=true;lic.expirationDate=re;lic.miCuenta=null;guardarLic();return true}
+    lic.hasLicense=false;lic.expirationDate=null;lic.miCuenta=null;guardarLic();return false;
+  }
+  return !!(lic.hasLicense&&lic.expirationDate&&lic.expirationDate>=hoy);
+}
+function demoActiva(){if(tieneLicencia())return false;return (Date.now()-(lic.demoStart||0))<(remote.horasDemo*3600000)}
+
+/* ===== BARRA DE ESTADO ===== */
+function setTxt(el,t){if(el.textContent!==t)el.textContent=t}
+function actualizarBarra(){
+  var st=$('statusText'),tm=$('statusTime'),ic=$('statusIcon');
+  if(tieneLicencia()){
+    var p=lic.expirationDate.split('-');
+    setTxt(ic,'✅');setTxt(st,'FULL | Licencia activa');
+    st.className='status-text status-full';
+    setTxt(tm,'EXPIRA: '+p[2]+'/'+p[1]+'/'+p[0]);
+  } else if(demoActiva()){
+    var rest=(remote.horasDemo*3600000)-(Date.now()-lic.demoStart);
+    var h=Math.floor(rest/3600000),m=Math.floor((rest%3600000)/60000);
+    setTxt(ic,'🎁');setTxt(st,'MODO DEMO');
+    st.className='status-text status-demo';
+    setTxt(tm,'FINALIZA: '+h+'h '+m+'m');
+  } else {
+    setTxt(ic,'⚠️');setTxt(st,'DEMO EXPIRADA');
+    st.className='status-text status-expiring';
+    setTxt(tm,(remote.canalesDemo.length||0)+' canales');
+  }
+}
+
+/* ===== DIÁLOGOS ===== */
+function abrirDialogo(html,cls,onClose){
+  if(S.dlg)cerrarDialogo();
+  var el=document.createElement('div');
+  el.className=cls;el.innerHTML=html;
+  document.body.appendChild(el);
+  S.dlg={el:el,onClose:onClose||null,tid:null,toast:false};
+  return S.dlg;
+}
+function cerrarDialogo(){
+  var d=S.dlg;if(!d)return;
+  S.dlg=null;clearTimeout(d.tid);
+  if(d.el.parentNode)d.el.parentNode.removeChild(d.el);
+  if(d.onClose)d.onClose();
+}
+function dlgBtns(){return Array.prototype.slice.call(S.dlg.el.querySelectorAll('button,input'))}
+function copiar(t){
+  try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t);return}}catch(e){}
+  try{var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}catch(e){}
+}
+function abrirWhatsApp(){window.open('https://wa.me/'+remote.whatsapp+'?text='+encodeURIComponent('Hola, necesito activar mi licencia GTV Play R. Mi ID es: '+deviceId),'_blank')}
+
+/* ===== DIÁLOGO INFO (licencia) ===== */
+function infoDialog(){
+  var total=canalesVisibles().length,perm=(remote.canalesDemo||[]).length,msg,col='#FFD700',pills='',tip='';
+  if(tieneLicencia()){
+    var p=lic.expirationDate.split('-');
+    msg='✅ Licencia FULL activa<br><span style="font-size:12px;color:#aaa">Vence: '+p[2]+'/'+p[1]+'/'+p[0]+'</span>';
+    col='#2ecc71';
+    var c=lic.miCuenta;
+    if(c){
+      var cant=(c.dispositivos||[]).length,max=c.maxDispositivos||1;
+      pills='<div class="info-pill green"><span class="num">'+total+'</span><span class="lbl">canales disponibles</span></div><div class="info-pill green"><span class="num">'+cant+' de '+max+'</span><span class="lbl">dispositivo'+(max>1?'s':'')+' habilitado'+(max>1?'s':'')+'</span></div>';
+      if(cant<max)tip='<div class="info-tip">💡 Podés sumar <strong>'+(max-cant)+'</strong> dispositivo'+((max-cant)>1?'s':'')+' más. <strong>Contactanos</strong> por WhatsApp.</div>';
+    } else pills='<div class="info-pill green"><span class="num">'+total+'</span><span class="lbl">canales disponibles</span></div>';
+  } else if(demoActiva()){
+    var rest=(remote.horasDemo*3600000)-(Date.now()-lic.demoStart);
+    var h=Math.floor(rest/3600000),m=Math.floor((rest%3600000)/60000);
+    msg='🎁 MODO DEMO<br><span style="font-size:12px;color:#aaa">Finaliza en: '+h+'h '+m+'m</span>';
+    pills='<div class="info-pill"><span class="num">'+total+'</span><span class="lbl">canales · acceso completo</span></div>';
+    tip='<div class="info-tip">⏳ Aprovechá <strong>todos los canales</strong>.<br>🔓 Activá tu licencia FULL para no perderlos.</div>';
+  } else {
+    msg='⏰ DEMO FINALIZADA';col='#e67e22';
+    pills='<div class="info-pill orange"><span class="num">'+perm+' de '+total+'</span><span class="lbl">canales disponibles</span></div>';
+    tip='<div class="info-tip">🔓 Activá tu licencia FULL para ver <strong>los '+total+' canales</strong>.</div>';
+  }
+  var wa=IS_TV?'<div class="whatsapp-number-tv"><div class="label">WHATSAPP PARA ACTIVAR</div><div class="number">+'+esc(remote.whatsapp)+'</div><div style="color:#aaa;font-size:10px;margin-top:6px">Anotá este número y mandanos tu ID</div></div>':'<button id="dWa" class="whatsapp-btn">💬 WhatsApp</button>';
+  var d=abrirDialogo('<div class="info-container"><h2>📱 GTV Play R</h2><div class="info-id">'+esc(deviceId)+'</div><div style="color:'+col+';font-size:15px;line-height:1.6">'+msg+'</div><div style="margin-top:12px">'+pills+'</div>'+tip+wa+'<div class="button-group"><button id="dCopy">📋 Copiar ID</button><button id="dClose" class="close-info">✕ Cerrar</button></div><hr style="margin:18px 0 12px;border-color:#333"><p style="color:#ccc;font-size:10px;line-height:1.6">© 2026 GTV Play R - Todos los derechos reservados.<br>Idea y desarrollo: Gabriel.</p></div>','info-overlay',function(){if(S.view==='list')D.bar.focus()});
+  var el=d.el,cp=el.querySelector('#dCopy'),wb=el.querySelector('#dWa');
+  cp.onclick=function(){copiar(deviceId);cp.textContent='✅ ¡Copiado!';setTimeout(function(){cp.textContent='📋 Copiar ID'},2000)};
+  if(wb)wb.onclick=abrirWhatsApp;
+  el.querySelector('#dClose').onclick=cerrarDialogo;
+  setTimeout(function(){cp.focus()},40);
+}
+
+/* ===== MENÚ DE CONFIGURACIÓN: cargar / usar / borrar listas ===== */
+function abrirSettings(){
+  if(S.view!=='list')return;
+  var d=abrirDialogo(
+    '<div class="info-container set-box">'
+    +'<h2>⚙️ Configuración</h2>'
+    +'<div class="set-sec">Agregar lista</div>'
+    +'<div class="set-row"><input id="sInput" class="set-input" type="text" placeholder="URL de la lista o palabra clave" autocomplete="off" spellcheck="false" autocapitalize="off"><button id="sCargar">Cargar</button></div>'
+    +'<div class="set-sec">Listas guardadas</div>'
+    +'<div id="sListas"></div>'
+    +'<div class="button-group"><button id="sLic">🎫 Mi licencia</button><button id="sClose" class="close-info">✕ Cerrar</button></div>'
+    +'</div>','info-overlay',function(){if(S.view==='list')D.btnMenu.focus()});
+  var el=d.el,inp=el.querySelector('#sInput');
+  el.querySelector('#sCargar').onclick=function(){
+    var t=inp.value.trim();
+    if(!t){inp.focus();return}
+    if(hasNat('cargarListaDesdeHtml')){cerrarDialogo();nat('cargarListaDesdeHtml',t)}
+    else if(hasNat('abrirDialogo')){cerrarDialogo();nat('abrirDialogo')}
+  };
+  inp.addEventListener('keydown',function(e){if(e.keyCode===13||e.key==='Enter'){e.preventDefault();el.querySelector('#sCargar').click()}});
+  el.querySelector('#sLic').onclick=function(){cerrarDialogo();infoDialog()};
+  el.querySelector('#sClose').onclick=cerrarDialogo;
+  renderListasGuardadas(d);
+  setTimeout(function(){inp.focus()},40);
+}
+function renderListasGuardadas(d){
+  var el=d.el,box=el.querySelector('#sListas'),arr=[];
+  if(!box)return;
+  if(hasNat('listarListas')){try{arr=JSON.parse(nat('listarListas')||'[]')}catch(e){arr=[]}}
+  if(!arr.length){box.innerHTML='<div class="set-empty">No hay listas guardadas todavía.</div>';return}
+  box.innerHTML=arr.map(function(l){
+    return '<div class="s-item"><div class="s-info"><b>'+esc(l.nombre)+'</b><small>'+(parseInt(l.canales,10)||0)+' canales</small></div>'
+      +'<button class="s-use" data-n="'+esc(l.nombre)+'">Usar</button>'
+      +'<button class="s-del" data-n="'+esc(l.nombre)+'">🗑</button></div>';
+  }).join('');
+  Array.prototype.forEach.call(box.querySelectorAll('.s-use'),function(b){
+    b.onclick=function(){var n=b.dataset.n;cerrarDialogo();nat('usarLista',n)};
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('.s-del'),function(b){
+    b.onclick=function(){
+      if(!b.dataset.arm){b.dataset.arm='1';b.textContent='¿Seguro?';return}
+      nat('eliminarLista',b.dataset.n);
+      setTimeout(function(){if(S.dlg===d)renderListasGuardadas(d)},250);
+    };
+  });
+}
+
+function toastBloqueo(){
+  if(S.dlg&&S.dlg.toast)return;
+  var d=abrirDialogo('<span>🔒 Canal bloqueado - Demo expirada</span><button id="tInfo">📋 Ver mi ID</button><button id="tClose" class="close-toast">✕</button>','toast-blocked');
+  d.toast=true;
+  d.el.querySelector('#tInfo').onclick=function(){cerrarDialogo();infoDialog()};
+  d.el.querySelector('#tClose').onclick=cerrarDialogo;
+  d.el.querySelector('#tClose').focus();
+  d.tid=setTimeout(function(){if(S.dlg===d)cerrarDialogo()},8000);
+}
+
+function popupNovedades(){
+  var msg=remote.mensaje;
+  if(!msg||!msg.trim()||S.dlg||S.view!=='list'||S.native)return;
+  var h;try{h=btoa(unescape(encodeURIComponent(msg)))}catch(e){h=String(hnum(msg))}
+  if(ls.get('gtv_ultimo_popup','')===h)return;
+  ls.set('gtv_ultimo_popup',h);
+  var d=abrirDialogo('<div class="popup-box"><div class="ptitle">⭐ GTV PLAY R</div><div class="ptext">'+esc(msg).replace(/\n/g,'<br>')+'</div><button id="pClose">✕ Cerrar</button></div>','info-overlay',function(){restaurarFoco()});
+  d.el.querySelector('#pClose').onclick=cerrarDialogo;
+  d.el.querySelector('#pClose').focus();
+  d.tid=setTimeout(function(){if(S.dlg===d)cerrarDialogo()},(remote.duracion||5)*1000);
+}
+
+/* ===== BLOQUEO / BANEO ===== */
+function bloquear(modo){
+  S.locked=true;
+  var ban=modo==='ban';
+  var txt=ban?'Hola, mi dispositivo fue bloqueado en GTV Play R. Mi ID es: ':'Hola, tengo un problema con la app GTV Play R. Mi ID es: ';
+  var wu='https://wa.me/'+remote.whatsapp+'?text='+encodeURIComponent(txt+(deviceId||'DESCONOCIDO'));
+  document.body.innerHTML='';
+  var el=document.createElement('div');el.className='block-screen';
+  el.innerHTML='<div class="box"><div style="font-size:60px;margin-bottom:10px">'+(ban?'🚫':'⛔')+'</div><h1 style="color:#f00;font-size:21px;margin-bottom:12px">'+(ban?'DISPOSITIVO BLOQUEADO':'APP NO AUTORIZADA')+'</h1><p style="color:#ffcc00;font-size:14px;margin-bottom:12px;line-height:1.5">'+(ban?'Este dispositivo ha sido bloqueado por el administrador.':(modo==='net'?'No se pudo cargar la configuración.':'La configuración de la aplicación ha sido alterada.'))+'</p><p style="color:#888;font-size:12px;margin-bottom:16px;line-height:1.4">'+(ban?'Si crees que se trata de un error, contactanos.':'Verificá tu conexión a Internet y reintentá.')+'</p>'+(ban?'':'<button class="alt" id="bRetry">🔄 Reintentar</button><br>')+'<button id="bWa">💬 Contactar al administrador</button><hr style="width:70%;margin:14px auto;border-color:#333"><p style="color:#666;font-size:9px;line-height:1.3">© 2026 GTV Play R<br>Idea y desarrollo: Gabriel.</p></div>';
+  document.body.appendChild(el);
+  var r=el.querySelector('#bRetry');
+  if(r)r.onclick=function(){location.reload()};
+  el.querySelector('#bWa').onclick=function(){window.open(wu,'_blank')};
+  (r||el.querySelector('#bWa')).focus();
+}
+function registrarDispositivo(){if(!ap())return;fetch(BAN_URL+'/api/registrar?device='+encodeURIComponent(deviceId),{method:'POST'}).catch(noop)}
+function verificarBaneo(){if(!ap())return;fetch(BAN_URL+'/api/estado?device='+encodeURIComponent(deviceId)).then(function(r){return r.json()}).then(function(d){if(d&&d.baneado===true)bloquear('ban')}).catch(noop)}
+
+/* ===== CONFIG ===== */
+function aplicarConfig(d){
+  if(!d)return;
+  remote.horasDemo=d.horasDemo||24;
+  remote.canalesDemo=d.canalesDemo||[];
+  remote.cuentas=d.cuentas||[];
+  remote.maxGlobal=d.maxGlobalDispositivos||5;
+  remote.whatsapp=d.whatsapp||'5491133550182';
+  remote.licencias={};
+  if(Array.isArray(d.licencias))d.licencias.forEach(function(l){if(l&&l.id&&l.vence)remote.licencias[String(l.id).trim()]=l.vence});
+  remote.mensaje=d.mensaje||'';
+  remote.duracion=d.duracion||5;
+  if(d.demoStart)remote.demoSrv=true;
+  aplicarConfigPub(d);
+}
+function cargarConfig(){
+  return fetchW(CONFIG_URL+'?t='+Date.now(),12000).then(function(r){
+    if(!r.ok)return 'net';
+    return r.json().then(function(d){
+      if(!d.hash_esperado||hashUrl(CONFIG_URL)!==d.hash_esperado)return 'hash';
+      aplicarConfig(d);
+      return 'ok';
+    });
+  }).catch(function(){return 'net'});
+}
+
+/* ===== LISTA DE CANALES ===== */
+function canalesVisibles(){
+  var out=[];
+  for(var i=0;i<S.list.length;i++){
+    var u=S.list[i].url;
+    if(!S.ocultos[u])out.push(i);
+  }
+  return out;
+}
+function totalVisible(){return canalesVisibles().length}
+function posVisibleDe(i){var v=canalesVisibles();for(var k=0;k<v.length;k++)if(v[k]===i)return k+1;return -1}
 
 function renderLista(){
-  var D = $('list');
   if(!S.list.length){
-    D.innerHTML = '<div class="empty"><div class="icon">📺</div><h2>Bienvenido a GTV Play R</h2><p>No tenés canales cargados.<br>Abrí el menú de configuración para agregar tu lista.</p><button id="btnEmptyConfig" tabindex="0">Abrir Menú</button></div>';
-    $('btnEmptyConfig').onclick = abrirSettings;
+    S.byUrl={};
+    D.list.innerHTML='<div class="empty"><div class="icon">📺</div><div class="title">GTV Play R</div><div class="subtitle">No tenés ninguna lista cargada todavía.<br>Agregá tu lista M3U para empezar a ver canales.</div><button id="btnAddList" tabindex="0">➕ AGREGAR LISTA</button><small>GTV Play R · Creado por Gabriel</small></div>';
+    var btn = $('btnAddList');
+    if(btn) btn.onclick = abrirSettings;
     return;
   }
-  var h = '';
+  var h=[],by={};
   for(var i=0;i<S.list.length;i++){
-    var c = S.list[i];
-    var cls = 'card';
-    if(S.ocultos[c.url]) cls += ' off';
-    else if(S.caidos[c.url]) cls += ' caido';
-    h += '<div class="'+cls+'" tabindex="0" data-i="'+i+'"><img src="'+(c.logo||'')+'"><span>'+esc(c.nombre||c.name)+'</span></div>';
+    var c=S.list[i];
+    (by[c.url]||(by[c.url]=[])).push(i);
+    var cls='card';
+    if(S.ocultos[c.url])cls+=' off';
+    else if(S.caidos[c.url])cls+=' caido';
+    h.push('<div class="'+cls+'" tabindex="0" id="idx-'+i+'" data-i="'+i+'"><img data-src="'+esc(c.logo||FB_LOGO)+'" alt="" decoding="async"><span>'+esc(c.nombre||c.name)+'</span></div>');
   }
-  D.innerHTML = h;
-  var cards = D.querySelectorAll('.card');
-  cards.forEach(function(card){
-    card.addEventListener('click', function(){ play(parseInt(this.dataset.i), 'user'); });
-  });
+  S.byUrl=by;
+  D.list.innerHTML=h.join('');
+  lazyObserve(D.list);
 }
 
-function abrirSettings(){
-  $('settingsModal').classList.remove('hidden');
-  $('btnCloseSettings').focus();
-  actualizarLicenciaUI();
-  cargarListasGuardadas();
-}
-function cerrarSettings(){
-  $('settingsModal').classList.add('hidden');
-  $('btnOpenSettings').focus();
-}
-
-$('btnOpenSettings').onclick = abrirSettings;
-$('btnCloseSettings').onclick = cerrarSettings;
-
-var tabs = document.querySelectorAll('.tab');
-tabs.forEach(function(tab){
-  tab.addEventListener('click', function(){
-    tabs.forEach(function(t){ t.classList.remove('active'); });
-    document.querySelectorAll('.tab-content').forEach(function(c){ c.classList.remove('active'); });
-    this.classList.add('active');
-    document.getElementById(this.dataset.tab).classList.add('active');
-  });
-});
-
-function cargarListasGuardadas(){
-  var grid = $('listasGrid');
-  grid.innerHTML = '<div style="color:#aaa;text-align:center;">Cargando...</div>';
-  var json = '[]';
-  if(hasNat('listarListas')) { try{ json = nat('listarListas'); }catch(e){} }
-  var listas = JSON.parse(json);
-  
-  if(!listas.length){
-    grid.innerHTML = '<div style="color:#aaa;text-align:center;">No hay listas guardadas aún.</div>';
+var IO = null;
+function lazyObserve(root){
+  var l=root.querySelectorAll('img[data-src]'),i;
+  if(!window.IntersectionObserver){
+    for(i=0;i<l.length;i++){l[i].src=l[i].getAttribute('data-src');l[i].removeAttribute('data-src')}
     return;
   }
-  
-  var h = '';
-  listas.forEach(function(l){
-    h += '<div class="lista-item" tabindex="0">' +
-           '<div class="info"><h4>'+esc(l.nombre)+'</h4><p>'+l.canales+' canales</p></div>' +
-           '<div>' +
-             '<button class="btn-primary" onclick="usarLista(\''+esc(l.nombre)+'\')" style="padding:8px 16px;">Usar</button>' +
-             '<button class="btn-danger" onclick="borrarLista(\''+esc(l.nombre)+'\')">🗑</button>' +
-           '</div>' +
-         '</div>';
+  if(!IO)IO=new IntersectionObserver(function(es){
+    for(var k=0;k<es.length;k++){
+      if(!es[k].isIntersecting)continue;
+      var im=es[k].target,s=im.getAttribute('data-src');
+      if(s){im.src=s;im.removeAttribute('data-src')}
+      IO.unobserve(im);
+    }
+  },{root:D.list,rootMargin:(LITE?'150px 0px':'400px 0px')});
+  for(i=0;i<l.length;i++)IO.observe(l[i]);
+}
+
+/* Envía la lista (con ocultos) al MainActivity para que zapping/reproducción nativos usen los mismos índices */
+function syncNativo(){
+  if(!hasNat('setLista'))return;
+  try{
+    var arr=S.list.map(function(c){
+      return {nombre:c.nombre||c.name,name:c.nombre||c.name,url:c.url,logo:c.logo||'',referer:c.referer||'',gain:c.gain||1.0,oculto:!!S.ocultos[c.url],esPeliculas:!!c.esPeliculas,urlPeliculasM3U:c.urlPeliculasM3U||null};
+    });
+    nat('setLista',JSON.stringify(arr));
+  }catch(e){}
+}
+
+function aplicarLista(nl,keepIndex){
+  S.list=nl;
+  renderLista();
+  syncNativo();
+  var li=keepIndex?parseInt(ls.get('gtv_last_index','0'),10):0;
+  if(!(li>=0&&li<nl.length))li=0;
+  S.index=li;
+  ls.set('gtv_last_index',String(li));
+  nat('sincronizarIndice',li);
+  if(S.view==='list'&&!S.dlg&&!S.native)setTimeout(function(){focusCard(li)},40);
+}
+
+function sincronizarEstadoCanales(){
+  return fetchW(ESTADO_URL+'?t='+Date.now(),8000).then(function(r){return r.json()}).then(function(d){
+    if(!d||!d.ok)return;
+    S.caidos=d.caidos||{};
+    S.ocultos=d.ocultos||{};
+    S.hideCargado=true;
+    ls.setJ('gtv_caidos_cache',S.caidos);
+    ls.setJ('gtv_ocultos_cache',S.ocultos);
+    if(S.list.length){renderLista();syncNativo()}
+  }).catch(noop);
+}
+function aplicarCacheEstado(){
+  S.caidos=ls.getJ('gtv_caidos_cache',{});
+  S.ocultos=ls.getJ('gtv_ocultos_cache',{});
+}
+
+/* ===== VISTAS ===== */
+function setView(v){
+  if(v!=='player'){
+    if(pubSched.nativeTickerShown&&hasNat('ocultarPublicidad'))nat('ocultarPublicidad');
+  }
+  S.view=v;
+  D.list.classList.toggle('hidden',v!=='list');
+  D.movies.classList.toggle('active',v==='movies');
+  D.player.classList.toggle('active',v==='player');
+  if(v!=='player'){
+    D.player.style.visibility='hidden';
+    D.wrap.style.visibility='hidden';
+  } else {
+    D.player.style.visibility='';
+    D.wrap.style.visibility='';
+  }
+}
+
+function focusCard(i,noScroll){
+  var c=D.list.children[i];
+  if(!c||!c.focus)return;
+  try{c.focus(noScroll?{preventScroll:true}:undefined)}catch(e){c.focus()}
+}
+
+function restaurarFoco(){
+  setTimeout(function(){
+    if(S.dlg||S.locked)return;
+    if(S.view==='list'){focusCard(S.index);return}
+    if(S.view==='movies'){focoPelis();return}
+  },60);
+}
+
+/* ===== PLAYER ===== */
+function showUI(){D.ui.classList.add('show');clearTimeout(S.uiTimer);S.uiTimer=setTimeout(function(){D.ui.classList.remove('show')},3000)}
+function aplicarRot(){D.wrap.classList.toggle('rotated',S.rotated)}
+
+function ifrVisibles(){return [D.ifr,D.kickIfr,D.okIfr,D.dailymotionIfr,D.tokyvideoIfr]}
+function ifrOcultarTodos(){
+  ifrVisibles().forEach(function(el){
+    if(!el)return;
+    el.style.display='none';
+    try{el.src='about:blank'}catch(e){}
+    try{el.removeAttribute('src')}catch(e){}
   });
-  grid.innerHTML = h;
+}
+function ifrSet(el,src){
+  if(!el)return;
+  ifrOcultarTodos();
+  el.src=src;
+  el.style.display='block';
+}
+/* Convierte la URL del canal en URL embebible y elige el iframe correspondiente */
+function embedUrl(u){
+  var m;
+  if((m=u.match(/kick\.com\/([\w-]+)/i)))return 'https://player.kick.com/'+m[1];
+  if((m=u.match(/twitch\.tv\/([\w-]+)/i)))return 'https://player.twitch.tv/?channel='+m[1]+'&parent=localhost&muted=false';
+  if((m=u.match(/dailymotion\.com\/(?:embed\/video\/|video\/)?([\w]+)/i)))return 'https://www.dailymotion.com/embed/video/'+m[1];
+  if((m=u.match(/ok\.ru\/(?:videoembed|video|live)\/(\d+)/i)))return 'https://ok.ru/videoembed/'+m[1];
+  return u;
+}
+function ifrDe(u){
+  if(/kick\.com/i.test(u))return D.kickIfr;
+  if(/ok\.ru|odnoklassniki/i.test(u))return D.okIfr;
+  if(/dailymotion/i.test(u))return D.dailymotionIfr;
+  if(/tokyvideo/i.test(u))return D.tokyvideoIfr;
+  return D.ifr;
+}
+function mostrarSinSenal(ch){
+  var el=$('sinSenal');if(!el)return;
+  var img=$('ssLogo'),nom=$('ssNombre');
+  if(ch&&ch.logo){img.src=ch.logo;img.style.display='block'}else img.style.display='none';
+  nom.textContent=(ch&&(ch.nombre||ch.name))?(ch.nombre||ch.name):'Canal';
+  el.classList.remove('hidden');
+}
+function ocultarSinSenal(){var el=$('sinSenal');if(el)el.classList.add('hidden')}
+function limpiarModales(){
+  var m=$('mName');if(m)m.textContent='';
+  var c=$('mCount');if(c)c.textContent='';
+  var i=$('mImg');if(i)i.src='';
+  var l=$('ld');if(l)l.classList.remove('active');
+}
+function limpiarMedia(){
+  ocultarSinSenal();
+  ifrOcultarTodos();
+  D.ld.classList.remove('active');
 }
 
-window.usarLista = function(nombre){
-  if(hasNat('usarLista')) nat('usarLista', nombre);
-  cerrarSettings();
-};
-window.borrarLista = function(nombre){
-  if(confirm('¿Eliminar la lista "'+nombre+'"?')){
-    if(hasNat('eliminarLista')) nat('eliminarLista', nombre);
-    setTimeout(cargarListasGuardadas, 200);
-  }
-};
-
-$('btnCargarLista').onclick = function(){
-  var txt = $('inputNuevaLista').value.trim();
-  if(!txt) return;
-  
-  // Llama directo al nativo sin abrir el cartel feo de Java
-  if(hasNat('cargarListaDesdeHtml')) {
-      nat('cargarListaDesdeHtml', txt);
-      cerrarSettings();
+/* ===== REPRODUCIR ===== */
+function lanzar(ch,pos,total){
+  limpiarModales();
+  var url=ch.url;
+  var esEmbed=EMBED_RE.test(url);
+  var usaNat=hasNat('reproducir')&&!esEmbed;
+  if(S.grid)cerrarGrid(true);
+  limpiarMedia();
+  setView('player');
+  aplicarRot();
+  D.ui.classList.toggle('single',total<2);
+  $('mImg').src=ch.logo||'';
+  $('mName').textContent=ch.nombre||ch.name;
+  var posV=posVisibleDe(pos);
+  $('mCount').textContent=(posV>0?posV:1)+'/'+total;
+  if(usaNat){
+    S.native=true;
+    S.nativeAt=Date.now();
+    nat('reproducir',url,ch.nombre||ch.name,(posV>0?posV:1)+'/'+total,ch.logo||'',ch.referer||'',ch.gain||1.0);
   } else {
-      if(hasNat('abrirDialogo')) nat('abrirDialogo'); 
+    /* Embeds (Kick/Twitch/OK/Dailymotion/Tokyvideo): iframe dentro del WebView.
+       Si venimos de un motor nativo, lo frenamos y mostramos el WebView. */
+    S.native=false;
+    if(hasNat('mostrarWebView'))nat('mostrarWebView');
+    ifrSet(ifrDe(url),embedUrl(url));
   }
-};
-
-function actualizarLicenciaUI(){
-  var hoy = new Date().toISOString().split('T')[0];
-  var activa = false;
-  var txt = '';
-  var color = '#ff3333';
-  
-  if(lic.expirationDate && lic.expirationDate >= hoy){
-    activa = true;
-    txt = '✅ FULL activa (Vence: '+lic.expirationDate+')';
-    color = '#00ff66';
-  } else if(lic.demoStart && (Date.now() - lic.demoStart < remote.horasDemo * 3600000)){
-    activa = true;
-    txt = '🎁 Modo DEMO activo';
-    color = '#FFD700';
-  } else {
-    txt = '⚠️ Demo expirada o sin licencia';
-  }
-  
-  $('licDeviceId').textContent = deviceId;
-  $('licStatusText').textContent = txt;
-  $('licStatusText').style.color = color;
-  
-  var badge = $('topLicBadge');
-  if(lic.expirationDate) {
-      badge.textContent = 'FULL';
-      badge.className = 'lic-badge full';
-  } else {
-      badge.textContent = 'DEMO';
-      badge.className = 'lic-badge demo';
-  }
+  showUI();
 }
 
-$('btnWa').onclick = function(){
-  window.open('https://wa.me/'+remote.whatsapp+'?text='+encodeURIComponent('Hola, necesito activar mi licencia GTV Play R. Mi ID es: '+deviceId), '_blank');
-};
+function play(i,origin){
+  origin=origin||'user';
+  if(i<0||i>=S.list.length)return;
+  var now=Date.now();
+  if(origin!=='zap'&&origin!=='native'){
+    if(now-S.exitAt<BLOQUEO_MS)return;
+    if(origin==='user'){
+      if(S.native||S.view!=='list'||S.dlg)return;
+      if(S.lastI===i&&now-S.lastAt<1200)return;
+    }
+  }
+  if(!tieneLicencia()&&!demoActiva()){
+    toastBloqueo();return;
+  }
+  var ch=S.list[i];
+  if(S.caidos[ch.url]){mostrarSinSenal(ch);return}
+  if(S.ocultos[ch.url]){zap(1);return}
+  limpiarModales();
+  S.lastI=i;S.lastAt=now;S.index=i;
+  ls.set('gtv_last_index',String(i));
+  nat('sincronizarIndice',i);
+  if(ch.esPeliculas&&ch.urlPeliculasM3U){abrirPeliculas(ch.urlPeliculasM3U);return}
+  S.fromMovies=false;
+  lanzar(ch,i,totalVisible());
+}
 
-function play(i, origin){
-  if(i < 0 || i >= S.list.length) return;
-  var c = S.list[i];
-  if(S.caidos[c.url]) return;
-  
-  S.index = i;
-  nat('sincronizarIndice', i);
-  ls.set('gtv_last_index', String(i));
-  
-  $('player').classList.add('active');
-  $('list').classList.add('hidden');
-  nat('reproducirCanal', i);
+function zap(d){
+  if(S.list.length<2)return;
+  var visibles=canalesVisibles();
+  if(!visibles.length)return;
+  var posActual=-1;
+  for(var k=0;k<visibles.length;k++)if(visibles[k]===S.index){posActual=k;break}
+  var nuevaPos;
+  if(posActual<0){nuevaPos=d>0?0:visibles.length-1}
+  else nuevaPos=(posActual+d+visibles.length)%visibles.length;
+  play(visibles[nuevaPos],'zap');
 }
 
 function detener(){
-  $('player').classList.remove('active');
-  $('list').classList.remove('hidden');
-  // Llama al nativo para que apague el player correctamente y vuelva a mostrar el WebView
-  if(hasNat('mostrarWebView')) nat('mostrarWebView');
+  S.exitAt=Date.now();
+  var eraNativo=S.native;
+  S.native=false;
+  if(eraNativo&&hasNat('cerrarPlayer')){nat('cerrarPlayer');return}
+  limpiarMedia();
+  if(hasNat('mostrarWebView'))nat('mostrarWebView');
+  if(S.view==='player'){
+    setView(S.fromMovies?'movies':'list');
+    setTimeout(restaurarFoco,30);
+  } else restaurarFoco();
 }
-$('goBack').onclick = detener;
 
-// Manejo de botón "Atrás" físico (Control Remoto)
-document.addEventListener('keydown', function(e){
-  var isBack = (e.keyCode === 4 || e.keyCode === 8 || e.key === 'Escape' || e.key === 'Backspace');
-  if(isBack) {
-    if(!$('settingsModal').classList.contains('hidden')) {
-      cerrarSettings(); 
-      e.preventDefault(); 
-      return; 
-    }
-    if($('player').classList.contains('active')) {
-      detener(); 
-      e.preventDefault(); 
-      return;
-    }
-  }
-});
+window.zapNativo=function(delta){zap(delta)};
+window.stop=detener;
+window.estoyEnPlayer=function(){return S.view==='player'};
+window._zappingEnCurso=false;
+window.volverDelExo=function(){if(S.exitAt&&Date.now()-S.exitAt<150)return;S.exitAt=Date.now();S.native=false;limpiarMedia();if(S.view==='player'){setView(S.fromMovies?'movies':'list');setTimeout(restaurarFoco,30)}else restaurarFoco()};
+window.sincronizarIndiceJS=function(i){if(i>=0&&i<S.list.length){S.index=i;ls.set('gtv_last_index',String(i))}};
+window.irACanal=function(i){if(i<0||i>=S.list.length)return;S.index=i;ls.set('gtv_last_index',String(i));play(i,'native')};
+window.playDesdeAndroid=function(i){if(i<0||i>=S.list.length)return;play(i,'native')};
+window.nextFn=function(){zap(1)};
+window.prevFn=function(){zap(-1)};
+window.atrasNativo=function(){if(S.dlg||S.grid||S.view==='player'||S.view==='movies'){atras();return true}return false};
+window.rotarDesdeAndroid=function(n){S.rotated=!!n;ls.set('gtv_rot',String(S.rotated));aplicarRot()};
 
-window.gtvSetCanales = function(json){
-  try {
-    var arr = JSON.parse(json);
-    S.list = arr;
-    renderLista();
-  } catch(e) {}
+/* ===== RECIBIR LISTA DEL NATIVO ===== */
+window.gtvSetCanales=function(json){
+  try{
+    var arr=typeof json==='string'?JSON.parse(json):json;
+    if(!Array.isArray(arr))return;
+    var nl=[];
+    for(var i=0;i<arr.length;i++){
+      var c=arr[i];
+      nl.push({
+        nombre:c.nombre||c.name||'Canal '+(i+1),
+        name:c.nombre||c.name||'Canal '+(i+1),
+        url:c.url,
+        logo:c.logo||'',
+        referer:c.referer||'',
+        gain:c.gain||1.0,
+        esPeliculas:!!c.esPeliculas,
+        urlPeliculasM3U:c.urlPeliculasM3U||null
+      });
+    }
+    /* Si es la misma lista que ya teníamos (restauración al abrir), conservamos el último canal;
+       si es una lista distinta, arrancamos desde el primero. */
+    var igual=S.list.length===nl.length&&nl.length>0&&S.list[0].url===nl[0].url&&S.list[nl.length-1].url===nl[nl.length-1].url;
+    aplicarLista(nl,igual);
+  }catch(e){}
 };
 
-var cached = ls.getJ('gtv_channels', null);
-if(cached) S.list = cached;
-renderLista();
+/* ===== PUBLICIDAD ===== */
+var pubSched={nativeTickerShown:false,nativeModalShown:false,tickerRunning:false,modalRunning:false};
+var pubCfg={tickerActivo:false,tickerTexto:'',tickerFuente:'arial',tickerVelocidad:20,tickerBg:'#111827',tickerAc:'#ffd23f',tickerTamano:14,modalActivo:false,modalTipo:'imagen',modalUrl:'',modalDuracion:5};
 
-lic.expirationDate = "2026-12-31";
-actualizarLicenciaUI();
+function aplicarConfigPub(d){
+  if(!d||!d.publicidad)return;
+  var p=d.publicidad,t=p.ticker||{},m=p.media||{};
+  pubCfg.tickerActivo=!!t.activo;
+  pubCfg.tickerTexto=t.texto||'';
+  pubCfg.tickerVelocidad=Math.max(1,Math.round(Number(t.velocidad)||25));
+  pubCfg.tickerBg=t.colorFondo||'rgba(0,0,0,0.55)';
+  pubCfg.tickerAc=t.colorTexto||'#ffffff';
+  pubCfg.tickerTamano=Math.max(8,Math.min(72,parseInt(t.tamano,10)||14));
+  pubCfg.tickerFuente=String(t.fuente||'arial').toLowerCase().trim();
+  pubCfg.modalActivo=!!m.activo;
+  pubCfg.modalTipo=m.tipo||'imagen';
+  pubCfg.modalUrl=m.url||'';
+  pubCfg.modalDuracion=Math.max(2,Math.round(Number(m.duracionSeg)||12));
+}
 
+window.gtv=window.gtv||{};
+window.gtv.onTickerTerminado=function(){pubSched.nativeTickerShown=false;pubSched.tickerRunning=false};
+window.gtv.onModalTerminado=function(){pubSched.nativeModalShown=false;pubSched.modalRunning=false};
+window.gtv.onNativoListo=function(){};
+window.gtv.onNativoIniciado=function(){};
+window.gtv.onNativoError=function(){};
+
+function pubSchedulerTick(){
+  if(S.locked||S.dlg)return;
+  var enExo=enExoNat();
+  var enPlayer=(S.view==='player')||enExo;
+  if(!enPlayer){
+    if(pubSched.nativeTickerShown&&hasNat('ocultarPublicidad'))nat('ocultarPublicidad');
+    pubSched.nativeTickerShown=false;
+    pubSched.nativeModalShown=false;
+    pubSched.tickerRunning=false;
+    pubSched.modalRunning=false;
+    return;
+  }
+  if(pubCfg.tickerActivo&&pubCfg.tickerTexto&&!pubSched.tickerRunning){
+    if(enExo&&hasNat('mostrarTickerConFuente')){
+      nat('mostrarTickerConFuente',String(pubCfg.tickerTexto),'',pubCfg.tickerVelocidad,String(pubCfg.tickerBg),String(pubCfg.tickerAc),pubCfg.tickerTamano,String(pubCfg.tickerFuente));
+      pubSched.nativeTickerShown=true;
+      pubSched.tickerRunning=true;
+      setTimeout(function(){if(!pubSched.nativeTickerShown)return;pubSched.nativeTickerShown=false;pubSched.tickerRunning=false},pubCfg.tickerVelocidad*1000+1000);
+    }
+  }
+  if(pubCfg.modalActivo&&pubCfg.modalUrl&&!pubSched.modalRunning){
+    if(enExo&&hasNat('mostrarModalPublicidad')){
+      nat('mostrarModalPublicidad',pubCfg.modalUrl,pubCfg.modalTipo==='video',pubCfg.modalDuracion);
+      pubSched.nativeModalShown=true;
+      pubSched.modalRunning=true;
+      setTimeout(function(){if(!pubSched.nativeModalShown)return;pubSched.nativeModalShown=false;pubSched.modalRunning=false},pubCfg.modalDuracion*1000+1000);
+    }
+  }
+}
+function enExoNat(){if(hasNat('estaEnExo')){try{return !!nat('estaEnExo')}catch(e){}}return !!S.native}
+
+/* ===== GPLIS CINEMA ===== */
+var M={url:'',at:0,items:[],byUrl:new Map(),tiles:[],series:new Map(),genres:[],favs:ls.getJ('peliculasFavoritos',[]),hist:ls.getJ('peliculasHistory',[]),nuevo:{},reco:null};
+var G={list:[],n:0,caps:false};
+
+function iconoDe(u){if(/twitch\.tv/i.test(u))return '🎮';if(/youtube\.com|youtu\.be/i.test(u))return '▶️';return '📺'}
+var GEN={'romántica':'Romance','romantica':'Romance','accion':'Acción'};
+function normGenero(g){var k=g.toLowerCase();return GEN[k]||(g.charAt(0).toUpperCase()+g.slice(1).toLowerCase())}
+function detectarSerie(title){
+  var reT=/(^|[^a-z'’])(?:temporada|season|serie|temp|t|s)\s*0?(\d{1,2})(?!\d)/i;
+  var reC=/(^|[^a-z'’])(?:cap[ií]tulo|episodio|episode|cap|ep|c|e)\s*0?(\d{1,3})(?!\d)/i;
+  var s=title,temp=1,cap=0,es=false,m;
+  if((m=s.match(reT))){temp=parseInt(m[2],10);es=true;s=s.replace(m[0],m[1])}
+  if((m=s.match(reC))){cap=parseInt(m[2],10);es=true;s=s.replace(m[0],m[1])}
+  s=s.replace(/\s{2,}/g,' ').replace(/^[\s-]+|[\s-]+$/g,'');
+  if(!es||!s)return {es:false,nombre:title,temp:1,cap:0};
+  return {es:true,nombre:s,temp:temp,cap:cap};
+}
+function serieDe(it){return it._s||(it._s=detectarSerie(it.title))}
+function slim(it){return {title:it.title,logo:it.logo,url:it.url,genre:it.genre,year:it.year}}
+function agrupar(items,prefix){
+  var map={},out=[];
+  items.forEach(function(it){
+    var s=serieDe(it);
+    if(!s.es){out.push(it);return}
+    var key=prefix+'|'+s.nombre+'|'+s.temp,t=map[key];
+    if(!t){t={serie:true,key:key,title:s.nombre+' T'+s.temp,serieNombre:s.nombre,temporada:s.temp,caps:[],logo:it.logo,year:it.year||'N/S',genre:it.genre};map[key]=t;out.push(t);M.series.set(key,t)}
+    t.caps.push(it);
+  });
+  out.forEach(function(t){if(t.serie)t.caps.sort(function(a,b){return serieDe(a).cap-serieDe(b).cap})});
+  return out;
+}
+function parsePelis(text){
+  var items=[],lines=text.split(/\r?\n/);
+  for(var i=0;i<lines.length;i++){
+    var fl=lines[i];
+    if(fl.indexOf('#EXTINF')!==0)continue;
+    var url='';
+    for(var j=i+1;j<i+5&&j<lines.length;j++){
+      var l2=lines[j].trim();
+      if(/^https?:\/\//i.test(l2)){url=l2;break}
+      if(l2.indexOf('#EXTINF')===0)break;
+    }
+    if(!url)continue;
+    var gm=fl.match(/group-title="([^"]*)"/i),genre=normGenero((gm&&gm[1].trim())||'General');
+    var lg=fl.match(/tvg-logo="([^"]*)"/i),logo=(lg&&lg[1])||FB_POSTER;
+    var title='',c=fl.lastIndexOf(',');
+    if(c!==-1&&c<fl.length-1)title=fl.substring(c+1).trim().replace(/^["']|["']$/g,'');
+    if(!title){var tn=fl.match(/tvg-name="([^"]*)"/i);if(tn)title=tn[1].trim()}
+    if(!title)title='Sin nombre';
+    var ym=title.match(/\b(19|20)\d{2}\b/),year;
+    if(ym)year=ym[0];
+    else{var all=fl.match(/\b(19|20)\d{2}\b/g);year=all?all[all.length-1]:'N/S'}
+    items.push({title:title,logo:logo,url:url,genre:genre,year:year,h:hnum(title+'|'+url)});
+  }
+  M.items=items;
+  M.byUrl=new Map();
+  items.forEach(function(it){M.byUrl.set(it.url,it)});
+  var prev=ls.getJ('gtv_pelis_fp',null),nuevo=ls.getJ('gtv_pelis_new',{}),now=Date.now();
+  if(prev){var ps=new Set(prev);items.forEach(function(it){if(!ps.has(it.h))nuevo[it.h]=now})}
+  Object.keys(nuevo).forEach(function(k){if(now-nuevo[k]>NUEVO_DIAS*86400000)delete nuevo[k]});
+  M.nuevo=nuevo;
+  ls.setJ('gtv_pelis_fp',items.map(function(it){return it.h}));
+  ls.setJ('gtv_pelis_new',nuevo);
+  M.series.clear();M.reco=null;
+  M.tiles=agrupar(items,'c');
+  var gm2={};
+  M.tiles.forEach(function(t){var g=t.genre||'General';(gm2[g]||(gm2[g]=[])).push(t)});
+  M.genres=Object.keys(gm2).map(function(g){return {name:g,tiles:gm2[g],prev:shuffle(gm2[g].slice()).slice(0,8)}});
+  shuffle(M.genres);
+}
+function ordenar(l){return l.slice().sort(function(a,b){var x=a._k||(a._k=a.title.toLowerCase()),y=b._k||(b._k=b.title.toLowerCase());return x<y?-1:x>y?1:0})}
+function esFav(u){for(var i=0;i<M.favs.length;i++)if(M.favs[i].url===u)return true;return false}
+function esNuevo(t){if(!M.nuevo)return false;if(t.serie){for(var i=0;i<t.caps.length;i++)if(M.nuevo[t.caps[i].h])return true;return false}return !!M.nuevo[t.h]}
+function buscarItem(u){var it=M.byUrl.get(u);if(it)return it;var i;for(i=0;i<M.favs.length;i++)if(M.favs[i].url===u)return M.favs[i];for(i=0;i<M.hist.length;i++)if(M.hist[i].url===u)return M.hist[i];return null}
+function cardHtml(t,o){
+  o=o||{};
+  var serie=!!t.serie,id=serie?'data-k="'+esc(t.key)+'"':'data-u="'+esc(t.url)+'"';
+  var b='<span class="pelicula-year-badge">'+esc(t.year||'N/S')+'</span><span class="pelicula-type-badge">'+(serie?'📺':iconoDe(t.url))+'</span>';
+  if(esNuevo(t))b+='<span class="pelicula-new-badge">NUEVO</span>';
+  if(o.hist)b+='<span class="delete-history-btn" data-act="del">🗑️</span>';
+  var titulo=t.title;
+  if(o.cap){var s=serieDe(t);titulo=s.cap>0?'Capítulo '+s.cap:t.title}
+  var fav='';
+  if(!serie){var f=esFav(t.url);fav='<span class="pelicula-fav-btn'+(f?' active':'')+'" data-act="fav">'+(f?'⭐':'☆')+'</span>'}
+  return '<div class="pelicula-card" tabindex="0" '+id+'><div class="pelicula-card-img"><img src="'+esc(t.logo||FB_POSTER)+'" alt="" loading="lazy" decoding="async">'+b+'</div><div class="pelicula-card-info"><div class="pelicula-card-title">'+esc(titulo)+'</div></div>'+fav+'</div>';
+}
+function seccion(titulo,tiles,o){
+  o=o||{};
+  var h='<div class="peliculas-section"'+(o.hist?' data-sec="hist"':'')+'><div class="section-header"><div class="section-title">'+esc(titulo)+'</div></div><div class="slider-container"><div class="cards-slider">';
+  for(var i=0;i<tiles.length;i++)h+=cardHtml(tiles[i],o);
+  if(o.genre)h+='<div class="ver-todos-card" tabindex="0" data-genre="'+esc(o.genre)+'"><div class="ico">📺</div><div class="txt">VER TODOS</div><div class="cnt">'+o.total+' títulos</div></div>';
+  return h+'</div></div></div>';
+}
+function renderPelis(){
+  var h=[];
+  if(M.favs.length)h.push(seccion('⭐ FAVORITOS',agrupar(M.favs,'f').slice(0,10)));
+  if(M.hist.length){
+    h.push(seccion('📺 YA VISTAS',agrupar(M.hist,'h').slice(0,8),{hist:true}));
+    var lw=M.hist[0];
+    if(!M.reco||M.reco.u!==lw.url){
+      var pool=M.items.filter(function(c){return c.genre===lw.genre&&c.url!==lw.url});
+      M.reco={u:lw.url,tiles:agrupar(shuffle(pool).slice(0,10),'r')};
+    }
+    if(M.reco.tiles.length)h.push(seccion('💡 RECOMENDADAS',M.reco.tiles));
+  }
+  M.genres.forEach(function(g){h.push(seccion(g.name.toUpperCase(),g.prev,{genre:g.name,total:g.tiles.length}))});
+  D.mc.innerHTML=h.join('')||'<div class="msg">⚠️ No hay títulos</div>';
+  $('mcount').textContent=M.items.length+' TÍTULOS';
+  S.pelisDirty=false;
+}
+function focoPelis(){setTimeout(function(){var c=buscarCard(D.mc,S.lastMovieUrl);if(!c)c=D.mc.querySelector('.pelicula-card,.ver-todos-card');if(c)c.focus()},30)}
+function buscarCard(root,id){
+  if(!id)return null;
+  var l=root.querySelectorAll('.pelicula-card,.ver-todos-card');
+  for(var i=0;i<l.length;i++){var d=l[i].dataset;if(d.u===id||d.k===id||d.genre===id)return l[i]}
+  return null;
+}
+function abrirPeliculas(url){
+  S.fromMovies=false;
+  setView('movies');
+  var fresco=M.url===url&&M.items.length&&(Date.now()-M.at)<300000;
+  if(M.items.length&&M.url===url){renderPelis();focoPelis();if(fresco)return}
+  else D.mc.innerHTML='<div class="msg">⏳ Cargando títulos…</div>';
+  M.url=url;
+  fetchW(url+'?t='+Date.now(),15000).then(function(r){return r.text()}).then(function(t){
+    parsePelis(t);M.at=Date.now();
+    if(S.view==='movies'&&!S.grid){renderPelis();focoPelis()}
+    else S.pelisDirty=true;
+  }).catch(function(){if(!M.items.length)D.mc.innerHTML='<div class="msg err">❌ Error al cargar</div>'});
+}
+function salirPeliculas(){S.fromMovies=false;if(S.grid)cerrarGrid(true);setView('list');restaurarFoco()}
+function toggleFav(u){
+  var it=buscarItem(u);if(!it)return;
+  var i=-1;
+  for(var k=0;k<M.favs.length;k++)if(M.favs[k].url===u){i=k;break}
+  if(i<0)M.favs.unshift(slim(it));else M.favs.splice(i,1);
+  ls.setJ('peliculasFavoritos',M.favs);
+  S.pelisDirty=true;
+}
+function quitarHist(u){M.hist=M.hist.filter(function(v){return v.url!==u});ls.setJ('peliculasHistory',M.hist);S.pelisDirty=true}
+function addHist(it){M.hist=M.hist.filter(function(v){return v.url!==it.url});M.hist.unshift(slim(it));if(M.hist.length>20)M.hist.length=20;ls.setJ('peliculasHistory',M.hist);S.pelisDirty=true}
+function longPress(card){
+  if(card.dataset.k||card.classList.contains('ver-todos-card'))return;
+  var u=card.dataset.u;
+  if(card.closest('[data-sec="hist"]'))quitarHist(u);else toggleFav(u);
+}
+function reproPeli(it){
+  var now=Date.now();
+  if(S.native||S.dlg||now-S.exitAt<BLOQUEO_MS)return;
+  if(S.lastU===it.url&&now-S.lastAt<1200)return;
+  S.lastU=it.url;S.lastAt=now;S.lastMovieUrl=it.url;
+  addHist(it);
+  S.fromMovies=true;
+  lanzar({nombre:it.title,logo:it.logo,url:it.url},0,1);
+}
+function activarCard(card){
+  if(!card)return;
+  if(card.classList.contains('ver-todos-card')){abrirGenero(card.dataset.genre);return}
+  if(card.dataset.k){var t=M.series.get(card.dataset.k);if(t)openGrid('📺 '+t.serieNombre+' - Temporada '+t.temporada,t.caps,true);return}
+  var it=buscarItem(card.dataset.u);
+  if(it)reproPeli(it);
+}
+function clickPelis(e){
+  if(Date.now()-S.suppressClick<700)return;
+  var card=e.target.closest?e.target.closest('.pelicula-card,.ver-todos-card'):null;
+  if(!card)return;
+  var act=e.target.closest('[data-act]');
+  if(act){
+    var a=act.dataset.act;
+    if(a==='fav')toggleFav(card.dataset.u);
+    else if(a==='del')quitarHist(card.dataset.u);
+    return;
+  }
+  activarCard(card);
+}
+function bindPress(el){
+  var t=null;
+  var clear=function(){clearTimeout(t);t=null};
+  var start=function(e){
+    var c=e.target.closest?e.target.closest('.pelicula-card'):null;
+    if(!c||e.target.closest('[data-act]'))return;
+    clear();
+    t=setTimeout(function(){t=null;S.suppressClick=Date.now();longPress(c)},800);
+  };
+  el.addEventListener('touchstart',start,{passive:true});
+  el.addEventListener('mousedown',start);
+  ['touchend','touchmove','touchcancel','mouseup','mouseleave'].forEach(function(n){el.addEventListener(n,clear,{passive:true})});
+  el.addEventListener('contextmenu',function(e){e.preventDefault()});
+}
+function openGrid(titulo,list,caps){
+  G.list=list;G.n=0;G.caps=!!caps;
+  D.gt.textContent=titulo;
+  D.gc.innerHTML='';
+  D.grid.scrollTop=0;
+  S.gridOpener=document.activeElement;
+  S.grid=true;
+  D.grid.classList.add('active');
+  masGrid();
+  setTimeout(function(){var c=D.gc.firstElementChild;if(c)c.focus();else $('gclose').focus()},40);
+}
+function masGrid(){
+  if(G.n>=G.list.length)return;
+  var end=Math.min(G.n+60,G.list.length),h='';
+  for(var i=G.n;i<end;i++)h+=cardHtml(G.list[i],{cap:G.caps});
+  G.n=end;
+  D.gc.insertAdjacentHTML('beforeend',h);
+}
+function cerrarGrid(silencioso){
+  S.grid=false;
+  D.grid.classList.remove('active');
+  if(silencioso)return;
+  if(S.pelisDirty){renderPelisKeep();return}
+  var o=S.gridOpener;
+  if(o&&document.body.contains(o))o.focus();else focoPelis();
+}
+function renderPelisKeep(){
+  var a=document.activeElement,id=a&&a.dataset?(a.dataset.u||a.dataset.k||a.dataset.genre):null,st=D.movies.scrollTop;
+  renderPelis();
+  D.movies.scrollTop=st;
+  var c=buscarCard(D.mc,id);
+  if(c){try{c.focus({preventScroll:true})}catch(e){c.focus()}}
+  else focoPelis();
+}
+function abrirGenero(nombre){
+  var g=null;
+  for(var i=0;i<M.genres.length;i++)if(M.genres[i].name===nombre){g=M.genres[i];break}
+  if(g)openGrid('📺 '+nombre.toUpperCase(),ordenar(g.tiles),false);
+}
+function abrirTodos(){if(M.items.length)openGrid('📺 TODOS LOS TÍTULOS',ordenar(M.tiles),false)}
+
+/* ===== NAVEGACIÓN ===== */
+function keyName(e){
+  switch(e.key){
+    case 'Enter':case 'OK':case 'Select':case 'Accept':return 'ok';
+    case 'Escape':case 'Backspace':case 'GoBack':case 'BrowserBack':return 'back';
+    case 'ArrowUp':return 'up';
+    case 'ArrowDown':return 'down';
+    case 'ArrowLeft':return 'left';
+    case 'ArrowRight':return 'right';
+    case 'ChannelUp':return 'chup';
+    case 'ChannelDown':return 'chdn';
+  }
+  switch(e.keyCode){
+    case 13:case 23:case 66:return 'ok';
+    case 4:case 8:case 27:return 'back';
+    case 38:return 'up';case 40:return 'down';case 37:return 'left';case 39:return 'right';
+    case 427:return 'chup';case 428:return 'chdn';
+  }
+  return null;
+}
+function atras(){
+  var now=Date.now();
+  if(now-S.backAt<250)return;
+  S.backAt=now;
+  if(S.dlg){cerrarDialogo();return}
+  if(S.grid){cerrarGrid();return}
+  if(S.view==='player'){detener();return}
+  if(S.view==='movies'){salirPeliculas();return}
+  try{if(hasNat('salirApp')){nat('salirApp');return}}catch(e){}
+  try{window.close()}catch(e){}
+}
+function navDialog(k,e){
+  var a=document.activeElement,enInput=a&&a.tagName==='INPUT';
+  /* Dentro de un campo de texto, izquierda/derecha/OK se dejan al teclado */
+  if(enInput&&(k==='left'||k==='right'||k==='ok'))return;
+  e.preventDefault();
+  var bs=dlgBtns();
+  if(!bs.length)return;
+  var i=bs.indexOf(a);
+  if(k==='right'||k==='down')bs[(i+1)%bs.length].focus();
+  else if(k==='left'||k==='up')bs[(i-1+bs.length)%bs.length].focus();
+  else if(k==='ok'&&!e.repeat)(i>=0?bs[i]:bs[0]).click();
+}
+function okDown(card){S.okDown=card;S.okFired=false;clearTimeout(S.okTimer);S.okTimer=setTimeout(function(){S.okFired=true;longPress(card)},800)}
+function navGrid(k,e){
+  var a=document.activeElement,close=$('gclose');
+  if(a===close){
+    if(k==='ok'){e.preventDefault();if(!e.repeat)cerrarGrid()}
+    else if(k==='down'){e.preventDefault();var f=D.gc.firstElementChild;if(f)f.focus()}
+    return;
+  }
+  var cards=D.gc.children,i=Array.prototype.indexOf.call(cards,a);
+  e.preventDefault();
+  if(i<0){var c0=cards[0];if(c0)c0.focus();else close.focus();return}
+  if(k==='ok'){if(!e.repeat)okDown(a);return}
+  var cols=colsDe(D.gc),n=i;
+  if(k==='right')n=i+1;
+  else if(k==='left')n=i-1;
+  else if(k==='down')n=i+cols;
+  else if(k==='up'){if(i<cols){close.focus();return}n=i-cols}
+  else return;
+  if(n>=cards.length&&G.n<G.list.length)masGrid();
+  if(n>=cards.length)n=cards.length-1;
+  if(n>=0&&n!==i)cards[n].focus();
+}
+function colsDe(el){
+  var c=el.children;if(!c.length)return 4;
+  var t=c[0].offsetTop,n=1;
+  while(n<c.length&&c[n].offsetTop===t)n++;
+  return n;
+}
+function navPelis(k,e){
+  var a=document.activeElement,hdr=[$('mback'),$('mcount')],hi=hdr.indexOf(a);
+  e.preventDefault();
+  if(hi>=0){
+    if(k==='right'&&hi<1)hdr[1].focus();
+    else if(k==='left'&&hi>0)hdr[0].focus();
+    else if(k==='down'){var c=D.mc.querySelector('.pelicula-card,.ver-todos-card');if(c)c.focus()}
+    else if(k==='ok'&&!e.repeat){if(hi===0)salirPeliculas();else abrirTodos()}
+    return;
+  }
+  var card=a&&a.closest?a.closest('.pelicula-card,.ver-todos-card'):null;
+  if(!card){var f=D.mc.querySelector('.pelicula-card,.ver-todos-card');if(f)f.focus();else hdr[0].focus();return}
+  if(k==='ok'){if(!e.repeat)okDown(card);return}
+  var row=card.parentNode,cards=row.children,i=Array.prototype.indexOf.call(cards,card);
+  if(k==='right'){if(cards[i+1])cards[i+1].focus()}
+  else if(k==='left'){if(cards[i-1])cards[i-1].focus()}
+  else if(k==='down'||k==='up'){
+    var sec=row.parentNode.parentNode,s=k==='down'?sec.nextElementSibling:sec.previousElementSibling;
+    if(!s){if(k==='up')hdr[0].focus();return}
+    var r2=s.querySelector('.cards-slider'),x=card.getBoundingClientRect().left,best=r2.children[0],bd=1e9;
+    for(var j=0;j<r2.children.length;j++){var d=Math.abs(r2.children[j].getBoundingClientRect().left-x);if(d<bd){bd=d;best=r2.children[j]}}
+    if(best)best.focus();
+  }
+}
+function navLista(k,e){
+  var a=document.activeElement;
+  if(a===D.btnMenu){
+    if(k==='left'){e.preventDefault();D.bar.focus()}
+    else if(k==='down'){e.preventDefault();focusCard(S.index)}
+    else if(k==='ok'){e.preventDefault();if(!e.repeat)abrirSettings()}
+    return;
+  }
+  if(a===D.bar){
+    if(k==='down'){e.preventDefault();focusCard(S.index)}
+    else if(k==='right'){e.preventDefault();D.btnMenu.focus()}
+    else if(k==='ok'){e.preventDefault();if(!e.repeat)infoDialog()}
+    return;
+  }
+  /* Estado vacío: el botón "AGREGAR LISTA" maneja OK; arriba vuelve a la barra */
+  var ab=$('btnAddList');
+  if(ab&&a===ab){
+    if(k==='up'){e.preventDefault();D.btnMenu.focus()}
+    else if(k==='ok'){e.preventDefault();if(!e.repeat)abrirSettings()}
+    return;
+  }
+  var idx=(a&&a.classList&&a.classList.contains('card'))?parseInt(a.dataset.i,10):-1;
+  if(idx<0){
+    if(k==='ok'||k==='up'||k==='down'||k==='left'||k==='right'){
+      e.preventDefault();
+      if(ab)ab.focus();else focusCard(S.index);
+    }
+    return;
+  }
+  if(k==='ok'){e.preventDefault();if(!e.repeat)play(idx,'user');return}
+  var vis=canalesVisibles(),len=vis.length,posVis=-1;
+  for(var q=0;q<len;q++)if(vis[q]===idx){posVis=q;break}
+  if(posVis<0){e.preventDefault();focusCard(S.index);return}
+  var cols=colsDe(D.list),n=posVis;
+  if(k==='down'){n=posVis+cols;if(n>=len&&Math.floor(posVis/cols)<Math.floor((len-1)/cols))n=len-1}
+  else if(k==='up'){if(posVis<cols){e.preventDefault();D.bar.focus();return}n=posVis-cols}
+  else if(k==='left')n=posVis-1;
+  else if(k==='right')n=posVis+1;
+  else return;
+  e.preventDefault();
+  if(n>=0&&n<len&&n!==posVis){S.index=vis[n];focusCard(vis[n])}
+}
+var navBusy=false;
+function frenar(e){if(e.repeat&&navBusy){e.preventDefault();return true}navBusy=true;(window.requestAnimationFrame||setTimeout)(function(){navBusy=false});return false}
+document.addEventListener('keydown',function(e){
+  if(S.locked)return;
+  var k=keyName(e);
+  if(!k)return;
+  if(k==='back'){
+    /* Backspace dentro de un campo de texto borra caracteres; no es "atrás" */
+    if(e.target&&e.target.tagName==='INPUT'&&(e.key==='Backspace'||e.keyCode===8))return;
+    e.preventDefault();e.stopPropagation();atras();return;
+  }
+  if(S.dlg){navDialog(k,e);return}
+  if(k!=='ok'&&(S.grid||S.view==='movies'||S.view==='list')&&frenar(e))return;
+  if(S.grid){navGrid(k,e);return}
+  if(S.view==='player'){e.preventDefault();showUI();if(k==='right'||k==='chup')zap(1);else if(k==='left'||k==='chdn')zap(-1);return}
+  if(S.view==='movies'){navPelis(k,e);return}
+  navLista(k,e);
+});
+document.addEventListener('keyup',function(e){
+  if(S.locked||!S.okDown||keyName(e)!=='ok')return;
+  e.preventDefault();
+  clearTimeout(S.okTimer);
+  var c=S.okDown;
+  S.okDown=null;
+  if(S.okFired){S.okFired=false;return}
+  activarCard(c);
+});
+
+/* ===== INICIALIZACIÓN ===== */
+function cargarListaInicial(){
+  var cached=ls.getJ('gtv_channels',null);
+  if(cached&&cached.length){
+    aplicarLista(cached,true);   // también sincroniza la lista con el nativo (setLista)
+  } else {
+    renderLista();
+  }
+}
+
+function iniciarApp(){
+  try{registrarDispositivo();verificarBaneo()}catch(e){}
+  fetchW(BAN_URL+'/api/fecha?device='+encodeURIComponent(deviceId),8000).then(function(r){return r.json()}).then(function(d){
+    if(d&&d.primeraVez){lic.demoStart=new Date(d.primeraVez).getTime();remote.demoSrv=true;guardarLic();actualizarBarra()}
+  }).catch(noop);
+  aplicarCacheEstado();
+  sincronizarEstadoCanales();
+  setInterval(actualizarBarra,30000);
+  setInterval(function(){if(!document.hidden||enExoNat())pubSchedulerTick()},1500);
+  setTimeout(pubSchedulerTick,2000);
+  setInterval(function(){if(!S.native&&!document.hidden)sincronizarEstadoCanales()},3*60*1000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&!S.native)sincronizarEstadoCanales();if(!document.hidden)setTimeout(pubSchedulerTick,500)});
+}
+
+/* ===== EVENTOS DE UI ===== */
+D.list.addEventListener('click',function(e){
+  var c=e.target.closest?e.target.closest('.card'):null;
+  if(c)play(parseInt(c.dataset.i,10),'user');
+});
+D.bar.addEventListener('click',function(){infoDialog()});
+D.btnMenu.addEventListener('click',function(e){e.stopPropagation();abrirSettings()});
+D.mc.addEventListener('click',clickPelis);
+D.gc.addEventListener('click',clickPelis);
+bindPress(D.mc);
+bindPress(D.gc);
+$('mback').addEventListener('click',salirPeliculas);
+$('mcount').addEventListener('click',abrirTodos);
+$('gclose').addEventListener('click',function(){cerrarGrid()});
+D.grid.addEventListener('scroll',function(){if(D.grid.scrollTop+D.grid.clientHeight>D.grid.scrollHeight-500)masGrid()});
+D.list.addEventListener('error',function(e){var t=e.target;if(t.tagName==='IMG'&&!t.dataset.fb){t.dataset.fb='1';t.src=FB_LOGO}},true);
+[D.mc,D.gc].forEach(function(r){r.addEventListener('error',function(e){var t=e.target;if(t.tagName==='IMG'&&!t.dataset.fb){t.dataset.fb='1';t.src=FB_POSTER}},true)});
+$('goPrev').onclick=function(){zap(-1)};
+$('goNext').onclick=function(){zap(1)};
+$('goBack').onclick=detener;
+$('goRot').onclick=function(){S.rotated=!S.rotated;ls.set('gtv_rot',String(S.rotated));aplicarRot();nat('rotarDesdeAndroid',S.rotated);showUI()};
+$('shield').onclick=showUI;
+
+window.addEventListener('resize',function(){S.cols=0});
+
+/* ===== ARRANQUE ===== */
+cargarLicLocal();
+actualizarBarra();
+cargarListaInicial();
+setTimeout(function(){
+  cargarConfig().then(function(r){
+    iniciarApp();
+  }).catch(function(e){
+    iniciarApp();
+  });
+},200);
+setTimeout(popupNovedades,2500);
 })();
 </script>
 </body>
