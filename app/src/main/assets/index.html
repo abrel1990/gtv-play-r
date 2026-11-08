@@ -76,45 +76,45 @@ button{font-family:inherit}
 .sin-senal .ss-msg{font-size:16px;color:#fff;margin-bottom:8px;line-height:1.5;max-width:80%}
 .sin-senal .ss-hint{font-size:12px;color:#888;margin-top:6px}
 
-/* INFO DIALOG */
+/* INFO DIALOG / SETTINGS */
 .info-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.96);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
-.info-container{background:#141414;border:2px solid #FFD700;border-radius:24px;padding:20px;max-width:92%;width:400px;text-align:center;margin:auto}
-.info-container h2{color:#FFD700;margin-bottom:12px;font-size:20px}
+.info-container{background:#141414;border:2px solid #FFD700;border-radius:24px;padding:24px;max-width:92%;width:460px;text-align:center;margin:auto;font-size:15px}
+.info-container h2{color:#FFD700;margin-bottom:14px;font-size:22px}
 .info-id{background:#000;color:#FFD700;font-family:monospace;font-size:18px;font-weight:bold;padding:12px;border-radius:16px;letter-spacing:1px;margin:12px 0;border:1px solid #FFD700;word-break:break-all}
 .info-pill{display:inline-block;background:rgba(255,215,0,.12);border:1px solid rgba(255,215,0,.3);border-radius:14px;padding:8px 14px;margin:4px;font-size:13px}
 .info-pill .num{color:#FFD700;font-weight:bold;font-size:16px}
 .info-pill .lbl{color:#ccc;font-size:11px;display:block;margin-top:2px}
 .info-pill.green{background:rgba(46,204,113,.12);border-color:rgba(46,204,113,.4)}.info-pill.green .num{color:#2ecc71}
 .info-pill.orange{background:rgba(230,126,34,.12);border-color:rgba(230,126,34,.4)}.info-pill.orange .num{color:#e67e22}
-.info-tip{font-size:12px;color:#bbb;margin-top:10px;line-height:1.5}.info-tip strong{color:#FFD700}
+.info-tip{font-size:13px;color:#bbb;margin-top:10px;line-height:1.5}.info-tip strong{color:#FFD700}
 .whatsapp-number-tv{background:rgba(37,211,102,.15);border:2px solid #25D366;border-radius:16px;padding:12px;margin:12px 0}
 .whatsapp-number-tv .label{color:#25D366;font-size:11px;font-weight:bold;letter-spacing:1px;margin-bottom:6px}
 .whatsapp-number-tv .number{color:#fff;font-size:22px;font-weight:bold;font-family:monospace;letter-spacing:2px}
-.button-group{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:15px}
-.info-container button,.popup-box button,.toast-blocked button{background:#FFD700;color:#000;border:none;padding:10px 16px;border-radius:40px;font-weight:bold;font-size:13px;cursor:pointer;min-width:90px}
+.button-group{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:16px}
+.info-container button,.popup-box button,.toast-blocked button{background:#FFD700;color:#000;border:none;padding:12px 20px;border-radius:40px;font-weight:bold;font-size:14px;cursor:pointer;min-width:100px}
 .info-container button:focus,.popup-box button:focus,.toast-blocked button:focus{outline:3px solid #fff;background:#e6c200}
 .close-info,.close-toast{background:#333!important;color:#fff!important}
 .whatsapp-btn{background:#25D366!important;color:#fff!important}
-.toast-blocked{position:fixed;bottom:90px;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);background:#000;border:2px solid #FFD700;border-radius:30px;padding:12px 20px;z-index:10001;display:flex;gap:12px;align-items:center;font-size:13px;white-space:nowrap}
+.toast-blocked{position:fixed;bottom:90px;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);background:#000;border:2px solid #FFD700;border-radius:30px;padding:12px 20px;z-index:10001;display:flex;gap:12px;align-items:center;font-size:14px;white-space:nowrap}
 .toast-blocked span{color:#FFD700}
 .popup-box{background:#141414;border:3px solid #FFD700;border-radius:24px;padding:26px 30px;max-width:550px;width:90%;max-height:85vh;text-align:center}
-.popup-box .ptitle{font-size:13px;color:#FFD700;font-weight:bold;letter-spacing:2px;margin-bottom:14px}
-.popup-box .ptext{color:#e0e0e0;font-size:15px;line-height:1.7;max-height:55vh;overflow-y:auto}
-.popup-box button{margin-top:18px;padding:11px 40px}
+.popup-box .ptitle{font-size:14px;color:#FFD700;font-weight:bold;letter-spacing:2px;margin-bottom:14px}
+.popup-box .ptext{color:#e0e0e0;font-size:16px;line-height:1.7;max-height:55vh;overflow-y:auto}
+.popup-box button{margin-top:18px;padding:12px 40px}
 
 /* MENÚ DE CONFIGURACIÓN (listas) */
-.set-box{text-align:left;max-height:92vh;overflow-y:auto}
-.set-box h2{text-align:center}
-.set-sec{font-size:12px;color:#FFD700;font-weight:bold;letter-spacing:1px;margin:14px 0 8px;text-transform:uppercase}
-.set-row{display:flex;gap:8px;align-items:center}
-.set-input{flex:1;min-width:0;background:#000;color:#fff;border:2px solid #444;border-radius:10px;padding:10px 12px;font-size:14px}
+.set-box{text-align:left;max-height:92vh;overflow-y:auto;width:90%;max-width:550px;font-size:15px}
+.set-box h2{text-align:center;margin-bottom:18px}
+.set-sec{font-size:14px;color:#FFD700;font-weight:bold;letter-spacing:1px;margin:18px 0 10px;text-transform:uppercase}
+.set-row{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+.set-input{flex:1;min-width:0;background:#000;color:#fff;border:2px solid #444;border-radius:10px;padding:12px 14px;font-size:15px}
 .set-input:focus{border-color:#FFD700}
-.set-empty{color:#888;font-size:12px;text-align:center;padding:10px 0}
-.s-item{display:flex;align-items:center;gap:8px;background:#1f1f1f;border-radius:12px;padding:8px 10px;margin-bottom:6px}
+.set-empty{color:#888;font-size:14px;text-align:center;padding:12px 0}
+.s-item{display:flex;align-items:center;gap:10px;background:#1f1f1f;border-radius:12px;padding:10px 12px;margin-bottom:8px}
 .s-info{flex:1;min-width:0}
-.s-info b{display:block;font-size:13px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.s-info small{font-size:11px;color:#aaa}
-.info-container .s-item button{min-width:0;padding:8px 12px}
+.s-info b{display:block;font-size:15px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s-info small{font-size:12px;color:#aaa}
+.info-container .s-item button{min-width:0;padding:10px 16px;font-size:14px}
 .info-container .s-del{background:#7a1010;color:#fff}
 .info-container .s-del:focus{background:#c0392b}
 
@@ -450,7 +450,7 @@ function abrirSettings(){
     '<div class="info-container set-box">'
     +'<h2>⚙️ Configuración</h2>'
     +'<div class="set-sec">Agregar lista</div>'
-    +'<div class="set-row"><input id="sInput" class="set-input" type="text" placeholder="URL de la lista o palabra clave" autocomplete="off" spellcheck="false" autocapitalize="off"><button id="sCargar">Cargar</button></div>'
+    +'<div class="set-row"><input id="sInput" class="set-input" type="text" placeholder="URL de la lista" autocomplete="off" spellcheck="false" autocapitalize="off"><button id="sCargar">Cargar</button></div>'
     +'<div class="set-sec">Listas guardadas</div>'
     +'<div id="sListas"></div>'
     +'<div class="button-group"><button id="sLic">🎫 Mi licencia</button><button id="sClose" class="close-info">✕ Cerrar</button></div>'
