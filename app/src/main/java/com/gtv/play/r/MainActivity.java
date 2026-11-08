@@ -1109,7 +1109,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void checkForUpdates() {
+        private void checkForUpdates() {
         if (!hayInternet()) return;
         new Thread(() -> {
             try {
@@ -1127,11 +1127,18 @@ public class MainActivity extends AppCompatActivity {
                 while ((line = br.readLine()) != null) sb.append(line);
                 br.close(); is.close();
                 JSONObject json = new JSONObject(sb.toString());
-                String remoteVersion = json.optString("versionName", "");
+                
+                int remoteVersionCode = json.optInt("versionCode", 0);
                 String apkUrl = json.optString("apkUrl", "");
-                String currentVersion = getCurrentVersionName();
-                if (remoteVersion.isEmpty() || apkUrl.isEmpty() || remoteVersion.equals(currentVersion)) return;
-                runOnUiThread(() -> mostrarDialogoUpdate(remoteVersion, apkUrl));
+                
+                int currentVersionCode = 0;
+                try { currentVersionCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; } catch (Exception ignored) {}
+                
+                // Si el remoto es mayor al actual, salta el cartel
+                if (remoteVersionCode > currentVersionCode && !apkUrl.isEmpty()) {
+                    final int rv = remoteVersionCode;
+                    runOnUiThread(() -> mostrarDialogoUpdate(rv, apkUrl));
+                }
             } catch (Exception ignored) {}
         }).start();
     }
