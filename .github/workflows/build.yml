@@ -19,14 +19,33 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Bump Version Code
+      # MAGIA: Suma +1 a la versión basándose en la última Release de GitHub
+      - name: Bump Version
         id: bump
         run: |
-          CURRENT_CODE=$(grep -oP 'versionCode \K\d+' app/build.gradle)
-          NEW_CODE=$((CURRENT_CODE + 1))
-          sed -i "s/versionCode $CURRENT_CODE/versionCode $NEW_CODE/" app/build.gradle
+          # Obtiene el tag de la última release (ej: si es v0.10, extrae el 0.10)
+          LAST_TAG=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/abrel1990/gtv-play-r/releases/latest | grep -oP '"tag_name":\s*"v\K[0-9.]+')
+          
+          if [ -z "$LAST_TAG" ]; then
+            # Si es la primera vez, arranca en 0.10
+            NEW_CODE=10
+            NEW_NAME="0.10"
+          else
+            # Si la última fue 0.10, saca el punto (queda 10), le suma 1 (queda 11)
+            NEW_CODE=$(echo "$LAST_TAG" | tr -d '.')
+            NEW_CODE=$((NEW_CODE + 1))
+            # Arma el nuevo nombre: 0.11
+            NEW_NAME="0.${NEW_CODE}"
+          fi
+
+          # Actualiza el build.gradle con los nuevos valores
+          sed -i "s/versionCode [0-9]*/versionCode $NEW_CODE/" app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$NEW_NAME\"/" app/build.gradle
+          
+          # Guarda las variables para los siguientes pasos
           echo "NEW_CODE=$NEW_CODE" >> $GITHUB_ENV
-          echo "Nueva versión: v$NEW_CODE"
+          echo "NEW_NAME=$NEW_NAME" >> $GITHUB_ENV
+          echo "Nueva versión generada: v$NEW_NAME"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
@@ -48,8 +67,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.NEW_CODE }}
-          name: GTV Play R v${{ env.NEW_CODE }}
+          # Usa el nombre calculado (ej: v0.11)
+          tag_name: v${{ env.NEW_NAME }}
+          name: GTV Play R v${{ env.NEW_NAME }}
           files: app/build/outputs/apk/release/app-release.apk
           draft: false
           prerelease: false
