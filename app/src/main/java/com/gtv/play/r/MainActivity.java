@@ -287,8 +287,8 @@ public class MainActivity extends AppCompatActivity {
             .setEnableDecoderFallback(true);
 
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-            .setBufferDurationsMs(1500, 3000, 500, 1000)
-            .setTargetBufferBytes(16 * 1024 * 1024)
+            .setBufferDurationsMs(10000, 30000, 2500, 5000)
+            .setTargetBufferBytes(24 * 1024 * 1024)
             .build();
 
         exoPlayer = new ExoPlayer.Builder(this, renderers)
