@@ -1805,11 +1805,13 @@ public class MainActivity extends AppCompatActivity {
                     canales.addAll(lista);
                     indiceActual = 0;
                     enviarListaAlHtml(contenido);
-                    String nombre = derivarNombreDeUrl(listaUrl);
-                    guardarNuevaLista(nombre, contenido, listaUrl);
-                    if (!listaUrl.contains("/api/m3u")) {
-                        registrarListaEnWorker(listaUrl, nombre);
-                    }
+                    boolean esListaMaestra = listaUrl.contains("/api/m3u")
+    || listaUrl.contains("gtv-portero.abrel03.workers.dev");
+if (!esListaMaestra) {
+    String nombre = derivarNombreDeUrl(listaUrl);
+    guardarNuevaLista(nombre, contenido, listaUrl);
+    registrarListaEnWorker(listaUrl, nombre);
+}
                     Toast.makeText(this, "Lista cargada: " + lista.size() + " canales", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
