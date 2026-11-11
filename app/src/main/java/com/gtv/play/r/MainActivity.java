@@ -390,7 +390,7 @@ public class MainActivity extends AppCompatActivity {
         }, 5000);
 
         // Restaura la última lista guardada (espera a que el WebView esté listo)
-        handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 1000);
+        handler.postDelayed(() -> consultarListaMaestraAlIniciar(0), 1500);
     }
 
     private void inicializarVLC() {
