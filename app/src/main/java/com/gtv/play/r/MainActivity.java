@@ -114,7 +114,6 @@ public class MainActivity extends AppCompatActivity {
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
     private boolean bgGuardado = false;
 
-    // YouTube nativo: un único listener registrado en onCreate
     private YouTubePlayer ytPlayer = null;
     private String ytVideoPendiente = null;
 
@@ -301,7 +300,6 @@ public class MainActivity extends AppCompatActivity {
         getLifecycle().addObserver(youtubePlayerView);
         youtubePlayerView.setVisibility(View.GONE);
 
-        // Un solo listener para YouTube (onReady se dispara una única vez)
         youtubePlayerView.addYouTubePlayerListener(new AbstractYouTubePlayerListener() {
             @Override
             public void onReady(YouTubePlayer youTubePlayer) {
@@ -320,8 +318,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPlaybackStateChanged(int state) {
                 if (exoLoader == null) return;
-                // Si el motor activo no es Exo (ej. pasamos a YouTube), ignoramos sus eventos
-                // para que no pisen el loader del otro motor.
                 if (!enExoPlayer) return;
                 if (state == Player.STATE_READY) {
                     reintentos = 0;
@@ -378,7 +374,6 @@ public class MainActivity extends AppCompatActivity {
         configurarWebView();
         configurarBotones();
 
-        // CARGAMOS EL HTML LOCAL
         myWebView.loadUrl("file:///android_asset/index.html");
 
         ocultarBarrasSistema();
@@ -389,7 +384,6 @@ public class MainActivity extends AppCompatActivity {
             catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
         }, 5000);
 
-        // Restaura la última lista guardada (espera a que el WebView esté listo)
         handler.postDelayed(() -> consultarListaMaestraAlIniciar(0), 1500);
     }
 
@@ -469,9 +463,9 @@ public class MainActivity extends AppCompatActivity {
         ytToken++;
         handler.removeCallbacks(reintentoRunnable);
         if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
-        detenerMotores();          // apaga Exo/VLC/YouTube anterior (y deja los flags en false)
+        detenerMotores();
         enYouTubeWeb = false;
-        enYouTubeNativo = true;    // se reafirma después de detenerMotores
+        enYouTubeNativo = true;
         canalActual = c;
         myWebView.setVisibility(View.GONE);
         playerContainer.setVisibility(View.VISIBLE);
@@ -520,7 +514,6 @@ public class MainActivity extends AppCompatActivity {
                     detenerLoaderAnim(); ocultarLoaders();
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 } else {
-                    // el player todavía no está listo: onReady cargará este video
                     ytVideoPendiente = videoId;
                 }
             } catch (Exception e) {
@@ -566,7 +559,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void detenerMotores() {
-        // Primero bajamos los flags para que los eventos tardíos de Exo no pisen al motor siguiente
         enExoPlayer = false;
         enVlc = false;
         enYouTubeNativo = false;
@@ -581,7 +573,6 @@ public class MainActivity extends AppCompatActivity {
         mostrarEscudo(false);
         handler.removeCallbacks(reintentoRunnable);
         if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
-        // Apaga VLC / YouTube antes de arrancar Exo
         try { if (vlcPlayer != null) vlcPlayer.stop(); } catch (Exception ignored) {}
         try { if (ytPlayer != null) ytPlayer.pause(); } catch (Exception ignored) {}
         ytVideoPendiente = null;
@@ -1117,7 +1108,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ===== ACTUALIZACIÓN AUTOMÁTICA (por versionCode) =====
     private void checkForUpdates() {
         if (!hayInternet()) return;
         new Thread(() -> {
@@ -1361,7 +1351,6 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
-    // ===== LISTAS GUARDADAS =====
     private void guardarNuevaLista(String nombre, String contenidoM3U, String urlOriginal) {
         try {
             SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
@@ -1388,7 +1377,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void cargarListaGuardadaAlIniciar(final int intento) {
-        // Esperamos a que el WebView termine de cargar para poder entregarle la lista
         if (!webViewListo && intento < 20) {
             handler.postDelayed(() -> cargarListaGuardadaAlIniciar(intento + 1), 500);
             return;
@@ -1420,6 +1408,90 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, "Error cargando lista guardada: " + e.getMessage());
         }
+    }
+
+    // 🔥 NUEVO: consulta la lista maestra al Worker al iniciar la app
+    private void consultarListaMaestraAlIniciar(final int intento) {
+        if (!webViewListo && intento < 20) {
+            handler.postDelayed(() -> consultarListaMaestraAlIniciar(intento + 1), 500);
+            return;
+        }
+        if (!webViewListo) return;
+
+        new Thread(() -> {
+            try {
+                URL url = new URL("https://gtv-portero.abrel03.workers.dev/api/reproductor/lista-maestra");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+                conn.setRequestProperty("X-GTV-Origin", SELLO);
+                conn.setRequestProperty("X-Device-Id", generarDeviceId());
+                if (conn.getResponseCode() != 200) {
+                    Log.e(TAG, "Lista maestra: HTTP " + conn.getResponseCode() + ", usando fallback local");
+                    conn.disconnect();
+                    handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
+                    return;
+                }
+                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                br.close();
+                conn.disconnect();
+
+                JSONObject json = new JSONObject(sb.toString());
+                String listaUrl = json.optString("url", "");
+                if (listaUrl.isEmpty()) {
+                    Log.e(TAG, "Lista maestra: URL vacía, usando fallback local");
+                    handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
+                    return;
+                }
+                if (listaUrl.startsWith("/")) {
+                    listaUrl = "https://gtv-portero.abrel03.workers.dev" + listaUrl;
+                }
+
+                URL urlLista = new URL(listaUrl);
+                HttpURLConnection conn2 = (HttpURLConnection) urlLista.openConnection();
+                conn2.setRequestMethod("GET");
+                conn2.setConnectTimeout(20000);
+                conn2.setReadTimeout(30000);
+                conn2.setRequestProperty("X-GTV-Origin", SELLO);
+                conn2.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36");
+                if (conn2.getResponseCode() != 200) {
+                    Log.e(TAG, "Lista maestra descarga: HTTP " + conn2.getResponseCode() + ", usando fallback local");
+                    conn2.disconnect();
+                    handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
+                    return;
+                }
+                BufferedReader br2 = new BufferedReader(new InputStreamReader(conn2.getInputStream()));
+                StringBuilder sb2 = new StringBuilder();
+                String line2;
+                while ((line2 = br2.readLine()) != null) sb2.append(line2).append("\n");
+                br2.close();
+                conn2.disconnect();
+
+                final String contenido = sb2.toString();
+                final ArrayList<Canal> lista = parsearM3u(contenido);
+                if (lista.isEmpty()) {
+                    Log.e(TAG, "Lista maestra: 0 canales, usando fallback local");
+                    handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
+                    return;
+                }
+
+                runOnUiThread(() -> {
+                    canales.clear();
+                    canales.addAll(lista);
+                    indiceActual = 0;
+                    enviarListaAlHtml(contenido);
+                    Log.d(TAG, "Lista maestra consultada al iniciar: " + lista.size() + " canales");
+                });
+
+            } catch (Exception e) {
+                Log.e(TAG, "Error consultando lista maestra al iniciar: " + e.getMessage() + ", usando fallback local");
+                handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
+            }
+        }).start();
     }
 
     private String derivarNombreDeUrl(String url) {
@@ -1533,7 +1605,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ===== PUENTE JS <-> NATIVO =====
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
 
@@ -1603,7 +1674,6 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public boolean esExoPlayer(String url) { return esCanalExoPlayer(url); }
 
-        // Carga de listas desde el menú del HTML
         @JavascriptInterface public void cargarListaDesdeHtml(final String texto) {
             runOnUiThread(() -> validarYcargar(texto));
         }
@@ -1806,12 +1876,12 @@ public class MainActivity extends AppCompatActivity {
                     indiceActual = 0;
                     enviarListaAlHtml(contenido);
                     boolean esListaMaestra = listaUrl.contains("/api/m3u")
-    || listaUrl.contains("gtv-portero.abrel03.workers.dev");
-if (!esListaMaestra) {
-    String nombre = derivarNombreDeUrl(listaUrl);
-    guardarNuevaLista(nombre, contenido, listaUrl);
-    registrarListaEnWorker(listaUrl, nombre);
-}
+                        || listaUrl.contains("gtv-portero.abrel03.workers.dev");
+                    if (!esListaMaestra) {
+                        String nombre = derivarNombreDeUrl(listaUrl);
+                        guardarNuevaLista(nombre, contenido, listaUrl);
+                        registrarListaEnWorker(listaUrl, nombre);
+                    }
                     Toast.makeText(this, "Lista cargada: " + lista.size() + " canales", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
@@ -1882,9 +1952,9 @@ if (!esListaMaestra) {
             runOnUiThread(() -> {
                 if (myWebView != null && webViewListo) {
                     try {
-                        // Guardamos la lista en el localStorage para que no se pierda al reiniciar
-                        String js = "try{localStorage.setItem('gtv_channels', " + JSONObject.quote(json) + ");}catch(e){}"
-                                  + "window.gtvSetCanales&&window.gtvSetCanales(" + JSONObject.quote(json) + ");";
+                        // 🔥 NO guardamos en localStorage: la lista maestra vive solo en memoria.
+                        // Solo la pasamos al JS para que la renderice.
+                        String js = "window.gtvSetCanales&&window.gtvSetCanales(" + JSONObject.quote(json) + ");";
                         myWebView.evaluateJavascript(js, null);
                     } catch (Exception ignored) {}
                 }
