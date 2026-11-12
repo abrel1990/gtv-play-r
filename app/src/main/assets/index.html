@@ -1,1373 +1,1025 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>GTV Play R</title>
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Montserrat:wght@400;700&family=Poppins:wght@400;700&family=Inter:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;width:100%;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;-webkit-user-select:none;user-select:none}
-input{-webkit-user-select:text;user-select:text}
-:focus{outline:none}
-.hidden{display:none!important}
-button{font-family:inherit}
+/* CONFIGURACIÓN */
+const DEF = { user:"gabitosila", pass:"gtv-admin-2026-x9k3-seguro", passStats:"gtvstats-gabito2026", sello:"gtv_app_2026_secreto_xyz789" };
+const CF_ACCOUNT = "a8b49bda19596082d5ae09682e52c05e";
+const OK_INTERVALO = 12 * 60 * 60 * 1000;
+const CAIDO_INTERVALO = 30 * 60 * 1000;
+const LOTE = 60;
+const REINTENTOS_MAX = 10;
+const CONCURRENCIA = 6;
+const TIMEOUT_MS = 5000;
+const FALLOS_PARA_CAIDO = 2;
+const UA = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+const SKIP_RE = /youtube\.com|youtu\.be|twitch\.tv|kick\.com|ok\.ru|odnoklassniki\.ru|dailymotion\.com|tokyvideo\.com/i;
+const ARCHIVOS_LEER = ["canales.m3u","peliculas.m3u","gtv_config.json","caidos.json","ocultos_app.json","falsos_positivos.json","fuentes_externas.json","consumo_diario.json"];
+const ARCHIVOS_GUARDAR = ["canales.m3u","peliculas.m3u","gtv_config.json"];
+const DEVICE_RE = /^[\w.:-]{3,64}$/;
+const CORS = {"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET, POST, OPTIONS","Access-Control-Allow-Headers":"Content-Type, Authorization, X-GTV-Origin"};
+const FX_LOTE = 30;
+const CONSUMO_LIMITES = { esc: 1000, lec: 100000, req: 100000 };
 
-/* STATUS BAR */
-.status-bar{position:fixed;top:0;left:0;right:0;height:48px;padding:0 12px;display:flex;justify-content:space-between;align-items:center;z-index:100;font-size:12px;background:#0b0b0b;border-bottom:2px solid #FFD700;cursor:pointer}
-.status-bar:focus{background:#2a2400;border-bottom-color:#fff}
-.status-bar.ocultar{display:none}
-.status-left{display:flex;align-items:center;gap:8px}
-.status-right{display:flex;align-items:center;gap:8px}
-.status-text{font-weight:bold}
-.status-demo{color:#FFD700}.status-full{color:#00ff66}.status-expiring{color:#ff6600}
-.status-time{font-family:monospace;font-size:11px;background:rgba(255,255,255,.08);padding:4px 8px;border-radius:20px}
-.btn-menu{background:rgba(255,255,255,.1);color:#fff;border:2px solid transparent;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:bold;cursor:pointer}
-.btn-menu:focus{border-color:#FFD700;background:rgba(255,215,0,.25)}
-
-/* LISTA DE CANALES */
-.view-list{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:56px 8px 8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(85px,1fr));grid-auto-rows:90px;gap:6px;background:#000}
-.view-list.bar-hidden{padding-top:8px}
-.card{background:#111;border:2px solid transparent;border-radius:6px;padding:5px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;contain:layout style paint}
-.card:active{background:#222}
-.card:focus{border-color:#FFD700;background:#222}
-.card img{width:100%;height:40px;object-fit:contain;margin-bottom:4px;pointer-events:none}
-.card span{font-size:10px;color:#ccc;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;pointer-events:none;max-width:100%}
-.card.off{display:none}
-.card.caido{opacity:.35;cursor:default}
-.card.caido:focus{border-color:#666;background:#1a1a1a}
-
-/* ESTADO VACÍO */
-.empty{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:50px 20px;color:#FFD700;height:100%}
-.empty .icon{font-size:60px;margin-bottom:20px}
-.empty .title{font-size:20px;font-weight:bold;margin-bottom:12px;letter-spacing:1px}
-.empty .subtitle{font-size:13px;color:#aaa;margin-bottom:30px;line-height:1.5;max-width:320px}
-.empty button{background:#FFD700;color:#000;border:none;padding:14px 32px;border-radius:50px;font-weight:bold;font-size:15px;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.4)}
-.empty button:focus{outline:3px solid #fff;background:#e6c200;transform:scale(1.05)}
-.empty button:active{transform:scale(0.98)}
-.empty small{color:#666;margin-top:20px;font-size:11px}
-
-/* PLAYER */
-.view-play{position:fixed;top:0;left:0;right:0;bottom:0;background:#000;display:none;z-index:1000}
-.view-play.active{display:block}
-.wrapper{position:absolute;top:0;left:0;width:100%;height:100%;background:#000}
-.wrapper.rotated{top:50%;left:50%;width:100vh;height:100vw;-webkit-transform:translate(-50%,-50%) rotate(90deg);transform:translate(-50%,-50%) rotate(90deg)}
-#ifr,#kickIfr,#okIfr,#dailymotionIfr,#tokyvideoIfr{position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#000;display:none}
-.shield{position:absolute;top:0;left:0;right:0;bottom:0;z-index:10}
-.ui{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;pointer-events:none;opacity:0}
-.ui.show{opacity:1;pointer-events:auto}
-.nav-btn{position:absolute;top:50%;margin-top:-40px;width:60px;height:80px;background:rgba(0,0,0,.6);color:#FFD700;border:2px solid #FFD700;border-radius:10px;font-size:34px;cursor:pointer;pointer-events:auto}
-.nav-btn.l{left:10px}.nav-btn.r{right:10px}
-.nav-btn:active,.float-btn:active{background:#FFD700;color:#000}
-.ui.single .nav-btn{display:none}
-.float-btn{position:absolute;right:15px;width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.7);color:#FFD700;border:2px solid #FFD700;font-size:22px;cursor:pointer;pointer-events:auto}
-.btn-back{bottom:15px;background:#a00;border-color:#fff;color:#fff}
-.btn-rot{bottom:70px}
-.modal{position:absolute;top:20px;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);background:rgba(0,0,0,.8);padding:8px 16px;border-radius:30px;border:1px solid #FFD700;display:flex;align-items:center;gap:10px;pointer-events:none;white-space:nowrap;max-width:90%}
-.modal img{height:30px;width:auto;border-radius:5px}
-.modal-name{font-size:13px;font-weight:bold;color:#FFD700;overflow:hidden;text-overflow:ellipsis}
-.modal-count{font-size:10px;color:#ccc}
-.loader{position:absolute;top:50%;left:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);background:rgba(0,0,0,.9);padding:10px 20px;border-radius:30px;border:2px solid #FFD700;color:#FFD700;font-weight:bold;display:none;z-index:30;white-space:nowrap;font-size:14px}
-.loader.active{display:block}
-.sin-senal{position:absolute;top:0;left:0;right:0;bottom:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:35;text-align:center;padding:24px;pointer-events:none}
-.sin-senal.hidden{display:none!important}
-.sin-senal img{max-height:80px;max-width:220px;margin-bottom:22px;object-fit:contain;opacity:.95}
-.sin-senal .ss-nombre{font-size:24px;font-weight:bold;color:#FFD700;margin-bottom:14px;letter-spacing:.5px;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sin-senal .ss-msg{font-size:16px;color:#fff;margin-bottom:8px;line-height:1.5;max-width:80%}
-.sin-senal .ss-hint{font-size:12px;color:#888;margin-top:6px}
-
-/* INFO DIALOG / SETTINGS */
-.info-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.96);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
-.info-container{background:#141414;border:2px solid #FFD700;border-radius:24px;padding:24px;max-width:92%;width:460px;text-align:center;margin:auto;font-size:15px}
-.info-container h2{color:#FFD700;margin-bottom:14px;font-size:22px}
-.info-id{background:#000;color:#FFD700;font-family:monospace;font-size:18px;font-weight:bold;padding:12px;border-radius:16px;letter-spacing:1px;margin:12px 0;border:1px solid #FFD700;word-break:break-all}
-.info-pill{display:inline-block;background:rgba(255,215,0,.12);border:1px solid rgba(255,215,0,.3);border-radius:14px;padding:8px 14px;margin:4px;font-size:13px}
-.info-pill .num{color:#FFD700;font-weight:bold;font-size:16px}
-.info-pill .lbl{color:#ccc;font-size:11px;display:block;margin-top:2px}
-.info-pill.green{background:rgba(46,204,113,.12);border-color:rgba(46,204,113,.4)}.info-pill.green .num{color:#2ecc71}
-.info-pill.orange{background:rgba(230,126,34,.12);border-color:rgba(230,126,34,.4)}.info-pill.orange .num{color:#e67e22}
-.info-tip{font-size:13px;color:#bbb;margin-top:10px;line-height:1.5}.info-tip strong{color:#FFD700}
-.whatsapp-number-tv{background:rgba(37,211,102,.15);border:2px solid #25D366;border-radius:16px;padding:12px;margin:12px 0}
-.whatsapp-number-tv .label{color:#25D366;font-size:11px;font-weight:bold;letter-spacing:1px;margin-bottom:6px}
-.whatsapp-number-tv .number{color:#fff;font-size:22px;font-weight:bold;font-family:monospace;letter-spacing:2px}
-.button-group{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:16px}
-.info-container button,.popup-box button,.toast-blocked button{background:#FFD700;color:#000;border:none;padding:12px 20px;border-radius:40px;font-weight:bold;font-size:14px;cursor:pointer;min-width:100px}
-.info-container button:focus,.popup-box button:focus,.toast-blocked button:focus{outline:3px solid #fff;background:#e6c200}
-.close-info,.close-toast{background:#333!important;color:#fff!important}
-.whatsapp-btn{background:#25D366!important;color:#fff!important}
-.toast-blocked{position:fixed;bottom:90px;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);background:#000;border:2px solid #FFD700;border-radius:30px;padding:12px 20px;z-index:10001;display:flex;gap:12px;align-items:center;font-size:14px;white-space:nowrap}
-.toast-blocked span{color:#FFD700}
-.popup-box{background:#141414;border:3px solid #FFD700;border-radius:24px;padding:26px 30px;max-width:550px;width:90%;max-height:85vh;text-align:center}
-.popup-box .ptitle{font-size:14px;color:#FFD700;font-weight:bold;letter-spacing:2px;margin-bottom:14px}
-.popup-box .ptext{color:#e0e0e0;font-size:16px;line-height:1.7;max-height:55vh;overflow-y:auto}
-.popup-box button{margin-top:18px;padding:12px 40px}
-
-/* MENÚ DE CONFIGURACIÓN (listas) */
-.set-box{text-align:left;max-height:92vh;overflow-y:auto;width:90%;max-width:550px;font-size:15px}
-.set-box h2{text-align:center;margin-bottom:18px}
-.set-sec{font-size:14px;color:#FFD700;font-weight:bold;letter-spacing:1px;margin:18px 0 10px;text-transform:uppercase}
-.set-row{display:flex;gap:10px;align-items:center;margin-bottom:14px}
-.set-input{flex:1;min-width:0;background:#000;color:#fff;border:2px solid #444;border-radius:10px;padding:12px 14px;font-size:15px}
-.set-input:focus{border-color:#FFD700}
-.set-empty{color:#888;font-size:14px;text-align:center;padding:12px 0}
-.s-item{display:flex;align-items:center;gap:10px;background:#1f1f1f;border-radius:12px;padding:10px 12px;margin-bottom:8px}
-.s-info{flex:1;min-width:0}
-.s-info b{display:block;font-size:15px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.s-info small{font-size:12px;color:#aaa}
-.info-container .s-item button{min-width:0;padding:10px 16px;font-size:14px}
-.info-container .s-del{background:#7a1010;color:#fff}
-.info-container .s-del:focus{background:#c0392b}
-
-/* BLOCK SCREEN */
-.block-screen{position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:99999;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;overflow-y:auto}
-.block-screen .box{max-width:320px;width:100%}
-.block-screen button{background:#25D366;color:#fff;border:none;padding:12px 20px;border-radius:50px;font-size:14px;font-weight:bold;cursor:pointer;margin:6px 0;width:100%;max-width:230px}
-.block-screen button:focus{outline:3px solid #fff}
-.block-screen button.alt{background:#FFD700;color:#000}
-
-/* GPLIS CINEMA (PELÍCULAS) */
-#movies{display:none;width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#0a0a0a}
-#movies.active{display:block}
-.peliculas-header{position:sticky;top:0;background:#050505;padding:0 20px;z-index:99;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(229,9,20,.4);height:56px}
-.peliculas-logo{font-size:18px;font-weight:800;color:#fff;cursor:pointer;padding:6px 10px;border-radius:10px;border:2px solid transparent}
-.peliculas-counter{background:linear-gradient(135deg,#f1c40f,#e67e22);padding:5px 14px;border-radius:40px;font-size:13px;font-weight:800;color:#000;cursor:pointer;border:2px solid transparent}
-.peliculas-logo:focus,.peliculas-counter:focus{border-color:#FFD700;background-color:#2a1a1a}
-.peliculas-counter:focus{background:#FFD700}
-.hint{font-size:10px;color:#777;position:absolute;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);pointer-events:none}
-#mcontent{padding:10px 0 30px}
-.msg{text-align:center;padding:60px 20px;color:#FFD700}.msg.err{color:#E50914}
-.peliculas-section{margin:14px 0 8px}
-.section-header{padding:0 20px 8px}
-.section-title{font-size:17px;font-weight:700;position:relative;display:inline-block;padding-bottom:6px}
-.section-title:after{content:'';position:absolute;bottom:0;left:0;width:40px;height:3px;background:#E50914;border-radius:2px}
-.slider-container{overflow-x:auto;padding:6px 20px 14px;scrollbar-width:none}
-.slider-container::-webkit-scrollbar{display:none}
-.cards-slider{display:flex;gap:10px}
-.pelicula-card,.ver-todos-card{width:140px;flex-shrink:0;position:relative;border-radius:10px;overflow:hidden;cursor:pointer;background:#1a1a1a;border:2px solid transparent}
-.pelicula-card:focus,.ver-todos-card:focus{border-color:#FFD700}
-body:not(.lite) .pelicula-card,body:not(.lite) .ver-todos-card{transition:-webkit-transform .15s;transition:transform .15s}
-body:not(.lite) .pelicula-card:focus,body:not(.lite) .ver-todos-card:focus{-webkit-transform:scale(1.05);transform:scale(1.05)}
-.pelicula-card-img{position:relative;height:0;padding-bottom:150%;overflow:hidden;background:#111}
-.pelicula-card-img img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
-.pelicula-card-img:after{content:'';position:absolute;bottom:0;left:0;right:0;height:55%;background:linear-gradient(to top,rgba(0,0,0,.95),transparent);pointer-events:none}
-.pelicula-year-badge{position:absolute;top:8px;right:8px;background:#E50914;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;z-index:3}
-.pelicula-type-badge{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.7);padding:3px 8px;border-radius:20px;font-size:9px;z-index:3}
-.pelicula-new-badge{position:absolute;top:34px;left:8px;background:#2ecc71;color:#000;font-size:8px;font-weight:800;padding:2px 8px;border-radius:20px;z-index:4}
-.pelicula-card-info{position:absolute;bottom:0;left:0;right:0;padding:30px 10px 10px;z-index:3}
-.pelicula-card-title{font-size:12px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.pelicula-fav-btn{position:absolute;bottom:46px;left:8px;background:rgba(0,0,0,.6);color:#f1c40f;width:28px;height:28px;line-height:28px;text-align:center;border-radius:50%;font-size:14px;z-index:5}
-.pelicula-fav-btn.active{background:#e67e22;color:#fff}
-.delete-history-btn{position:absolute;top:32px;right:8px;background:rgba(0,0,0,.7);width:24px;height:24px;line-height:24px;text-align:center;border-radius:50%;font-size:12px;z-index:5}
-.ver-todos-card{background:#101020;border-color:#E50914;display:flex;align-items:center;justify-content:center;flex-direction:column;min-height:210px}
-.ver-todos-card .ico{font-size:32px;margin-bottom:6px}
-.ver-todos-card .txt{font-size:12px;font-weight:700;color:#E50914}
-.ver-todos-card .cnt{font-size:9px;color:#777;margin-top:4px}
-
-/* GRID (ver todos) */
-#grid{position:fixed;top:0;left:0;right:0;bottom:0;background:#0a0a0a;z-index:2000;overflow-y:auto;display:none;padding:70px 15px 30px;-webkit-overflow-scrolling:touch}
-#grid.active{display:block}
-.grid-header{position:fixed;top:0;left:0;right:0;background:#050505;padding:0 20px;height:56px;display:flex;justify-content:space-between;align-items:center;z-index:2001;border-bottom:1px solid rgba(229,9,20,.4)}
-.grid-header h3{font-size:17px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:10px}
-.grid-close{background:#E50914;border:2px solid transparent;color:#fff;width:38px;height:38px;border-radius:50%;font-size:18px;cursor:pointer;flex-shrink:0}
-.grid-close:focus{border-color:#FFD700}
-#gcontent{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;padding:10px 0}
-#gcontent .pelicula-card{width:auto}
-
-/* RESPONSIVE */
-@media (max-width:480px){#gcontent{grid-template-columns:repeat(2,1fr);gap:10px}.pelicula-card,.ver-todos-card{width:110px}.ver-todos-card{min-height:165px}.section-header,.slider-container{padding-left:12px;padding-right:12px}.status-bar{height:40px;font-size:11px}}
-body.tv *{animation:none!important;transition:none!important}
-body.lite .pelicula-card,body.lite .ver-todos-card{transition:none!important}
-</style>
-</head>
-<body>
-
-<!-- STATUS BAR -->
-<div class="status-bar" id="statusBar" tabindex="0">
-  <div class="status-left">
-    <span id="statusIcon">🎬</span>
-    <span class="status-text" id="statusText">GTV Play R</span>
-  </div>
-  <div class="status-right">
-    <span class="status-time" id="statusTime"></span>
-    <button class="btn-menu" id="btnMenu" tabindex="0">⚙️ Menú</button>
-  </div>
-</div>
-
-<!-- LISTA DE CANALES -->
-<div id="list" class="view-list"></div>
-
-<!-- PLAYER -->
-<div id="player" class="view-play">
-  <div class="wrapper" id="wrap">
-    <iframe id="ifr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
-    <iframe id="kickIfr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
-    <iframe id="okIfr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
-    <iframe id="dailymotionIfr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
-    <iframe id="tokyvideoIfr" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
-    <div class="shield" id="shield"></div>
-    <div class="ui" id="ui">
-      <div class="loader" id="ld">Sintonizando...</div>
-      <div id="sinSenal" class="sin-senal hidden">
-        <img id="ssLogo" src="" alt="">
-        <div class="ss-nombre" id="ssNombre"></div>
-        <div class="ss-msg">📡 En este momento no está transmitiendo en vivo</div>
-        <div class="ss-hint">Probá de nuevo más tarde</div>
-      </div>
-      <button class="nav-btn l" id="goPrev" tabindex="-1">❮</button>
-      <button class="nav-btn r" id="goNext" tabindex="-1">❯</button>
-      <button class="float-btn btn-back" id="goBack" tabindex="-1">✕</button>
-      <button class="float-btn btn-rot" id="goRot" tabindex="-1">⟳</button>
-      <div class="modal">
-        <img id="mImg" src="" alt="">
-        <span class="modal-name" id="mName"></span>
-        <span class="modal-count" id="mCount"></span>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- GPLIS CINEMA -->
-<div id="movies">
-  <div class="peliculas-header">
-    <div class="peliculas-logo" id="mback" tabindex="0">◀ 🎬 GPLIS CINEMA</div>
-    <span class="hint" id="mhint">Mantené OK = ⭐ favorito</span>
-    <div class="peliculas-counter" id="mcount" tabindex="0">0 TÍTULOS</div>
-  </div>
-  <div id="mcontent"></div>
-</div>
-
-<!-- GRID -->
-<div id="grid">
-  <div class="grid-header">
-    <h3 id="gtitle"></h3>
-    <button class="grid-close" id="gclose" tabindex="0">✕</button>
-  </div>
-  <div id="gcontent"></div>
-</div>
-<script>
-(function(){
-'use strict';
-
-/* ===== CONSTANTES ===== */
-var WORKER = 'https://gtv-portero.abrel03.workers.dev/api/';
-var CONFIG_URL = WORKER + 'config';
-var ESTADO_URL = WORKER + 'estado-canales';
-var BAN_URL = 'https://gtv-portero.abrel03.workers.dev';
-var SELLO = 'gtv_app_2026_secreto_xyz789';
-var BLOQUEO_MS = 250;
-var NUEVO_DIAS = 7;
-
-/* Embeds de terceros: se reproducen en iframe dentro del WebView */
-var EMBED_RE = /kick\.com|twitch\.tv|ok\.ru|odnoklassniki\.ru|dailymotion\.com|tokyvideo\.com/i;
-
-/* ===== HELPERS ===== */
-var ESC_MAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
-function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ESC_MAP[c]})}
-function $(id){return document.getElementById(id)}
-function noop(){}
-function hnum(s){var h=0;for(var i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h=h&h}return h}
-function hashUrl(u){return Math.abs(hnum(u)).toString(16).slice(0,8)}
-function shuffle(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
-var ls = {
-  get: function(k,d){try{var v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},
-  set: function(k,v){try{localStorage.setItem(k,v)}catch(e){}},
-  getJ: function(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v||d}catch(e){return d}},
-  setJ: function(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
-};
-function svgUri(w,h,txt,bg,fg){return 'data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'"><rect width="'+w+'" height="'+h+'" fill="'+bg+'"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="'+fg+'" font-family="Arial" font-size="'+Math.round(w/4)+'">'+txt+'</text></svg>')}
-var FB_LOGO = svgUri(40,40,'TV','#333','#fff');
-var FB_POSTER = svgUri(300,450,'GPLIS','#1a1a1a','#E50914');
-function hoyStr(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
-function fetchW(url,ms,opts){
-  opts=opts||{};
-  opts.headers=Object.assign({'X-GTV-Origin':SELLO},opts.headers||{});
-  var tid=null;
-  if(ms&&window.AbortController){
-    var c=new AbortController();
-    opts.signal=c.signal;
-    tid=setTimeout(function(){c.abort()},ms);
-  }
-  return fetch(url,opts).then(function(r){clearTimeout(tid);return r},function(e){clearTimeout(tid);throw e});
+function cfg(env){ return { user: env.ADMIN_USER || DEF.user, pass: env.ADMIN_PASS || DEF.pass, passStats: env.PASS_STATS || DEF.passStats, sello: env.SELLO || DEF.sello }; }
+function json(obj, status, extra){ return new Response(JSON.stringify(obj), { status: status || 200, headers: Object.assign({ "Content-Type": "application/json; charset=utf-8" }, CORS, extra || {}) }); }
+function safeEq(a, b){ a=String(a); b=String(b); let r=a.length^b.length; const n=Math.max(a.length,b.length); for(let i=0;i<n;i++) r|=(a.charCodeAt(i)||0)^(b.charCodeAt(i)||0); return r===0; }
+function adminAuth(request, c){
+  const h=request.headers.get("Authorization")||"";
+  if(h.slice(0,6)!=="Basic ") return false;
+  let dec=""; try{ dec=decodeURIComponent(escape(atob(h.slice(6)))); }catch(e){ return false; }
+  const i=dec.indexOf(":"); if(i<0) return false;
+  return safeEq(dec.slice(0,i),c.user) & safeEq(dec.slice(i+1),c.pass) ? true : false;
 }
+function jparse(raw, def){ try{ const v=JSON.parse(raw); return v && typeof v==="object" ? v : def; }catch(e){ return def; } }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* ===== DETECCIÓN DE DISPOSITIVO ===== */
-var UA = navigator.userAgent;
-var IS_ANDROID = /Android/i.test(UA);
-var IS_TV = (IS_ANDROID && (!/Mobile/i.test(UA)||/TV|BOX|PROJECT|AFT/i.test(UA)) && !(navigator.maxTouchPoints>0)) || /SMART-TV|SmartTV|Tizen|Web0S|webOS/i.test(UA);
-var lm = location.search.match(/[?&]lite=(\d)/);
-var LITE = lm ? lm[1]==='1' : (IS_TV || (navigator.hardwareConcurrency||8)<=4 || (navigator.deviceMemory||4)<=2);
-document.body.classList.toggle('tv', IS_TV);
-document.body.classList.toggle('lite', LITE);
-$('mhint').style.display = IS_TV ? '' : 'none';
-
-/* ===== BRIDGE NATIVO ===== */
-function ap(){return window.AndroidPlayer||null}
-function hasNat(n){var a=ap();return !!(a&&a[n])}
-function nat(n){var a=ap();if(!a||!a[n])return undefined;try{return a[n].apply(a,Array.prototype.slice.call(arguments,1))}catch(e){return undefined}}
-
-/* ===== DEVICE ID ===== */
-var deviceId = '';
-if(hasNat('getDeviceId')){try{deviceId=nat('getDeviceId')||''}catch(e){}}
-if(!deviceId){
-  deviceId = ls.get('gtv_device_id','');
-  if(!deviceId){
-    var chars='123456789ABCDEFGHIJKLMNPQRSTUVWXYZ', r='';
-    for(var i=0;i<6;i++) r+=chars.charAt(Math.floor(Math.random()*chars.length));
-    deviceId='GTV-R-'+r;
-    ls.set('gtv_device_id',deviceId);
+function hoyISO(){ return new Date().toISOString().slice(0,10); }
+function bumpConsumoLocal(env, tipo, n){
+  const c = (env.__consumoLocal = env.__consumoLocal || { fecha: hoyISO(), esc:0, lec:0, req:0, sub:0, dirty:false });
+  if(c.fecha !== hoyISO()){ c.fecha = hoyISO(); c.esc=0; c.lec=0; c.req=0; c.sub=0; c.dirty=false; }
+  c[tipo] = (c[tipo]||0) + (n||1);
+  c.dirty = true;
+  c._ops = (c._ops||0) + 1;
+  if(c._ops >= 10 && !c._flushScheduled){
+    c._flushScheduled = true;
+    queueMicrotask(() => {
+      c._flushScheduled = false;
+      c._ops = 0;
+      if(!c.dirty) return;
+      const payload = JSON.stringify({ fecha:c.fecha, esc:c.esc, lec:c.lec, req:c.req, sub:c.sub });
+      c.dirty = false;
+      env.GTV_ARCHIVOS.put("consumo_diario.json", payload).catch(()=>{});
+    });
   }
 }
+async function leerConsumo(env){
+  const raw = await env.GTV_ARCHIVOS.get("consumo_diario.json");
+  const c = jparse(raw, { fecha: hoyISO(), esc:0, lec:0, req:0, sub:0 });
+  if(c.fecha !== hoyISO()) return { fecha: hoyISO(), esc:0, lec:0, req:0, sub:0 };
+  return c;
+}
 
-/* ===== ESTADO GLOBAL ===== */
-var S = {
-  list: [], index: 0, raw: '', view: 'list',
-  fromMovies: false, native: false, nativeAt: 0, exitAt: 0,
-  lastI: -1, lastU: '', lastAt: 0, backAt: 0,
-  rotated: ls.get('gtv_rot','false')==='true',
-  uiTimer: null, dlg: null, grid: false, gridOpener: null,
-  locked: false,
-  okDown: null, okFired: false, okTimer: null, suppressClick: 0,
-  pelisDirty: false, lastMovieUrl: '',
-  caidos: {}, ocultos: {}, hideCargado: false, byUrl: {},
-  cols: 0, focoIdx: 0
-};
+function parseM3U(text){
+  const lines = text.split(/\r?\n/), out=[];
+  for(let i=0;i<lines.length;i++){
+    const l=lines[i];
+    if(l.indexOf("#EXTINF")!==0) continue;
+    let url="", j=i+1;
+    for(; j<lines.length && j<i+6; j++){
+      const l2=lines[j].trim();
+      if(l2.indexOf("#EXTINF")===0) break;
+      if(l2.indexOf("http://")===0 || l2.indexOf("https://")===0){ url=l2; break; }
+    }
+    if(!url) continue;
+    let q=false, ci=-1;
+    for(let k=0;k<l.length;k++){ const ch=l.charCodeAt(k); if(ch===34) q=!q; else if(ch===44 && !q){ ci=k; break; } }
+    const name = ci>=0 ? l.slice(ci+1).trim().replace(/^["']|["']$/g,"") : "";
+    out.push({ name, logo:attr(l,"tvg-logo"), tipo:attr(l,"tvg-tipo").toLowerCase(), group:attr(l,"group-title"), url, start:i, end:j });
+    i=j;
+  }
+  return out;
+}
+function attr(line, a){ const k=line.indexOf(a+'="'); if(k<0) return ""; const s=k+a.length+2, e=line.indexOf('"',s); return e<0?"":line.slice(s,e); }
+function esChequeable(c){
+  const u=c.url;
+  if(!/^https?:\/\//i.test(u)) return false;
+  if(SKIP_RE.test(u)) return false;
+  if(c.tipo==="yt-dinamico") return false;
+  return true;
+}
+function claveIPTV(c){ return "iptv:" + c.url; }
 
-/* ===== REFERENCIAS DOM ===== */
-var D = {
-  bar: $('statusBar'), btnMenu: $('btnMenu'), list: $('list'), player: $('player'), wrap: $('wrap'),
-  ifr: $('ifr'), kickIfr: $('kickIfr'), okIfr: $('okIfr'),
-  dailymotionIfr: $('dailymotionIfr'), tokyvideoIfr: $('tokyvideoIfr'),
-  ui: $('ui'), ld: $('ld'), movies: $('movies'), mc: $('mcontent'),
-  grid: $('grid'), gc: $('gcontent'), gt: $('gtitle')
-};
+async function leerGlobal(env){
+  const [m3uRaw, caidosRaw, ocultosRaw, falsosRaw] = await Promise.all([
+    env.GTV_ARCHIVOS.get("canales.m3u"),
+    env.GTV_ARCHIVOS.get("caidos.json"),
+    env.GTV_ARCHIVOS.get("ocultos_app.json"),
+    env.GTV_ARCHIVOS.get("falsos_positivos.json")
+  ]);
+  const iptv = parseM3U(m3uRaw||"");
+  const caidos  = jparse(caidosRaw, {});
+  const ocultos = jparse(ocultosRaw, {});
+  const falsos  = jparse(falsosRaw, {});
 
-/* ===== LICENCIAS ===== */
-var lic = {hasLicense:false, expirationDate:null, demoStart:null, miCuenta:null};
-var remote = {horasDemo:24, canalesDemo:[], licencias:{}, cuentas:[], maxGlobal:5, whatsapp:'5491133550182', mensaje:'', duracion:5, demoSrv:false};
+  const estaOculto = (url) => {
+    if(falsos[url]) return !!ocultos[url];
+    return !!(caidos[url] || ocultos[url]);
+  };
 
-var _licSrc = '';
-function guardarLic(){var c=Object.assign({},lic);if(remote.demoSrv)delete c.demoStart;var t=JSON.stringify(c);if(t===_licSrc)return;_licSrc=t;ls.set('gtv_license',t)}
-function cargarLicLocal(){var s=ls.getJ('gtv_license',null);if(s)Object.assign(lic,s);if(!remote.demoSrv&&!lic.demoStart){lic.demoStart=Date.now();guardarLic()}}
-function tieneLicencia(){
-  var hoy=hoyStr();
-  var cargado=(remote.cuentas&&remote.cuentas.length)||Object.keys(remote.licencias).length;
-  if(cargado){
-    for(var i=0;i<remote.cuentas.length;i++){
-      var c=remote.cuentas[i];
-      if(Array.isArray(c.dispositivos)&&c.dispositivos.map(function(d){return String(d).trim()}).indexOf(deviceId)>=0&&c.vence&&c.vence>=hoy){
-        lic.hasLicense=true;lic.expirationDate=c.vence;lic.miCuenta=c;guardarLic();return true;
+  const items = [];
+  for(const c of iptv){
+    items.push({
+      clave: claveIPTV(c), origen: "iptv", url: c.url,
+      nombre: c.name || "", logo: c.logo || "",
+      grupo: c.group || "General", tipo: c.tipo || "",
+      oculto: estaOculto(c.url)
+    });
+  }
+  return items;
+}
+
+async function probar(url){
+  const t0=Date.now(), ms=()=>Date.now()-t0;
+  let res;
+  try { res = await fetch(url, { headers:{ "User-Agent": UA, "Accept":"*/*" }, redirect:"follow", signal: AbortSignal.timeout(TIMEOUT_MS) }); }
+  catch(e){ return { ok:false, motivo: e && e.name==="TimeoutError" ? "timeout" : "sin_conexion", ms: ms() }; }
+  const code=res.status;
+  const cancelar=()=>{ try{ if(res.body) res.body.cancel(); }catch(e){} };
+  if(code===401||code===403||code===429||code===451){ cancelar(); return { ok:true, motivo:"restringido_"+code, code, ms:ms() }; }
+  if(code>=400){ cancelar(); return { ok:false, motivo:"http_"+code, code, ms:ms() }; }
+  const ct=(res.headers.get("content-type")||"").toLowerCase();
+  let head="";
+  try {
+    if(res.body){
+      const reader=res.body.getReader();
+      const r=await reader.read();
+      try{ await reader.cancel(); }catch(e){}
+      if(!r.value || !r.value.length) return { ok:false, motivo:"vacio", code, ms:ms() };
+      head = new TextDecoder().decode(r.value.subarray(0,2048));
+    }
+  } catch(e){ return { ok:false, motivo:"sin_datos", code, ms:ms() }; }
+  if(ct.indexOf("text/html")>=0) return { ok:false, motivo:"html", code, ms:ms() };
+  const esHls = /\.m3u8(\?|$)/i.test(url) || ct.indexOf("mpegurl")>=0;
+  if(esHls && head.indexOf("#EXTM3U")<0) return { ok:false, motivo:"m3u8_invalido", code, ms:ms() };
+  return { ok:true, motivo:"ok", code, ms:ms() };
+}
+async function pool(items, n, fn){
+  const out=new Array(items.length); let i=0;
+  const w = async () => { for(;;){ const k=i++; if(k>=items.length) return; try{ out[k]=await fn(items[k]); }catch(e){ out[k]={ok:false,motivo:"error",ms:0}; } } };
+  await Promise.all(Array.from({length: Math.min(n, items.length)}, w));
+  return out;
+}
+async function chequearLote(env, opts){
+  opts = opts || {};
+  const kv = env.GTV_ARCHIVOS;
+  const [pausa, m3u, caidosRaw, ocultosRaw, falsosRaw, estRaw, metaRaw] = await Promise.all([
+    kv.get("chequeo_pausa"), kv.get("canales.m3u"), kv.get("caidos.json"),
+    kv.get("ocultos_app.json"), kv.get("falsos_positivos.json"),
+    kv.get("chequeo_estado.json"), kv.get("chequeo_meta.json")
+  ]);
+  if(pausa==="1" && !opts.forzar) return { ok:true, pausado:true };
+  if(!m3u) return { ok:false, error:"sin_m3u" };
+  const now = Date.now(), canales = parseM3U(m3u);
+  const caidos = jparse(caidosRaw, {}), ocultos = jparse(ocultosRaw, {}), falsos = jparse(falsosRaw, {});
+  const est = jparse(estRaw, {}), meta = jparse(metaRaw, {});
+  const f = est.f || {}, ok = est.ok || {};
+  const urls = new Set(canales.map((c) => c.url));
+  let cambCaidos = false, cambEst = false;
+  for(const u of Object.keys(caidos)) if(!urls.has(u)){ delete caidos[u]; cambCaidos=true; }
+  for(const u of Object.keys(f)) if(!urls.has(u)){ delete f[u]; cambEst=true; }
+  for(const u of Object.keys(ok)) if(!urls.has(u)){ delete ok[u]; cambEst=true; }
+
+  let chequeables = canales.filter(esChequeable).filter((c) => {
+    const u=c.url;
+    if(ocultos[u] || falsos[u]) return false;
+    const estaCaido = !!caidos[u];
+    if(estaCaido){ const ultimaVez=caidos[u].ultima_vez||0; return (now-ultimaVez) >= CAIDO_INTERVALO; }
+    const ultimoOk = ok[u] || 0;
+    return (now - ultimoOk) >= OK_INTERVALO;
+  });
+  if(opts.forzar && opts.full) chequeables = canales.filter(esChequeable).filter(c=>!ocultos[c.url] && !falsos[c.url]);
+  if(!chequeables.length){
+    await kv.put("chequeo_meta.json", JSON.stringify({ ultimo_ciclo: now, chequeables: 0, lote_tam: LOTE, caidos: Object.keys(caidos).length, nada_que_chequear: true }));
+    return { ok:true, nada:true, chequeados:0, fallos:0, lote:0, lotes:1 };
+  }
+  chequeables.sort((a,b) => {
+    const ca=caidos[a.url], cb=caidos[b.url];
+    if(ca && !cb) return -1;
+    if(!ca && cb) return 1;
+    if(ca && cb) return (ca.ultima_vez||0)-(cb.ultima_vez||0);
+    return (ok[a.url]||0)-(ok[b.url]||0);
+  });
+  const lotes = Math.max(1, Math.ceil(chequeables.length / LOTE));
+  const lote = (opts.lote != null ? opts.lote : Math.floor(now/60000)) % lotes;
+  let slice;
+  if(opts.forzar && opts.full) slice = chequeables;
+  else slice = chequeables.slice(lote*LOTE, (lote+1)*LOTE);
+  if(!slice.length){
+    await kv.put("chequeo_meta.json", JSON.stringify({ ultimo_ciclo: now, chequeables: chequeables.length, lote_tam: LOTE, caidos: Object.keys(caidos).length }));
+    return { ok:true, chequeados:0, fallos:0, lote:0, lotes: lotes };
+  }
+  const res = await pool(slice, CONCURRENCIA, (c) => probar(c.url));
+  const fall = [];
+  for(let i=0;i<slice.length;i++) if(!res[i].ok && fall.length<REINTENTOS_MAX) fall.push(i);
+  if(fall.length){ await sleep(1200); const r2 = await pool(fall, CONCURRENCIA, (i) => probar(slice[i].url)); fall.forEach((i,k)=>{ res[i]=r2[k]; }); }
+  const nFallos = res.filter((r) => !r.ok).length;
+  const anomalo = slice.length>=8 && nFallos/slice.length > 0.6;
+  if(!anomalo){
+    for(let i=0;i<slice.length;i++){
+      const c=slice[i], r=res[i], u=c.url;
+      if(r.ok){ ok[u]=now; cambEst=true; if(f[u]){ delete f[u]; cambEst=true; } if(caidos[u]){ delete caidos[u]; cambCaidos=true; } }
+      else {
+        const n=(f[u]||0)+1; f[u]=n; cambEst=true;
+        if(n>=FALLOS_PARA_CAIDO){
+          if(!caidos[u]) caidos[u]={ nombre:c.name, logo:c.logo, veces:1, primera_vez:now, ultima_vez:now, motivo:r.motivo };
+          else { caidos[u].veces=(caidos[u].veces||0)+1; caidos[u].ultima_vez=now; caidos[u].motivo=r.motivo; }
+          cambCaidos=true;
+        }
       }
     }
-    var re=remote.licencias[deviceId];
-    if(re&&re>=hoy){lic.hasLicense=true;lic.expirationDate=re;lic.miCuenta=null;guardarLic();return true}
-    lic.hasLicense=false;lic.expirationDate=null;lic.miCuenta=null;guardarLic();return false;
   }
-  return !!(lic.hasLicense&&lic.expirationDate&&lic.expirationDate>=hoy);
-}
-function demoActiva(){if(tieneLicencia())return false;return (Date.now()-(lic.demoStart||0))<(remote.horasDemo*3600000)}
-
-/* ===== BARRA DE ESTADO ===== */
-function setTxt(el,t){if(el.textContent!==t)el.textContent=t}
-function actualizarBarra(){
-  var st=$('statusText'),tm=$('statusTime'),ic=$('statusIcon');
-  if(tieneLicencia()){
-    var p=lic.expirationDate.split('-');
-    setTxt(ic,'✅');setTxt(st,'FULL | Licencia activa');
-    st.className='status-text status-full';
-    setTxt(tm,'EXPIRA: '+p[2]+'/'+p[1]+'/'+p[0]);
-  } else if(demoActiva()){
-    var rest=(remote.horasDemo*3600000)-(Date.now()-lic.demoStart);
-    var h=Math.floor(rest/3600000),m=Math.floor((rest%3600000)/60000);
-    setTxt(ic,'🎁');setTxt(st,'MODO DEMO');
-    st.className='status-text status-demo';
-    setTxt(tm,'FINALIZA: '+h+'h '+m+'m');
-  } else {
-    setTxt(ic,'⚠️');setTxt(st,'DEMO EXPIRADA');
-    st.className='status-text status-expiring';
-    setTxt(tm,(remote.canalesDemo.length||0)+' canales');
-  }
+  const writes = [];
+  if(cambCaidos) writes.push(kv.put("caidos.json", JSON.stringify(caidos)));
+  if(cambEst) writes.push(kv.put("chequeo_estado.json", JSON.stringify({ f, ok })));
+  writes.push(kv.put("chequeo_meta.json", JSON.stringify({
+    ultimo_ciclo: now, chequeables: chequeables.length, lote_tam: LOTE,
+    anomalo: !!anomalo, caidos: Object.keys(caidos).length,
+    chequeados_vuelta: (meta.chequeados_vuelta||0)+slice.length,
+    vuelta: meta.vuelta||0, lotes
+  })));
+  await Promise.all(writes);
+  return { ok:true, lote, lotes, chequeados: slice.length, fallos: nFallos, anomalo, caidos: Object.keys(caidos).length };
 }
 
-/* ===== DIÁLOGOS ===== */
-function abrirDialogo(html,cls,onClose){
-  if(S.dlg)cerrarDialogo();
-  var el=document.createElement('div');
-  el.className=cls;el.innerHTML=html;
-  document.body.appendChild(el);
-  S.dlg={el:el,onClose:onClose||null,tid:null,toast:false};
-  return S.dlg;
+const PALABRAS_IGNORADAS = ["TEST","DEBUG","DEMO","PRUEBA","SAMPLE"];
+function esDispositivoReal(d){ if(!d) return false; const up=String(d).toUpperCase(); for(const p of PALABRAS_IGNORADAS) if(up.indexOf(p)>=0) return false; return true; }
+function putDisp(env, id, data){ return env.GTV_DISPOSITIVOS.put(id, JSON.stringify(data), { metadata: { estado: data.estado || "activo", fecha_registro: data.fecha_registro || null, fecha_ban: data.fecha_ban || null } }); }
+async function nombresDeCuentas(env){
+  try {
+    let raw = await env.GTV_ARCHIVOS.get("gtv_config.json");
+    if(!raw){ return {}; }
+    const data = JSON.parse(raw), mapa = {};
+    for(const c of data.cuentas||[]){ const nombre=(c.nombre||"").trim(); if(!nombre) continue; for(const d of c.dispositivos||[]) if(d) mapa[d]=nombre; }
+    return mapa;
+  } catch(e){ return {}; }
 }
-function cerrarDialogo(){
-  var d=S.dlg;if(!d)return;
-  S.dlg=null;clearTimeout(d.tid);
-  if(d.el.parentNode)d.el.parentNode.removeChild(d.el);
-  if(d.onClose)d.onClose();
+async function estadosDeDispositivos(env){
+  const mapa={}; let cursor;
+  try {
+    for(let pag=0;pag<5;pag++){
+      const l = await env.GTV_DISPOSITIVOS.list({ limit:1000, cursor });
+      for(const k of l.keys){ const m=k.metadata; if(m && m.estado) mapa[k.name]={ estado:m.estado, fecha_registro:m.fecha_registro||null, fecha_ban:m.fecha_ban||null }; else { mapa[k.name]={ estado:"activo", fecha_registro:null, fecha_ban:null }; } }
+      if(l.list_complete) break; cursor=l.cursor;
+    }
+  } catch(e){}
+  return mapa;
 }
-function dlgBtns(){return Array.prototype.slice.call(S.dlg.el.querySelectorAll('button,input'))}
-function copiar(t){
-  try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t);return}}catch(e){}
-  try{var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)}catch(e){}
-}
-function abrirWhatsApp(){window.open('https://wa.me/'+remote.whatsapp+'?text='+encodeURIComponent('Hola, necesito activar mi licencia GTV Play R. Mi ID es: '+deviceId),'_blank')}
-
-/* ===== DIÁLOGO INFO (licencia) ===== */
-function infoDialog(){
-  var total=canalesVisibles().length,perm=(remote.canalesDemo||[]).length,msg,col='#FFD700',pills='',tip='';
-  if(tieneLicencia()){
-    var p=lic.expirationDate.split('-');
-    msg='✅ Licencia FULL activa<br><span style="font-size:12px;color:#aaa">Vence: '+p[2]+'/'+p[1]+'/'+p[0]+'</span>';
-    col='#2ecc71';
-    var c=lic.miCuenta;
-    if(c){
-      var cant=(c.dispositivos||[]).length,max=c.maxDispositivos||1;
-      pills='<div class="info-pill green"><span class="num">'+total+'</span><span class="lbl">canales disponibles</span></div><div class="info-pill green"><span class="num">'+cant+' de '+max+'</span><span class="lbl">dispositivo'+(max>1?'s':'')+' habilitado'+(max>1?'s':'')+'</span></div>';
-      if(cant<max)tip='<div class="info-tip">💡 Podés sumar <strong>'+(max-cant)+'</strong> dispositivo'+((max-cant)>1?'s':'')+' más. <strong>Contactanos</strong> por WhatsApp.</div>';
-    } else pills='<div class="info-pill green"><span class="num">'+total+'</span><span class="lbl">canales disponibles</span></div>';
-  } else if(demoActiva()){
-    var rest=(remote.horasDemo*3600000)-(Date.now()-lic.demoStart);
-    var h=Math.floor(rest/3600000),m=Math.floor((rest%3600000)/60000);
-    msg='🎁 MODO DEMO<br><span style="font-size:12px;color:#aaa">Finaliza en: '+h+'h '+m+'m</span>';
-    pills='<div class="info-pill"><span class="num">'+total+'</span><span class="lbl">canales · acceso completo</span></div>';
-    tip='<div class="info-tip">⏳ Aprovechá <strong>todos los canales</strong>.<br>🔓 Activá tu licencia FULL para no perderlos.</div>';
-  } else {
-    msg='⏰ DEMO FINALIZADA';col='#e67e22';
-    pills='<div class="info-pill orange"><span class="num">'+perm+' de '+total+'</span><span class="lbl">canales disponibles</span></div>';
-    tip='<div class="info-tip">🔓 Activá tu licencia FULL para ver <strong>los '+total+' canales</strong>.</div>';
-  }
-  var wa=IS_TV?'<div class="whatsapp-number-tv"><div class="label">WHATSAPP PARA ACTIVAR</div><div class="number">+'+esc(remote.whatsapp)+'</div><div style="color:#aaa;font-size:10px;margin-top:6px">Anotá este número y mandanos tu ID</div></div>':'<button id="dWa" class="whatsapp-btn">💬 WhatsApp</button>';
-  var d=abrirDialogo('<div class="info-container"><h2>📱 GTV Play R</h2><div class="info-id">'+esc(deviceId)+'</div><div style="color:'+col+';font-size:15px;line-height:1.6">'+msg+'</div><div style="margin-top:12px">'+pills+'</div>'+tip+wa+'<div class="button-group"><button id="dCopy">📋 Copiar ID</button><button id="dClose" class="close-info">✕ Cerrar</button></div><hr style="margin:18px 0 12px;border-color:#333"><p style="color:#ccc;font-size:10px;line-height:1.6">© 2026 GTV Play R - Todos los derechos reservados.<br>Idea y desarrollo: Gabriel.</p></div>','info-overlay',function(){if(S.view==='list')D.bar.focus()});
-  var el=d.el,cp=el.querySelector('#dCopy'),wb=el.querySelector('#dWa');
-  cp.onclick=function(){copiar(deviceId);cp.textContent='✅ ¡Copiado!';setTimeout(function(){cp.textContent='📋 Copiar ID'},2000)};
-  if(wb)wb.onclick=abrirWhatsApp;
-  el.querySelector('#dClose').onclick=cerrarDialogo;
-  setTimeout(function(){cp.focus()},40);
-}
-
-/* ===== MENÚ DE CONFIGURACIÓN: cargar / usar / borrar listas ===== */
-function abrirSettings(){
-  if(S.view!=='list')return;
-  var d=abrirDialogo(
-    '<div class="info-container set-box">'
-    +'<h2>⚙️ Configuración</h2>'
-    +'<div class="set-sec">Agregar lista</div>'
-    +'<div class="set-row"><input id="sInput" class="set-input" type="text" placeholder="URL de la lista" autocomplete="off" spellcheck="false" autocapitalize="off"><button id="sCargar">Cargar</button></div>'
-    +'<div class="set-sec">Listas guardadas</div>'
-    +'<div id="sListas"></div>'
-    +'<div class="button-group"><button id="sLic">🎫 Mi licencia</button><button id="sClose" class="close-info">✕ Cerrar</button></div>'
-    +'</div>','info-overlay',function(){if(S.view==='list')D.btnMenu.focus()});
-  var el=d.el,inp=el.querySelector('#sInput');
-  el.querySelector('#sCargar').onclick=function(){
-    var t=inp.value.trim();
-    if(!t){inp.focus();return}
-    if(hasNat('cargarListaDesdeHtml')){cerrarDialogo();nat('cargarListaDesdeHtml',t)}
-    else if(hasNat('abrirDialogo')){cerrarDialogo();nat('abrirDialogo')}
+async function statsJSON(env){
+  if(!env.CF_ANALYTICS_TOKEN) throw new Error("Falta CF_ANALYTICS_TOKEN");
+  const filtro = " AND blob1 NOT LIKE '%TEST%' AND blob1 NOT LIKE '%DEBUG%' AND blob1 NOT LIKE '%DEMO%' AND blob1 NOT LIKE '%PRUEBA%' AND blob1 NOT LIKE '%SAMPLE%'";
+  const q = {
+    totales: "SELECT blob1 AS device, blob2 AS tipo, count() AS total, max(timestamp) AS ultima_vez FROM gtv_analytics GROUP BY device, tipo ORDER BY total DESC LIMIT 500",
+    hoy: "SELECT count(DISTINCT blob1) AS n FROM gtv_analytics WHERE timestamp > NOW() - INTERVAL '1' DAY" + filtro,
+    a7: "SELECT count(DISTINCT blob1) AS n FROM gtv_analytics WHERE timestamp > NOW() - INTERVAL '7' DAY" + filtro,
+    mes: "SELECT blob1, toDate(timestamp + INTERVAL '3' HOUR) AS dia FROM gtv_analytics WHERE timestamp > NOW() - INTERVAL '30' DAY" + filtro + " GROUP BY blob1, dia LIMIT 5000",
+    meses: "SELECT toStartOfMonth(timestamp + INTERVAL '3' HOUR) AS mes, count(DISTINCT blob1) AS dispositivos FROM gtv_analytics WHERE timestamp > NOW() - INTERVAL '6' MONTH" + filtro + " GROUP BY mes ORDER BY mes DESC",
+    dia: "SELECT toDate(timestamp + INTERVAL '3' HOUR) AS dia, count(DISTINCT blob1) AS dispositivos FROM gtv_analytics WHERE timestamp > NOW() - INTERVAL '31' DAY" + filtro + " GROUP BY dia ORDER BY dia ASC LIMIT 62"
   };
-  inp.addEventListener('keydown',function(e){if(e.keyCode===13||e.key==='Enter'){e.preventDefault();el.querySelector('#sCargar').click()}});
-  el.querySelector('#sLic').onclick=function(){cerrarDialogo();infoDialog()};
-  el.querySelector('#sClose').onclick=cerrarDialogo;
-  renderListasGuardadas(d);
-  setTimeout(function(){inp.focus()},40);
-}
-function renderListasGuardadas(d){
-  var el=d.el,box=el.querySelector('#sListas'),arr=[];
-  if(!box)return;
-  if(hasNat('listarListas')){try{arr=JSON.parse(nat('listarListas')||'[]')}catch(e){arr=[]}}
-  if(!arr.length){box.innerHTML='<div class="set-empty">No hay listas guardadas todavía.</div>';return}
-  box.innerHTML=arr.map(function(l){
-    return '<div class="s-item"><div class="s-info"><b>'+esc(l.nombre)+'</b><small>'+(parseInt(l.canales,10)||0)+' canales</small></div>'
-      +'<button class="s-use" data-n="'+esc(l.nombre)+'">Usar</button>'
-      +'<button class="s-del" data-n="'+esc(l.nombre)+'">🗑</button></div>';
-  }).join('');
-  Array.prototype.forEach.call(box.querySelectorAll('.s-use'),function(b){
-    b.onclick=function(){var n=b.dataset.n;cerrarDialogo();nat('usarLista',n)};
-  });
-  Array.prototype.forEach.call(box.querySelectorAll('.s-del'),function(b){
-    b.onclick=function(){
-      if(!b.dataset.arm){b.dataset.arm='1';b.textContent='¿Seguro?';return}
-      nat('eliminarLista',b.dataset.n);
-      setTimeout(function(){if(S.dlg===d)renderListasGuardadas(d)},250);
-    };
-  });
-}
-
-function toastBloqueo(){
-  if(S.dlg&&S.dlg.toast)return;
-  var d=abrirDialogo('<span>🔒 Canal bloqueado - Demo expirada</span><button id="tInfo">📋 Ver mi ID</button><button id="tClose" class="close-toast">✕</button>','toast-blocked');
-  d.toast=true;
-  d.el.querySelector('#tInfo').onclick=function(){cerrarDialogo();infoDialog()};
-  d.el.querySelector('#tClose').onclick=cerrarDialogo;
-  d.el.querySelector('#tClose').focus();
-  d.tid=setTimeout(function(){if(S.dlg===d)cerrarDialogo()},8000);
+  const apiUrl = "https://api.cloudflare.com/client/v4/accounts/" + CF_ACCOUNT + "/analytics_engine/sql";
+  const hd = { "Authorization": "Bearer "+env.CF_ANALYTICS_TOKEN, "Content-Type":"text/plain" };
+  const ask = (s) => fetch(apiUrl, { method:"POST", headers: hd, body: s });
+  const [rT,rH,rA,rM,rMs,rD,nombres,estados] = await Promise.all([ ask(q.totales), ask(q.hoy), ask(q.a7), ask(q.mes), ask(q.meses), ask(q.dia), nombresDeCuentas(env), estadosDeDispositivos(env) ]);
+  if(!rT.ok) throw new Error("CF API "+rT.status);
+  const rows = async (r) => { try { return r.ok ? ((await r.json()).data||[]) : []; } catch(e){ return []; } };
+  const filas = (await rT.json()).data || [];
+  const disp = {};
+  for(const fila of filas){
+    const d = fila.device; if(!esDispositivoReal(d)) continue;
+    const t = parseInt(fila.total,10)||0;
+    if(!disp[d]) disp[d] = { device: d, total: 0, ultima: null };
+    disp[d].total += t;
+    if(fila.ultima_vez && (!disp[d].ultima || fila.ultima_vez > disp[d].ultima)) disp[d].ultima = fila.ultima_vez;
+  }
+  for(const d in estados) if(esDispositivoReal(d) && !disp[d]) disp[d] = { device:d, total:0, ultima:null };
+  const lista = Object.values(disp).sort((a,b)=>b.total-a.total);
+  const activos=[], baneados=[];
+  for(const d of lista){ const e=estados[d.device]||{}; const item={ device:d.device, total:d.total, ultima:d.ultima, cuenta:nombres[d.device]||"" }; if(e.estado==="baneado"){ item.fecha_ban=e.fecha_ban; baneados.push(item); } else activos.push(item); }
+  const hoy = parseInt(((await rows(rH))[0]||{}).n,10)||0;
+  const activos7d = parseInt(((await rows(rA))[0]||{}).n,10)||0;
+  const pares = (await rows(rM)).filter((p)=>esDispositivoReal(p.blob1));
+  const meses = (await rows(rMs)).filter((m)=>parseInt(m.dispositivos,10)>0).map((m)=>({ mes:m.mes, n:parseInt(m.dispositivos,10) }));
+  const porDia = (await rows(rD)).filter((d)=>parseInt(d.dispositivos,10)>0).map((d)=>({ dia:d.dia, n:parseInt(d.dispositivos,10) }));
+  return { ok:true, totalDispositivos: lista.length, totalAperturas: lista.reduce((s,d)=>s+d.total,0), hoy, activos7d, inactivos: Math.max(0, lista.length - activos7d), diasDispositivoMes: pares.length, activos, baneados, porDia, meses };
 }
 
-function popupNovedades(){
-  var msg=remote.mensaje;
-  if(!msg||!msg.trim()||S.dlg||S.view!=='list'||S.native)return;
-  var h;try{h=btoa(unescape(encodeURIComponent(msg)))}catch(e){h=String(hnum(msg))}
-  if(ls.get('gtv_ultimo_popup','')===h)return;
-  ls.set('gtv_ultimo_popup',h);
-  var d=abrirDialogo('<div class="popup-box"><div class="ptitle">⭐ GTV PLAY R</div><div class="ptext">'+esc(msg).replace(/\n/g,'<br>')+'</div><button id="pClose">✕ Cerrar</button></div>','info-overlay',function(){restaurarFoco()});
-  d.el.querySelector('#pClose').onclick=cerrarDialogo;
-  d.el.querySelector('#pClose').focus();
-  d.tid=setTimeout(function(){if(S.dlg===d)cerrarDialogo()},(remote.duracion||5)*1000);
+async function leerFuentes(env){
+  const raw = await env.GTV_ARCHIVOS.get("fuentes_externas.json");
+  return jparse(raw, { listas:[], canales:[], ultima_revision:0, lote_actual:0 });
 }
+async function guardarFuentes(env, data){ await env.GTV_ARCHIVOS.put("fuentes_externas.json", JSON.stringify(data)); }
 
-/* ===== BLOQUEO / BANEO ===== */
-function bloquear(modo){
-  S.locked=true;
-  var ban=modo==='ban';
-  var txt=ban?'Hola, mi dispositivo fue bloqueado en GTV Play R. Mi ID es: ':'Hola, tengo un problema con la app GTV Play R. Mi ID es: ';
-  var wu='https://wa.me/'+remote.whatsapp+'?text='+encodeURIComponent(txt+(deviceId||'DESCONOCIDO'));
-  document.body.innerHTML='';
-  var el=document.createElement('div');el.className='block-screen';
-  el.innerHTML='<div class="box"><div style="font-size:60px;margin-bottom:10px">'+(ban?'🚫':'⛔')+'</div><h1 style="color:#f00;font-size:21px;margin-bottom:12px">'+(ban?'DISPOSITIVO BLOQUEADO':'APP NO AUTORIZADA')+'</h1><p style="color:#ffcc00;font-size:14px;margin-bottom:12px;line-height:1.5">'+(ban?'Este dispositivo ha sido bloqueado por el administrador.':(modo==='net'?'No se pudo cargar la configuración.':'La configuración de la aplicación ha sido alterada.'))+'</p><p style="color:#888;font-size:12px;margin-bottom:16px;line-height:1.4">'+(ban?'Si crees que se trata de un error, contactanos.':'Verificá tu conexión a Internet y reintentá.')+'</p>'+(ban?'':'<button class="alt" id="bRetry">🔄 Reintentar</button><br>')+'<button id="bWa">💬 Contactar al administrador</button><hr style="width:70%;margin:14px auto;border-color:#333"><p style="color:#666;font-size:9px;line-height:1.3">© 2026 GTV Play R<br>Idea y desarrollo: Gabriel.</p></div>';
-  document.body.appendChild(el);
-  var r=el.querySelector('#bRetry');
-  if(r)r.onclick=function(){location.reload()};
-  el.querySelector('#bWa').onclick=function(){window.open(wu,'_blank')};
-  (r||el.querySelector('#bWa')).focus();
-}
-function registrarDispositivo(){if(!ap())return;fetch(BAN_URL+'/api/registrar?device='+encodeURIComponent(deviceId),{method:'POST'}).catch(noop)}
-function verificarBaneo(){if(!ap())return;fetch(BAN_URL+'/api/estado?device='+encodeURIComponent(deviceId)).then(function(r){return r.json()}).then(function(d){if(d&&d.baneado===true)bloquear('ban')}).catch(noop)}
+async function fxRevisarLote(env){
+  const data = await leerFuentes(env);
+  const activas = (data.listas||[]).filter(l => l.activa !== false);
+  if(!activas.length) return { ok:false, error:"Sin listas activas" };
 
-/* ===== CONFIG ===== */
-function aplicarConfig(d){
-  if(!d)return;
-  remote.horasDemo=d.horasDemo||24;
-  remote.canalesDemo=d.canalesDemo||[];
-  remote.cuentas=d.cuentas||[];
-  remote.maxGlobal=d.maxGlobalDispositivos||5;
-  remote.whatsapp=d.whatsapp||'5491133550182';
-  remote.licencias={};
-  if(Array.isArray(d.licencias))d.licencias.forEach(function(l){if(l&&l.id&&l.vence)remote.licencias[String(l.id).trim()]=l.vence});
-  remote.mensaje=d.mensaje||'';
-  remote.duracion=d.duracion||5;
-  if(d.demoStart)remote.demoSrv=true;
-  aplicarConfigPub(d);
-}
-function cargarConfig(){
-  return fetchW(CONFIG_URL+'?t='+Date.now(),12000).then(function(r){
-    if(!r.ok)return 'net';
-    return r.json().then(function(d){
-      if(!d.hash_esperado||hashUrl(CONFIG_URL)!==d.hash_esperado)return 'hash';
-      aplicarConfig(d);
-      return 'ok';
+  if(!(data.canales||[]).length){
+    const resultados = await pool(activas, 2, async (l) => {
+      try {
+        const r = await fetch(l.url, { headers:{ "User-Agent": UA, "Accept":"application/x-mpegurl,audio/x-mpegurl,text/plain,*/*" }, redirect:"follow", signal: AbortSignal.timeout(20000) });
+        if(!r.ok) return { lista:l, error:"http_"+r.status };
+        const txt = await r.text();
+        if(!txt || txt.indexOf("#EXTINF") < 0) return { lista:l, error:"sin_extinf" };
+        const canales = parseM3U(txt).filter(esChequeable);
+        return { lista:l, canales };
+      } catch(e){ return { lista:l, error: e.message||String(e) }; }
     });
-  }).catch(function(){return 'net'});
-}
-
-/* ===== LISTA DE CANALES ===== */
-function canalesVisibles(){
-  var out=[];
-  for(var i=0;i<S.list.length;i++){
-    var u=S.list[i].url;
-    if(!S.ocultos[u])out.push(i);
-  }
-  return out;
-}
-function totalVisible(){return canalesVisibles().length}
-function posVisibleDe(i){var v=canalesVisibles();for(var k=0;k<v.length;k++)if(v[k]===i)return k+1;return -1}
-
-function renderLista(){
-  if(!S.list.length){
-    S.byUrl={};
-    D.list.innerHTML='<div class="empty"><div class="icon">📺</div><div class="title">GTV Play R</div><div class="subtitle">No tenés ninguna lista cargada todavía.<br>Agregá tu lista M3U para empezar a ver canales.</div><button id="btnAddList" tabindex="0">➕ AGREGAR LISTA</button><small>GTV Play R · Creado por Gabriel</small></div>';
-    var btn = $('btnAddList');
-    if(btn) btn.onclick = abrirSettings;
-    return;
-  }
-  var h=[],by={};
-  for(var i=0;i<S.list.length;i++){
-    var c=S.list[i];
-    (by[c.url]||(by[c.url]=[])).push(i);
-    var cls='card';
-    if(S.ocultos[c.url])cls+=' off';
-    else if(S.caidos[c.url])cls+=' caido';
-    h.push('<div class="'+cls+'" tabindex="0" id="idx-'+i+'" data-i="'+i+'"><img data-src="'+esc(c.logo||FB_LOGO)+'" alt="" decoding="async"><span>'+esc(c.nombre||c.name)+'</span></div>');
-  }
-  S.byUrl=by;
-  D.list.innerHTML=h.join('');
-  lazyObserve(D.list);
-}
-
-var IO = null;
-function lazyObserve(root){
-  var l=root.querySelectorAll('img[data-src]'),i;
-  if(!window.IntersectionObserver){
-    for(i=0;i<l.length;i++){l[i].src=l[i].getAttribute('data-src');l[i].removeAttribute('data-src')}
-    return;
-  }
-  if(!IO)IO=new IntersectionObserver(function(es){
-    for(var k=0;k<es.length;k++){
-      if(!es[k].isIntersecting)continue;
-      var im=es[k].target,s=im.getAttribute('data-src');
-      if(s){im.src=s;im.removeAttribute('data-src')}
-      IO.unobserve(im);
+    const porNorm = new Map();
+    for(const r of resultados){
+      if(r.error) continue;
+      for(const c of r.canales){
+        const norm = String(c.name||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "sin-nombre";
+        if(!porNorm.has(norm)) porNorm.set(norm, { nombre_norm:norm, nombre:c.name||"", logo:"", group:c.group||"General", fuentes:[] });
+        const entry = porNorm.get(norm);
+        if(!entry.logo && c.logo) entry.logo = c.logo;
+        if(entry.fuentes.some(f => f.url === c.url)) continue;
+        entry.fuentes.push({ lista_id:r.lista.id, lista_nombre:r.lista.nombre, url:c.url, estado:"pendiente", motivo:"", ms:0, ts:0 });
+      }
     }
-  },{root:D.list,rootMargin:(LITE?'150px 0px':'400px 0px')});
-  for(i=0;i<l.length;i++)IO.observe(l[i]);
-}
-
-/* Envía la lista (con ocultos) al MainActivity para que zapping/reproducción nativos usen los mismos índices */
-function syncNativo(){
-  if(!hasNat('setLista'))return;
-  try{
-    var arr=S.list.map(function(c){
-      return {nombre:c.nombre||c.name,name:c.nombre||c.name,url:c.url,logo:c.logo||'',referer:c.referer||'',gain:c.gain||1.0,oculto:!!S.ocultos[c.url],esPeliculas:!!c.esPeliculas,urlPeliculasM3U:c.urlPeliculasM3U||null};
-    });
-    nat('setLista',JSON.stringify(arr));
-  }catch(e){}
-}
-
-function aplicarLista(nl,keepIndex){
-  S.list=nl;
-  renderLista();
-  syncNativo();
-  var li=keepIndex?parseInt(ls.get('gtv_last_index','0'),10):0;
-  if(!(li>=0&&li<nl.length))li=0;
-  S.index=li;
-  ls.set('gtv_last_index',String(li));
-  nat('sincronizarIndice',li);
-  if(S.view==='list'&&!S.dlg&&!S.native)setTimeout(function(){focusCard(li)},40);
-}
-
-function sincronizarEstadoCanales(){
-  return fetchW(ESTADO_URL+'?t='+Date.now(),8000).then(function(r){return r.json()}).then(function(d){
-    if(!d||!d.ok)return;
-    S.caidos=d.caidos||{};
-    S.ocultos=d.ocultos||{};
-    S.hideCargado=true;
-    ls.setJ('gtv_caidos_cache',S.caidos);
-    ls.setJ('gtv_ocultos_cache',S.ocultos);
-    if(S.list.length){renderLista();syncNativo()}
-  }).catch(noop);
-}
-function aplicarCacheEstado(){
-  S.caidos=ls.getJ('gtv_caidos_cache',{});
-  S.ocultos=ls.getJ('gtv_ocultos_cache',{});
-}
-
-/* ===== VISTAS ===== */
-function setView(v){
-  if(v!=='player'){
-    if(pubSched.nativeTickerShown&&hasNat('ocultarPublicidad'))nat('ocultarPublicidad');
+    data.canales = Array.from(porNorm.values());
+    data.lote_actual = 0;
+    if(!data.canales.length) return { ok:false, error:"No se pudo parsear ninguna lista" };
   }
-  S.view=v;
-  D.list.classList.toggle('hidden',v!=='list');
-  D.movies.classList.toggle('active',v==='movies');
-  D.player.classList.toggle('active',v==='player');
-  if(v!=='player'){
-    D.player.style.visibility='hidden';
-    D.wrap.style.visibility='hidden';
-  } else {
-    D.player.style.visibility='';
-    D.wrap.style.visibility='';
+
+  const pendientes = [];
+  for(const canal of data.canales){ for(const f of canal.fuentes){ if(f.estado === "pendiente" || f.estado === "caido") pendientes.push({ canal, fuente:f }); } }
+  if(!pendientes.length) return { ok:true, probadas:0, ok:0, caidas:0, pendientes:0, mensaje:"Todo probado" };
+
+  const inicio = (data.lote_actual||0) % pendientes.length;
+  const slice = [];
+  for(let i=0;i<FX_LOTE && i<pendientes.length;i++) slice.push(pendientes[(inicio+i)%pendientes.length]);
+  data.lote_actual = (inicio + FX_LOTE) % Math.max(pendientes.length, 1);
+
+  const res = await pool(slice, CONCURRENCIA, (item) => probar(item.fuente.url));
+  let okCount=0, caidasCount=0;
+  for(let i=0;i<slice.length;i++){
+    const f = slice[i].fuente, r = res[i], ahora = Date.now();
+    f.estado = r.ok ? "ok" : "caido";
+    f.motivo = r.motivo || "";
+    f.ms = r.ms || 0;
+    f.ts = ahora;
+    if(r.ok) okCount++; else caidasCount++;
   }
+  await guardarFuentes(env, data);
+  const pendRestantes = data.canales.reduce((s,c)=>s + c.fuentes.filter(f=>f.estado==="pendiente").length, 0);
+  return { ok:true, probadas: slice.length, ok: okCount, caidas: caidasCount, pendientes: pendRestantes };
 }
 
-function focusCard(i,noScroll){
-  var c=D.list.children[i];
-  if(!c||!c.focus)return;
-  try{c.focus(noScroll?{preventScroll:true}:undefined)}catch(e){c.focus()}
-}
+/* HANDLER */
+export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(chequearLote(env).catch((e) => console.log("chequeo error: " + (e && e.message))));
+  },
 
-function restaurarFoco(){
-  setTimeout(function(){
-    if(S.dlg||S.locked)return;
-    if(S.view==='list'){focusCard(S.index);return}
-    if(S.view==='movies'){focoPelis();return}
-  },60);
-}
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const c = cfg(env);
+    const sello = request.headers.get("X-GTV-Origin");
+    const conSello = sello === c.sello;
 
-/* ===== PLAYER ===== */
-function showUI(){D.ui.classList.add('show');clearTimeout(S.uiTimer);S.uiTimer=setTimeout(function(){D.ui.classList.remove('show')},3000)}
-function aplicarRot(){D.wrap.classList.toggle('rotated',S.rotated)}
+    try { bumpConsumoLocal(env, "req", 1); } catch(e){}
 
-function ifrVisibles(){return [D.ifr,D.kickIfr,D.okIfr,D.dailymotionIfr,D.tokyvideoIfr]}
-function ifrOcultarTodos(){
-  ifrVisibles().forEach(function(el){
-    if(!el)return;
-    el.style.display='none';
-    try{el.src='about:blank'}catch(e){}
-    try{el.removeAttribute('src')}catch(e){}
+    if(request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+
+    if(path === "/gtv-admin") return new Response(PANEL_HTML, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control":"no-store", "X-Robots-Tag":"noindex" } });
+
+    if(path.indexOf("/api/admin/") === 0){
+      if(!adminAuth(request, c)) return json({ ok:false, error:"No autorizado" }, 401);
+      try {
+        if(path === "/api/admin/login") return json({ ok:true });
+
+        if(path === "/api/admin/leer"){
+          const a = url.searchParams.get("archivo");
+          if(ARCHIVOS_LEER.indexOf(a) < 0) return json({ ok:false, error:"Archivo no permitido" }, 400);
+          return json({ ok:true, contenido: (await env.GTV_ARCHIVOS.get(a)) || "" });
+        }
+
+        if(path === "/api/admin/guardar" && request.method === "POST"){
+          const a = url.searchParams.get("archivo");
+          if(ARCHIVOS_GUARDAR.indexOf(a) < 0) return json({ ok:false, error:"Archivo no permitido" }, 400);
+          const body = await request.text();
+          if(!body.trim()) return json({ ok:false, error:"Contenido vacío" }, 400);
+          if(/\.json$/.test(a)){ try{ JSON.parse(body); }catch(e){ return json({ ok:false, error:"JSON inválido" }, 400); } }
+          await env.GTV_ARCHIVOS.put(a, body);
+          return json({ ok:true });
+        }
+
+        if(path === "/api/admin/guardar-canales" && request.method === "POST"){
+          const b = await request.json();
+          if(!b || !Array.isArray(b.items)) return json({ ok:false, error:"Falta items" }, 400);
+          let out = "#EXTM3U\n\n";
+          let n = 0;
+          for(const c of b.items){
+            const u = String(c.url||'').trim();
+            if(!u) continue;
+            const logo  = String(c.logo||'').replace(/"/g,"'");
+            const grupo = String(c.grupo||'General').replace(/"/g,"'");
+            const tipo  = String(c.tipo||'').replace(/"/g,"'");
+            const nombre = String(c.nombre||'').replace(/,/g,' ').replace(/\r?\n/g,' ').trim();
+            out += '#EXTINF:-1 tvg-logo="'+logo+'"';
+            if(tipo) out += ' tvg-tipo="'+tipo+'"';
+            out += ' group-title="'+grupo+'",'+nombre+'\n';
+            out += u+'\n\n';
+            n++;
+          }
+          await env.GTV_ARCHIVOS.put("canales.m3u", out);
+          try { await env.GTV_ARCHIVOS.delete("orden_global.json"); } catch(e){}
+          return json({ ok:true, guardados:n });
+        }
+
+        if(path === "/api/admin/estado"){
+          const [ca, oc, fa, me, pa] = await Promise.all([ env.GTV_ARCHIVOS.get("caidos.json"), env.GTV_ARCHIVOS.get("ocultos_app.json"), env.GTV_ARCHIVOS.get("falsos_positivos.json"), env.GTV_ARCHIVOS.get("chequeo_meta.json"), env.GTV_ARCHIVOS.get("chequeo_pausa") ]);
+          return json({ ok:true, caidos: jparse(ca,{}), ocultos: jparse(oc,{}), falsos: jparse(fa,{}), meta: jparse(me,{}), pausa: pa === "1" });
+        }
+
+        if(path === "/api/admin/consumo"){
+          const cc = await leerConsumo(env);
+          return json({ ok:true, consumo: cc, limites: CONSUMO_LIMITES });
+        }
+
+        if(path === "/api/admin/canales/todos"){
+          const m3uRaw = (await env.GTV_ARCHIVOS.get("canales.m3u")) || "";
+          const iptv = parseM3U(m3uRaw);
+          const items = iptv.map(c => ({
+            clave: claveIPTV(c), origen:"iptv", url:c.url,
+            nombre:c.name||"", logo:c.logo||"", grupo:c.group||"", tipo:c.tipo||""
+          }));
+          return json({ ok:true, items });
+        }
+
+        if(path === "/api/admin/fuentes/leer"){
+          const data = await leerFuentes(env);
+          return json({ ok:true, listas: data.listas||[], canales: data.canales||[], ultima_revision: data.ultima_revision||0 });
+        }
+        if(path === "/api/admin/fuentes/agregar" && request.method === "POST"){
+          const b = await request.json();
+          if(!b || !b.url || !/^https?:\/\//i.test(b.url)) return json({ ok:false, error:"URL inválida" }, 400);
+          const data = await leerFuentes(env);
+          data.listas = data.listas || [];
+          data.listas.push({ id:"l"+(Date.now().toString(36))+Math.random().toString(36).slice(2,6), nombre:(b.nombre||"").trim() || ("Lista "+(data.listas.length+1)), url:b.url.trim(), activa:true, agregada: Date.now() });
+          await guardarFuentes(env, data);
+          return json({ ok:true });
+        }
+        if(path === "/api/admin/fuentes/quitar" && request.method === "POST"){
+          const b = await request.json();
+          if(!b || !b.id) return json({ ok:false, error:"Falta id" }, 400);
+          const data = await leerFuentes(env);
+          data.listas = (data.listas||[]).filter(l => l.id !== b.id);
+          for(const canal of (data.canales||[])){ canal.fuentes = (canal.fuentes||[]).filter(f => f.lista_id !== b.id); }
+          data.canales = (data.canales||[]).filter(c => (c.fuentes||[]).length > 0);
+          await guardarFuentes(env, data);
+          return json({ ok:true });
+        }
+        if(path === "/api/admin/fuentes/revisar-lote" && request.method === "POST"){
+          const r = await fxRevisarLote(env);
+          if(r.ok){ const data = await leerFuentes(env); data.ultima_revision = Date.now(); await guardarFuentes(env, data); }
+          return json(r);
+        }
+
+        if(path === "/api/admin/snapshot" && request.method === "POST"){
+          const b = await request.json();
+          const archivo = b && b.archivo;
+          if(ARCHIVOS_GUARDAR.indexOf(archivo) < 0) return json({ ok:false, error:"No permitido" }, 400);
+          const contenido = await env.GTV_ARCHIVOS.get(archivo);
+          if(!contenido) return json({ ok:false, error:"vacío" }, 400);
+          const ts = Date.now(), id = archivo.replace(/\W/g, "_") + "_" + ts;
+          await env.GTV_ARCHIVOS.put("snap_" + id, JSON.stringify({ archivo, contenido, ts }));
+          const lista = jparse(await env.GTV_ARCHIVOS.get("snap_index"), {});
+          lista[id] = { archivo, ts };
+          const ids = Object.keys(lista).filter(k => lista[k].archivo === archivo).sort().reverse();
+          while(ids.length > 10){ const v = ids.pop(); delete lista[v]; await env.GTV_ARCHIVOS.delete("snap_" + v); }
+          await env.GTV_ARCHIVOS.put("snap_index", JSON.stringify(lista));
+          return json({ ok:true, id });
+        }
+        if(path === "/api/admin/snapshots"){
+          const a = url.searchParams.get("archivo");
+          const lista = jparse(await env.GTV_ARCHIVOS.get("snap_index"), {});
+          const out = Object.keys(lista).filter(k => !a || lista[k].archivo === a).map(k => Object.assign({ id:k }, lista[k])).sort((x,y) => y.ts - x.ts);
+          return json({ ok:true, snapshots: out });
+        }
+        if(path === "/api/admin/snapshot-borrar" && request.method === "POST"){
+          const b = await request.json();
+          await env.GTV_ARCHIVOS.delete("snap_" + b.id);
+          const lista = jparse(await env.GTV_ARCHIVOS.get("snap_index"), {});
+          delete lista[b.id];
+          await env.GTV_ARCHIVOS.put("snap_index", JSON.stringify(lista));
+          return json({ ok:true });
+        }
+        if(path === "/api/admin/restaurar" && request.method === "POST"){
+          const b = await request.json();
+          const raw = await env.GTV_ARCHIVOS.get("snap_" + b.id);
+          if(!raw) return json({ ok:false, error:"no existe" }, 404);
+          const s = JSON.parse(raw);
+          await env.GTV_ARCHIVOS.put(s.archivo, s.contenido);
+          return json({ ok:true });
+        }
+
+        if(path === "/api/admin/caidos/accion" && request.method === "POST"){
+          const body = await request.json();
+          const accion = body && body.accion, u = body && body.url;
+          if(!accion || !u) return json({ ok:false, error:"Faltan parámetros" }, 400);
+          const [ca, oc, fa, es] = await Promise.all([ env.GTV_ARCHIVOS.get("caidos.json"), env.GTV_ARCHIVOS.get("ocultos_app.json"), env.GTV_ARCHIVOS.get("falsos_positivos.json"), env.GTV_ARCHIVOS.get("chequeo_estado.json") ]);
+          const caidos = jparse(ca,{}), ocultos = jparse(oc,{}), falsos = jparse(fa,{}), est = jparse(es,{});
+          const f = est.f||{}, ok = est.ok||{};
+          const info = caidos[u] || ocultos[u] || falsos[u] || {};
+          const nombre = info.nombre || body.nombre || "", logo = info.logo || body.logo || "";
+          let urlFinal = u;
+          if(accion === "reparado"){ delete caidos[u]; delete ocultos[u]; delete falsos[u]; delete f[u]; ok[u] = Date.now(); }
+          else if(accion === "ocultar"){ ocultos[u] = { nombre, logo, desde: Date.now() }; delete caidos[u]; }
+          else if(accion === "falso_positivo"){ falsos[u] = { nombre, logo, desde: Date.now() }; delete caidos[u]; delete f[u]; }
+          else if(accion === "desmarcar_falso"){ delete falsos[u]; delete f[u]; }
+          else if(accion === "desocultar"){ delete ocultos[u]; delete f[u]; }
+          else if(accion === "eliminar"){ delete caidos[u]; delete ocultos[u]; delete falsos[u]; delete f[u]; delete ok[u]; const m3u = await env.GTV_ARCHIVOS.get("canales.m3u"); if(m3u) await env.GTV_ARCHIVOS.put("canales.m3u", quitarDelM3U(m3u, u)); }
+          else return json({ ok:false, error:"Acción desconocida" }, 400);
+          await Promise.all([ env.GTV_ARCHIVOS.put("caidos.json", JSON.stringify(caidos)), env.GTV_ARCHIVOS.put("ocultos_app.json", JSON.stringify(ocultos)), env.GTV_ARCHIVOS.put("falsos_positivos.json", JSON.stringify(falsos)), env.GTV_ARCHIVOS.put("chequeo_estado.json", JSON.stringify({ f, ok })) ]);
+          return json({ ok:true, urlFinal });
+        }
+        if(path === "/api/admin/probar" && request.method === "POST"){
+          const body = await request.json();
+          if(!body || !/^https?:\/\//i.test(body.url||"")) return json({ ok:false, error:"URL inválida" }, 400);
+          return json({ ok:true, resultado: await probar(body.url) });
+        }
+        if(path === "/api/admin/chequear-ahora" && request.method === "POST"){ const r = await chequearLote(env, { forzar:true }); return json(r); }
+        if(path === "/api/admin/chequear-full" && request.method === "POST"){ const r = await chequearLote(env, { forzar:true, full:true }); return json(r); }
+        if(path === "/api/admin/chequeo-pausa" && request.method === "POST"){
+          const body = await request.json();
+          if(body && body.pausa) await env.GTV_ARCHIVOS.put("chequeo_pausa", "1"); else await env.GTV_ARCHIVOS.delete("chequeo_pausa");
+          return json({ ok:true, pausa: !!(body && body.pausa) });
+        }
+        if(path === "/api/admin/stats") return json(await statsJSON(env));
+        if(path === "/api/admin/banear" && request.method === "POST"){
+          const body = await request.json();
+          const dev = body && body.device, acc = body && body.accion;
+          if(!dev || !DEVICE_RE.test(dev) || (acc !== "banear" && acc !== "desbanear")) return json({ ok:false, error:"Parámetros inválidos" }, 400);
+          const raw = await env.GTV_DISPOSITIVOS.get(dev);
+          let data = {}; if(raw){ try{ data = JSON.parse(raw)||{}; }catch(e){ data = {}; } }
+          if(!data.fecha_registro) data.fecha_registro = new Date().toISOString();
+          if(acc === "banear"){ data.estado = "baneado"; data.fecha_ban = new Date().toISOString(); } else { data.estado = "activo"; delete data.fecha_ban; }
+          await putDisp(env, dev, data);
+          return json({ ok:true, device: dev, estado: data.estado });
+        }
+
+        /* ===== NUEVO v26: LISTAR LICENCIAS ===== */
+        if(path === "/api/admin/licencias" && request.method === "GET"){
+          try {
+            const cfgRaw = await env.GTV_ARCHIVOS.get("gtv_config.json");
+            const cfgData = jparse(cfgRaw, {});
+            const licencias = [];
+            for(const l of (cfgData.licencias || [])){
+              if(l && l.id){ licencias.push({ device: String(l.id).trim(), vence: l.vence || "", nombre: l.nombre || "", tipo: "suelta" }); }
+            }
+            for(const c of (cfgData.cuentas || [])){
+              for(const d of (c.dispositivos || [])){
+                if(d) licencias.push({ device: String(d).trim(), vence: c.vence || "", nombre: c.nombre || "", tipo: "cuenta", cuenta: c.nombre || "" });
+              }
+            }
+            licencias.sort((a, b) => (a.nombre || a.device).localeCompare(b.nombre || b.device));
+            return json({ ok: true, licencias });
+          } catch(e){ return json({ ok: false, error: e.message }, 500); }
+        }
+
+        /* ===== NUEVO v26: BORRAR LICENCIA ===== */
+        if(path === "/api/admin/licencia-borrar" && request.method === "POST"){
+          try {
+            const b = await request.json();
+            const dev = (b && b.device || "").trim();
+            if(!dev) return json({ ok: false, error: "Falta device" }, 400);
+            const cfgRaw = await env.GTV_ARCHIVOS.get("gtv_config.json");
+            const cfgData = jparse(cfgRaw, {});
+            if(Array.isArray(cfgData.licencias)){ cfgData.licencias = cfgData.licencias.filter(function(l){ return !(l && String(l.id).trim() === dev); }); }
+            if(Array.isArray(cfgData.cuentas)){ for(const c of cfgData.cuentas){ if(Array.isArray(c.dispositivos)){ c.dispositivos = c.dispositivos.filter(function(d){ return String(d).trim() !== dev; }); } } }
+            await env.GTV_ARCHIVOS.put("gtv_config.json", JSON.stringify(cfgData, null, 2));
+            return json({ ok: true, device: dev });
+          } catch(e){ return json({ ok: false, error: e.message }, 500); }
+        }
+
+        /* ===== NUEVO v26: EDITAR LICENCIA (nombre + fecha) ===== */
+        if(path === "/api/admin/licencia-editar" && request.method === "POST"){
+          try {
+            const b = await request.json();
+            const dev = (b && b.device || "").trim();
+            const vence = (b && b.vence || "").trim();
+            const nombre = (b && b.nombre || "").trim();
+            if(!dev || !vence) return json({ ok: false, error: "Faltan device o vence" }, 400);
+            if(!/^\d{4}-\d{2}-\d{2}$/.test(vence)) return json({ ok: false, error: "Formato de fecha inválido" }, 400);
+            const cfgRaw = await env.GTV_ARCHIVOS.get("gtv_config.json");
+            const cfgData = jparse(cfgRaw, {});
+            cfgData.licencias = cfgData.licencias || [];
+            const idx = cfgData.licencias.findIndex(function(l){ return l && String(l.id).trim() === dev; });
+            if(idx >= 0){ cfgData.licencias[idx].vence = vence; if(nombre) cfgData.licencias[idx].nombre = nombre; }
+            else { cfgData.licencias.push({ id: dev, vence: vence, nombre: nombre }); }
+            await env.GTV_ARCHIVOS.put("gtv_config.json", JSON.stringify(cfgData, null, 2));
+            return json({ ok: true, device: dev, vence: vence, nombre: nombre });
+          } catch(e){ return json({ ok: false, error: e.message }, 500); }
+        }
+
+        /* ===== GTV Play R: licencias (VIEJO) ===== */
+        if(path === "/api/admin/licencia" && request.method === "POST"){
+          const b = await request.json();
+          const dev = (b && b.device || "").trim();
+          const vence = (b && b.vence || "").trim();
+          if(!dev || !vence) return json({ ok:false, error:"Faltan device o vence" }, 400);
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(vence)) return json({ ok:false, error:"Formato de fecha inválido (usar YYYY-MM-DD)" }, 400);
+          const cfgRaw = await env.GTV_ARCHIVOS.get("gtv_config.json");
+          const cfgData = jparse(cfgRaw, {});
+          cfgData.licencias = cfgData.licencias || [];
+          const idx = cfgData.licencias.findIndex(function(l){ return l && String(l.id).trim() === dev; });
+          if(idx >= 0){ cfgData.licencias[idx].vence = vence; } else { cfgData.licencias.push({ id: dev, vence: vence }); }
+          await env.GTV_ARCHIVOS.put("gtv_config.json", JSON.stringify(cfgData, null, 2));
+          return json({ ok:true, device: dev, vence: vence });
+        }
+
+        if(path === "/api/admin/licencia-r" && request.method === "POST"){
+          const b = await request.json();
+          const dev = (b && b.device || "").trim();
+          const vence = (b && b.vence || "").trim();
+          if(!dev || !vence) return json({ ok:false, error:"Faltan device o vence" }, 400);
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(vence)) return json({ ok:false, error:"Formato de fecha inválido (usar YYYY-MM-DD)" }, 400);
+          const cfgRaw = await env.GTV_ARCHIVOS.get("gtv_config.json");
+          const cfgData = jparse(cfgRaw, {});
+          cfgData.licencias = cfgData.licencias || [];
+          const idx = cfgData.licencias.findIndex(function(l){ return l && String(l.id).trim() === dev; });
+          if(idx >= 0){ cfgData.licencias[idx].vence = vence; } else { cfgData.licencias.push({ id: dev, vence: vence }); }
+          await env.GTV_ARCHIVOS.put("gtv_config.json", JSON.stringify(cfgData, null, 2));
+          return json({ ok:true, device: dev, vence: vence });
+        }
+
+        if(path === "/api/admin/palabra-clave"){
+          if(request.method === "GET"){
+            const clave = await env.GTV_ARCHIVOS.get("config:palabra_clave_reproductor");
+            return json({ ok:true, clave: clave || "" });
+          }
+          if(request.method === "POST"){
+            const b = await request.json();
+            if(!b || !b.clave || !b.clave.trim()) return json({ ok:false, error:"Clave vacía" }, 400);
+            await env.GTV_ARCHIVOS.put("config:palabra_clave_reproductor", b.clave.trim());
+            return json({ ok:true });
+          }
+        }
+
+        if(path === "/api/admin/listas-externas"){
+          const lista = jparse(await env.GTV_ARCHIVOS.get("listas_externas"), {});
+          const arr = [];
+          Object.keys(lista).forEach(function(k){
+            const v = lista[k] || {};
+            const urls = Array.isArray(v.urls) ? v.urls : (v.url ? [{ url: v.url, ts: v.ts || 0, nombre: "" }] : []);
+            urls.forEach(function(u){
+              arr.push({ device: k, url: u.url || "", ts: u.ts || 0, nombre: u.nombre || "" });
+            });
+          });
+          arr.sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+          return json({ ok:true, listas: arr });
+        }
+        if(path === "/api/admin/listas-externas/borrar" && request.method === "POST"){
+          const b = await request.json();
+          if(!b || !b.device) return json({ ok:false, error:"Falta device" }, 400);
+          const lista = jparse(await env.GTV_ARCHIVOS.get("listas_externas"), {});
+          if(b.url){
+            const v = lista[b.device];
+            if(v && Array.isArray(v.urls)){
+              v.urls = v.urls.filter(function(x){ return x.url !== b.url; });
+              if(v.urls.length){ lista[b.device] = v; } else { delete lista[b.device]; }
+            }
+          } else {
+            delete lista[b.device];
+          }
+          await env.GTV_ARCHIVOS.put("listas_externas", JSON.stringify(lista));
+          return json({ ok:true });
+        }
+
+        return json({ ok:false, error:"Ruta desconocida" }, 404);
+      } catch(e){ return json({ ok:false, error: e.message || String(e) }, 500); }
+    }
+
+    /* ===== ENDPOINT PÚBLICO: VALIDAR REPRODUCTOR ===== */
+    if(path === "/api/reproductor/validar" && request.method === "POST"){
+      try {
+        const b = await request.json();
+        const texto = (b && b.texto || "").trim();
+        const dev = (b && b.deviceId || "").trim();
+        if(!texto) return json({ ok:false, error:"texto_vacio" }, 400);
+        if(!dev || !DEVICE_RE.test(dev)) return json({ ok:false, error:"device_invalido" }, 400);
+
+        if(/^https?:\/\//i.test(texto)){
+          const lista = jparse(await env.GTV_ARCHIVOS.get("listas_externas"), {});
+          const actual = lista[dev] || { urls: [], ts: 0 };
+          const urls = Array.isArray(actual.urls) ? actual.urls : (actual.url ? [{ url: actual.url, ts: actual.ts || Date.now(), nombre: "" }] : []);
+          const yaEsta = urls.some(function(x){ return x.url === texto; });
+          if(!yaEsta){
+            urls.push({ url: texto, ts: Date.now(), nombre: "" });
+          }
+          lista[dev] = { urls: urls, ts: Date.now() };
+          await env.GTV_ARCHIVOS.put("listas_externas", JSON.stringify(lista));
+          return json({ ok:true, tipo:"externa", url:texto });
+        }
+
+        const claveGuardada = (await env.GTV_ARCHIVOS.get("config:palabra_clave_reproductor")) || "";
+        if(!claveGuardada || texto !== claveGuardada){
+          return json({ ok:false, error:"clave_invalida" }, 403);
+        }
+
+        const hoy = hoyISO();
+        const cfgRaw = await env.GTV_ARCHIVOS.get("gtv_config.json");
+        const cfgData = jparse(cfgRaw, {});
+        let tiene = false, vence = null;
+
+        for(const cta of (cfgData.cuentas||[])){
+          if(Array.isArray(cta.dispositivos) && cta.dispositivos.map(function(d){return String(d).trim()}).indexOf(dev)>=0 && cta.vence && cta.vence>=hoy){
+            tiene = true; vence = cta.vence; break;
+          }
+        }
+        if(!tiene && Array.isArray(cfgData.licencias)){
+          for(const l of cfgData.licencias){
+            if(l && String(l.id).trim()===dev && l.vence && l.vence>=hoy){ tiene = true; vence = l.vence; break; }
+          }
+        }
+
+        if(!tiene){ return json({ ok:false, error:"licencia_requerida" }, 403); }
+
+        return json({ ok:true, tipo:"maestra", url:"/api/m3u", vence:vence });
+      } catch(e){ return json({ ok:false, error: e.message || String(e) }, 500); }
+    }
+
+    /* ===== ENDPOINT NUEVO v25: LISTA MAESTRA PARA GTV PLAY R ===== */
+    if(path === "/api/reproductor/lista-maestra" && request.method === "GET"){
+      if(!conSello) return json({ ok:false, error:"no_autorizado" }, 403);
+      try {
+        const dev = (request.headers.get("X-Device-Id") || "").trim();
+        if(!dev || !DEVICE_RE.test(dev)) {
+          return json({ ok:false, error:"device_invalido" }, 400);
+        }
+
+        const hoy = hoyISO();
+        const cfgRaw = await env.GTV_ARCHIVOS.get("gtv_config.json");
+        const cfgData = jparse(cfgRaw, {});
+        let tiene = false, vence = null;
+
+        for(const cta of (cfgData.cuentas||[])){
+          if(Array.isArray(cta.dispositivos) && cta.dispositivos.map(function(d){return String(d).trim()}).indexOf(dev)>=0 && cta.vence && cta.vence>=hoy){
+            tiene = true; vence = cta.vence; break;
+          }
+        }
+        if(!tiene && Array.isArray(cfgData.licencias)){
+          for(const l of cfgData.licencias){
+            if(l && String(l.id).trim()===dev && l.vence && l.vence>=hoy){ tiene = true; vence = l.vence; break; }
+          }
+        }
+
+        if(!tiene) {
+          return json({ ok:false, error:"licencia_requerida" }, 403);
+        }
+
+        return json({
+          ok:true,
+          url: "/api/m3u",
+          vence: vence
+        });
+      } catch(e){
+        return json({ ok:false, error: e.message || String(e) }, 500);
+      }
+    }
+
+    /* ===== NUEVOS ENDPOINTS PÚBLICOS: LISTAS DEL DISPOSITIVO ===== */
+    if(path === "/api/reproductor/listas" && request.method === "GET"){
+      try {
+        const dev = (url.searchParams.get("deviceId") || "").trim();
+        if(!dev || !DEVICE_RE.test(dev)) return json({ ok:false, error:"device_invalido" }, 400);
+        const lista = jparse(await env.GTV_ARCHIVOS.get("listas_externas"), {});
+        const v = lista[dev];
+        let urls = [];
+        if(v){
+          urls = Array.isArray(v.urls) ? v.urls : (v.url ? [{ url: v.url, ts: v.ts || 0, nombre: "" }] : []);
+        }
+        return json({ ok:true, listas: urls });
+      } catch(e){ return json({ ok:false, error: e.message || String(e) }, 500); }
+    }
+
+    if(path === "/api/reproductor/registrar-lista" && request.method === "POST"){
+      try {
+        const b = await request.json();
+        const dev = (b && b.deviceId || "").trim();
+        const u = (b && b.url || "").trim();
+        const nombre = (b && b.nombre || "").trim();
+        if(!dev || !DEVICE_RE.test(dev)) return json({ ok:false, error:"device_invalido" }, 400);
+        if(!u || !/^https?:\/\//i.test(u)) return json({ ok:false, error:"url_invalida" }, 400);
+        const lista = jparse(await env.GTV_ARCHIVOS.get("listas_externas"), {});
+        const actual = lista[dev] || { urls: [], ts: 0 };
+        const urls = Array.isArray(actual.urls) ? actual.urls : (actual.url ? [{ url: actual.url, ts: actual.ts || Date.now(), nombre: "" }] : []);
+        const idx = urls.findIndex(function(x){ return x.url === u; });
+        if(idx >= 0){ urls[idx].ts = Date.now(); if(nombre) urls[idx].nombre = nombre; }
+        else { urls.push({ url: u, ts: Date.now(), nombre: nombre }); }
+        lista[dev] = { urls: urls, ts: Date.now() };
+        await env.GTV_ARCHIVOS.put("listas_externas", JSON.stringify(lista));
+        return json({ ok:true });
+      } catch(e){ return json({ ok:false, error: e.message || String(e) }, 500); }
+    }
+
+    if(path === "/api/reproductor/lista" && request.method === "DELETE"){
+      try {
+        const b = await request.json();
+        const dev = (b && b.deviceId || "").trim();
+        const u = (b && b.url || "").trim();
+        if(!dev || !DEVICE_RE.test(dev)) return json({ ok:false, error:"device_invalido" }, 400);
+        const lista = jparse(await env.GTV_ARCHIVOS.get("listas_externas"), {});
+        if(lista[dev]){
+          if(u){
+            const v = lista[dev];
+            if(Array.isArray(v.urls)){
+              v.urls = v.urls.filter(function(x){ return x.url !== u; });
+              if(v.urls.length){ lista[dev] = v; } else { delete lista[dev]; }
+            }
+          } else {
+            delete lista[dev];
+          }
+          await env.GTV_ARCHIVOS.put("listas_externas", JSON.stringify(lista));
+        }
+        return json({ ok:true });
+      } catch(e){ return json({ ok:false, error: e.message || String(e) }, 500); }
+    }
+
+    if(path === "/api/estado-canales"){
+      if(!conSello) return new Response("No autorizado", { status: 403 });
+      try {
+        const [ca, oc] = await Promise.all([ env.GTV_ARCHIVOS.get("caidos.json"), env.GTV_ARCHIVOS.get("ocultos_app.json") ]);
+        const mini = (o) => { const m = {}; for(const k in o) m[k]=1; return m; };
+        return json({ ok:true, caidos: mini(jparse(ca,{})), ocultos: mini(jparse(oc,{})) }, 200, { "Cache-Control":"max-age=30" });
+      } catch(e){ return json({ ok:false, error: e.message }, 500); }
+    }
+    if((path === "/api/reportar-caido" || path === "/api/reportar-activo") && request.method === "POST"){
+      if(!conSello) return new Response("No autorizado", { status: 403 });
+      return json({ ok:true, ignorado:true });
+    }
+    if(path === "/api/registrar" || path === "/api/estado" || path === "/api/fecha"){
+      const dev = url.searchParams.get("device");
+      if(!dev || !DEVICE_RE.test(dev)) return json({ error:"device inválido" }, 400);
+      try {
+        if(path === "/api/registrar"){
+          const ex = await env.GTV_DISPOSITIVOS.get(dev);
+          if(!ex) await putDisp(env, dev, { estado:"activo", fecha_registro: new Date().toISOString() });
+          try{ env.GTV_ANALYTICS.writeDataPoint({ blobs:[dev, "registro"], doubles:[1], indexes:[dev] }); }catch(e){}
+          return json({ ok:true });
+        }
+        if(path === "/api/estado"){
+          const raw = await env.GTV_DISPOSITIVOS.get(dev);
+          if(!raw) return json({ baneado:false, estado:"no_registrado" });
+          let d = {}; try{ d = JSON.parse(raw); }catch(e){ d = { estado: raw }; }
+          return json({ baneado: d.estado === "baneado", estado: d.estado || "activo" });
+        }
+        let primeraVez = await env.GTV_DEVICES.get(dev), esNuevo = false;
+        if(!primeraVez){ primeraVez = new Date().toISOString(); await env.GTV_DEVICES.put(dev, primeraVez); esNuevo = true; }
+        try{ env.GTV_ANALYTICS.writeDataPoint({ blobs:[dev, esNuevo ? "nuevo" : "recurrente"], doubles:[1], indexes:[dev] }); }catch(e){}
+        return json({ primeraVez, esNuevo });
+      } catch(e){ return json({ error: e.message }, 500); }
+    }
+
+    if(path === "/api/version"){
+      try {
+        const res = await fetch("https://api.github.com/repos/abrel1990/gtv-apk/releases?per_page=1", { headers: { "Authorization": "token " + env.GITHUB_TOKEN, "User-Agent": "Cloudflare-Worker", "Accept": "application/vnd.github.v3+json" } });
+        if(!res.ok) return json({ ok:false, error:"github_" + res.status }, 502);
+        const releases = await res.json();
+        if(!Array.isArray(releases) || releases.length === 0){ return json({ ok:false, error:"sin_releases" }, 404); }
+        const release = releases[0];
+        const tag = release.tag_name || "";
+        const versionName = tag.replace(/^v/i, "");
+        const assets = release.assets || [];
+        const apkAsset = assets.find(a => a.name && a.name.endsWith(".apk"));
+        const apkSize = apkAsset ? apkAsset.size : 0;
+        return json({ versionName, tag, apkUrl:"https://gtv-portero.abrel03.workers.dev/api/apk", apkSize, publishedAt: release.published_at || "", notes: release.body || "" });
+      } catch(e){ return json({ ok:false, error: e.message || "error" }, 500); }
+    }
+
+    if(path === "/api/apk"){
+      try {
+        const res = await fetch("https://api.github.com/repos/abrel1990/gtv-apk/releases?per_page=1", { headers: { "Authorization": "token " + env.GITHUB_TOKEN, "User-Agent": "Cloudflare-Worker", "Accept": "application/vnd.github.v3+json" } });
+        if(!res.ok) return new Response("Error GitHub: " + res.status, { status: 502 });
+        const releases = await res.json();
+        if(!Array.isArray(releases) || !releases.length) return new Response("Sin releases", { status: 404 });
+        const assets = releases[0].assets || [];
+        const apkAsset = assets.find(a => a.name && a.name.endsWith(".apk"));
+        if(!apkAsset) return new Response("APK no encontrado en el release", { status: 404 });
+        const assetUrl = "https://api.github.com/repos/abrel1990/gtv-apk/releases/assets/" + apkAsset.id;
+        const apkRes = await fetch(assetUrl, { headers: { "Authorization": "token " + env.GITHUB_TOKEN, "User-Agent": "Cloudflare-Worker", "Accept": "application/octet-stream" }, redirect: "follow" });
+        if(!apkRes.ok) return new Response("Error descargando APK: " + apkRes.status, { status: 502 });
+        return new Response(apkRes.body, { status: 200, headers: { "Content-Type":"application/vnd.android.package-archive", "Content-Disposition":'attachment; filename="' + apkAsset.name + '"', "Content-Length": String(apkAsset.size || 0), "Access-Control-Allow-Origin":"*", "Cache-Control":"no-cache" } });
+      } catch(e){ return new Response("Error: " + e.message, { status: 500 }); }
+    }
+if(path === "/api/debug-token"){
+  const t = env.GITHUB_TOKEN || "";
+  return json({
+    existe: !!t,
+    largo: t.length,
+    empieza: t.slice(0, 7),
+    termina: t.slice(-4),
+    tieneEspacios: t !== t.trim(),
+    caracteresInvalidos: t.replace(/[a-zA-Z0-9_]/g, '').length
   });
 }
-function ifrSet(el,src){
-  if(!el)return;
-  ifrOcultarTodos();
-  el.src=src;
-  el.style.display='block';
-}
-/* Convierte la URL del canal en URL embebible y elige el iframe correspondiente */
-function embedUrl(u){
-  var m;
-  if((m=u.match(/kick\.com\/([\w-]+)/i)))return 'https://player.kick.com/'+m[1];
-  if((m=u.match(/twitch\.tv\/([\w-]+)/i)))return 'https://player.twitch.tv/?channel='+m[1]+'&parent=localhost&muted=false';
-  if((m=u.match(/dailymotion\.com\/(?:embed\/video\/|video\/)?([\w]+)/i)))return 'https://www.dailymotion.com/embed/video/'+m[1];
-  if((m=u.match(/ok\.ru\/(?:videoembed|video|live)\/(\d+)/i)))return 'https://ok.ru/videoembed/'+m[1];
-  return u;
-}
-function ifrDe(u){
-  if(/kick\.com/i.test(u))return D.kickIfr;
-  if(/ok\.ru|odnoklassniki/i.test(u))return D.okIfr;
-  if(/dailymotion/i.test(u))return D.dailymotionIfr;
-  if(/tokyvideo/i.test(u))return D.tokyvideoIfr;
-  return D.ifr;
-}
-function mostrarSinSenal(ch){
-  var el=$('sinSenal');if(!el)return;
-  var img=$('ssLogo'),nom=$('ssNombre');
-  if(ch&&ch.logo){img.src=ch.logo;img.style.display='block'}else img.style.display='none';
-  nom.textContent=(ch&&(ch.nombre||ch.name))?(ch.nombre||ch.name):'Canal';
-  el.classList.remove('hidden');
-}
-function ocultarSinSenal(){var el=$('sinSenal');if(el)el.classList.add('hidden')}
-function limpiarModales(){
-  var m=$('mName');if(m)m.textContent='';
-  var c=$('mCount');if(c)c.textContent='';
-  var i=$('mImg');if(i)i.src='';
-  var l=$('ld');if(l)l.classList.remove('active');
-}
-function limpiarMedia(){
-  ocultarSinSenal();
-  ifrOcultarTodos();
-  D.ld.classList.remove('active');
-}
-
-/* ===== REPRODUCIR ===== */
-function lanzar(ch,pos,total){
-  limpiarModales();
-  var url=ch.url;
-  var esEmbed=EMBED_RE.test(url);
-  var usaNat=hasNat('reproducir')&&!esEmbed;
-  if(S.grid)cerrarGrid(true);
-  limpiarMedia();
-  setView('player');
-  aplicarRot();
-  D.ui.classList.toggle('single',total<2);
-  $('mImg').src=ch.logo||'';
-  $('mName').textContent=ch.nombre||ch.name;
-  var posV=posVisibleDe(pos);
-  $('mCount').textContent=(posV>0?posV:1)+'/'+total;
-  if(usaNat){
-    S.native=true;
-    S.nativeAt=Date.now();
-    nat('reproducir',url,ch.nombre||ch.name,(posV>0?posV:1)+'/'+total,ch.logo||'',ch.referer||'',ch.gain||1.0);
-  } else {
-    /* Embeds (Kick/Twitch/OK/Dailymotion/Tokyvideo): iframe dentro del WebView.
-       Si venimos de un motor nativo, lo frenamos y mostramos el WebView. */
-    S.native=false;
-    if(hasNat('mostrarWebView'))nat('mostrarWebView');
-    ifrSet(ifrDe(url),embedUrl(url));
-  }
-  showUI();
-}
-
-function play(i,origin){
-  origin=origin||'user';
-  if(i<0||i>=S.list.length)return;
-  var now=Date.now();
-  if(origin!=='zap'&&origin!=='native'){
-    if(now-S.exitAt<BLOQUEO_MS)return;
-    if(origin==='user'){
-      if(S.native||S.view!=='list'||S.dlg)return;
-      if(S.lastI===i&&now-S.lastAt<1200)return;
+            if(path === "/api/version-r"){
+      try {
+        const res = await fetch("https://api.github.com/repos/abrel1990/gtv-play-r/releases?per_page=1", { 
+          headers: { 
+            "Authorization": "token " + env.GITHUB_TOKEN, 
+            "User-Agent": "Cloudflare-Worker", 
+            "Accept": "application/vnd.github.v3+json" 
+          } 
+        });
+        if(!res.ok) return json({ ok:false, error:"github_" + res.status }, 502);
+        const releases = await res.json();
+        if(!Array.isArray(releases) || releases.length === 0){ return json({ ok:false, error:"sin_releases" }, 404); }
+        const release = releases[0];
+        const tag = release.tag_name || "";
+        
+        const cleanTag = tag.replace(/^v/i, "").replace(".", "");
+        const versionCode = parseInt(cleanTag, 10) || 0;
+        
+        const assets = release.assets || [];
+        const apkAsset = assets.find(a => a.name && a.name.endsWith(".apk"));
+        const apkSize = apkAsset ? apkAsset.size : 0;
+        
+        return json({ 
+          versionCode, 
+          tag, 
+          apkUrl: "https://gtv-portero.abrel03.workers.dev/api/apk-r", 
+          apkSize, 
+          publishedAt: release.published_at || ""
+        });
+      } catch(e){ return json({ ok:false, error: e.message || "error" }, 500); }
     }
-  }
-  if(!tieneLicencia()&&!demoActiva()){
-    toastBloqueo();return;
-  }
-  var ch=S.list[i];
-  if(S.caidos[ch.url]){mostrarSinSenal(ch);return}
-  if(S.ocultos[ch.url]){zap(1);return}
-  limpiarModales();
-  S.lastI=i;S.lastAt=now;S.index=i;
-  ls.set('gtv_last_index',String(i));
-  nat('sincronizarIndice',i);
-  if(ch.esPeliculas&&ch.urlPeliculasM3U){abrirPeliculas(ch.urlPeliculasM3U);return}
-  S.fromMovies=false;
-  lanzar(ch,i,totalVisible());
-}
 
-function zap(d){
-  if(S.list.length<2)return;
-  var visibles=canalesVisibles();
-  if(!visibles.length)return;
-  var posActual=-1;
-  for(var k=0;k<visibles.length;k++)if(visibles[k]===S.index){posActual=k;break}
-  var nuevaPos;
-  if(posActual<0){nuevaPos=d>0?0:visibles.length-1}
-  else nuevaPos=(posActual+d+visibles.length)%visibles.length;
-  play(visibles[nuevaPos],'zap');
-}
-
-function detener(){
-  S.exitAt=Date.now();
-  var eraNativo=S.native;
-  S.native=false;
-  if(eraNativo&&hasNat('cerrarPlayer')){nat('cerrarPlayer');return}
-  limpiarMedia();
-  if(hasNat('mostrarWebView'))nat('mostrarWebView');
-  if(S.view==='player'){
-    setView(S.fromMovies?'movies':'list');
-    setTimeout(restaurarFoco,30);
-  } else restaurarFoco();
-}
-
-window.zapNativo=function(delta){zap(delta)};
-window.stop=detener;
-window.estoyEnPlayer=function(){return S.view==='player'};
-window._zappingEnCurso=false;
-window.volverDelExo=function(){if(S.exitAt&&Date.now()-S.exitAt<150)return;S.exitAt=Date.now();S.native=false;limpiarMedia();if(S.view==='player'){setView(S.fromMovies?'movies':'list');setTimeout(restaurarFoco,30)}else restaurarFoco()};
-window.sincronizarIndiceJS=function(i){if(i>=0&&i<S.list.length){S.index=i;ls.set('gtv_last_index',String(i))}};
-window.irACanal=function(i){if(i<0||i>=S.list.length)return;S.index=i;ls.set('gtv_last_index',String(i));play(i,'native')};
-window.playDesdeAndroid=function(i){if(i<0||i>=S.list.length)return;play(i,'native')};
-window.nextFn=function(){zap(1)};
-window.prevFn=function(){zap(-1)};
-window.atrasNativo=function(){if(S.dlg||S.grid||S.view==='player'||S.view==='movies'){atras();return true}return false};
-window.rotarDesdeAndroid=function(n){S.rotated=!!n;ls.set('gtv_rot',String(S.rotated));aplicarRot()};
-
-/* ===== RECIBIR LISTA DEL NATIVO ===== */
-window.gtvSetCanales=function(json){
-  try{
-    var arr=typeof json==='string'?JSON.parse(json):json;
-    if(!Array.isArray(arr))return;
-    var nl=[];
-    for(var i=0;i<arr.length;i++){
-      var c=arr[i];
-      nl.push({
-        nombre:c.nombre||c.name||'Canal '+(i+1),
-        name:c.nombre||c.name||'Canal '+(i+1),
-        url:c.url,
-        logo:c.logo||'',
-        referer:c.referer||'',
-        gain:c.gain||1.0,
-        esPeliculas:!!c.esPeliculas,
-        urlPeliculasM3U:c.urlPeliculasM3U||null
-      });
+    if(path === "/api/apk-r"){
+      try {
+        const res = await fetch("https://api.github.com/repos/abrel1990/gtv-play-r/releases?per_page=1", { headers: { "Authorization": "token " + env.GITHUB_TOKEN, "User-Agent": "Cloudflare-Worker", "Accept": "application/vnd.github.v3+json" } });
+        if(!res.ok) return new Response("Error GitHub: " + res.status, { status: 502 });
+        const releases = await res.json();
+        if(!Array.isArray(releases) || !releases.length) return new Response("Sin releases", { status: 404 });
+        const assets = releases[0].assets || [];
+        const apkAsset = assets.find(a => a.name && a.name.endsWith(".apk"));
+        if(!apkAsset) return new Response("APK no encontrado en el release", { status: 404 });
+        const assetUrl = "https://api.github.com/repos/abrel1990/gtv-play-r/releases/assets/" + apkAsset.id;
+        const apkRes = await fetch(assetUrl, { headers: { "Authorization": "token " + env.GITHUB_TOKEN, "User-Agent": "Cloudflare-Worker", "Accept": "application/octet-stream" }, redirect: "follow" });
+        if(!apkRes.ok) return new Response("Error descargando APK: " + apkRes.status, { status: 502 });
+        return new Response(apkRes.body, { status: 200, headers: { "Content-Type":"application/vnd.android.package-archive", "Content-Disposition":'attachment; filename="' + apkAsset.name + '"', "Content-Length": String(apkAsset.size || 0), "Access-Control-Allow-Origin":"*", "Cache-Control":"no-cache" } });
+      } catch(e){ return new Response("Error: " + e.message, { status: 500 }); }
     }
-    /* Si es la misma lista que ya teníamos (restauración al abrir), conservamos el último canal;
-       si es una lista distinta, arrancamos desde el primero. */
-    var igual=S.list.length===nl.length&&nl.length>0&&S.list[0].url===nl[0].url&&S.list[nl.length-1].url===nl[nl.length-1].url;
-    aplicarLista(nl,igual);
-  }catch(e){}
+
+    if(path === "/api/config"){
+      if(!conSello) return new Response("No autorizado", { status: 403 });
+      try {
+        let j = await env.GTV_ARCHIVOS.get("gtv_config.json");
+        if(!j) return json({ error:"sin config" }, 500);
+        return new Response(j, { headers: { "Content-Type":"application/json", "Access-Control-Allow-Origin":"*" } });
+      } catch(e){ return json({ error:"Error config" }, 500); }
+    }
+
+    if(path === "/api/m3u" || path === "/api/m3u-peliculas"){
+      if(!conSello) return new Response("No autorizado", { status: 403 });
+      const esP = path === "/api/m3u-peliculas";
+      try {
+        if(!esP){
+          const items = await leerGlobal(env);
+          let out = "#EXTM3U\n\n";
+          for(const c of items){
+            if(c.oculto) continue;
+            out += '#EXTINF:-1 tvg-logo="'+(c.logo||'')+'"'+(c.tipo?' tvg-tipo="'+c.tipo+'"':'')+' group-title="'+(c.grupo||'General')+'",'+(c.nombre||'Sin nombre')+'\n'+c.url+'\n\n';
+          }
+          const etag = '"' + Math.abs(hashStr(out)) + '"';
+          const inm = request.headers.get("If-None-Match");
+          if(inm === etag) return new Response(null, { status: 304, headers: { "ETag": etag } });
+          return new Response(out, { headers: { "Content-Type":"audio/x-mpegurl", "Access-Control-Allow-Origin":"*", "ETag": etag } });
+        }
+        let m = await env.GTV_ARCHIVOS.get("peliculas.m3u");
+        if(!m) return new Response("Sin peliculas", { status: 404 });
+        return new Response(m, { headers: { "Content-Type":"audio/x-mpegurl", "Access-Control-Allow-Origin":"*" } });
+      } catch(e){ return new Response("Error m3u", { status: 500 }); }
+    }
+
+    if(path === "/api/m3u-master"){
+      if(!conSello) return new Response("No autorizado", { status: 403 });
+      try {
+        const items = await leerGlobal(env);
+        let out = "#EXTM3U\n\n";
+        for(const c of items){
+          if(c.oculto) continue;
+          out += '#EXTINF:-1 tvg-logo="'+(c.logo||'')+'"'+(c.tipo?' tvg-tipo="'+c.tipo+'"':'')+' group-title="'+(c.grupo||'General')+'",'+(c.nombre||'Sin nombre')+'\n'+c.url+'\n\n';
+        }
+        return new Response(out, { headers: { "Content-Type":"audio/x-mpegurl", "Access-Control-Allow-Origin":"*" } });
+      } catch(e){ return new Response("Error m3u-master: " + e.message, { status: 500 }); }
+    }
+
+    if(!conSello) return new Response(paginaAccesoDenegado(), { status: 403, headers:{ "Content-Type":"text/html; charset=utf-8" } });
+    if(path === "/" || path === ""){
+      try {
+        const r = await fetch("https://api.github.com/repos/abrel1990/gtv-app/contents/index.html", { headers: { "Authorization":"token "+env.GITHUB_TOKEN, "User-Agent":"Cloudflare-Worker", "Accept":"application/vnd.github.v3.raw" } });
+        if(!r.ok) return new Response("Error HTML", { status: 500 });
+        return new Response(await r.text(), { headers: { "Content-Type":"text/html" } });
+      } catch(e){ return new Response("Error interno", { status: 500 }); }
+    }
+    return new Response(paginaAccesoDenegado(), { status: 403, headers:{ "Content-Type":"text/html; charset=utf-8" } });
+  }
 };
 
-/* ===== PUBLICIDAD ===== */
-var pubSched={nativeTickerShown:false,nativeModalShown:false,tickerRunning:false,modalRunning:false};
-var pubCfg={tickerActivo:false,tickerTexto:'',tickerFuente:'arial',tickerVelocidad:20,tickerBg:'#111827',tickerAc:'#ffd23f',tickerTamano:14,modalActivo:false,modalTipo:'imagen',modalUrl:'',modalDuracion:5};
-
-function aplicarConfigPub(d){
-  if(!d||!d.publicidad)return;
-  var p=d.publicidad,t=p.ticker||{},m=p.media||{};
-  pubCfg.tickerActivo=!!t.activo;
-  pubCfg.tickerTexto=t.texto||'';
-  pubCfg.tickerVelocidad=Math.max(1,Math.round(Number(t.velocidad)||25));
-  pubCfg.tickerBg=t.colorFondo||'rgba(0,0,0,0.55)';
-  pubCfg.tickerAc=t.colorTexto||'#ffffff';
-  pubCfg.tickerTamano=Math.max(8,Math.min(72,parseInt(t.tamano,10)||14));
-  pubCfg.tickerFuente=String(t.fuente||'arial').toLowerCase().trim();
-  pubCfg.modalActivo=!!m.activo;
-  pubCfg.modalTipo=m.tipo||'imagen';
-  pubCfg.modalUrl=m.url||'';
-  pubCfg.modalDuracion=Math.max(2,Math.round(Number(m.duracionSeg)||12));
-}
-
-window.gtv=window.gtv||{};
-window.gtv.onTickerTerminado=function(){pubSched.nativeTickerShown=false;pubSched.tickerRunning=false};
-window.gtv.onModalTerminado=function(){pubSched.nativeModalShown=false;pubSched.modalRunning=false};
-window.gtv.onNativoListo=function(){};
-window.gtv.onNativoIniciado=function(){};
-window.gtv.onNativoError=function(){};
-
-function pubSchedulerTick(){
-  if(S.locked||S.dlg)return;
-  var enExo=enExoNat();
-  var enPlayer=(S.view==='player')||enExo;
-  if(!enPlayer){
-    if(pubSched.nativeTickerShown&&hasNat('ocultarPublicidad'))nat('ocultarPublicidad');
-    pubSched.nativeTickerShown=false;
-    pubSched.nativeModalShown=false;
-    pubSched.tickerRunning=false;
-    pubSched.modalRunning=false;
-    return;
-  }
-  if(pubCfg.tickerActivo&&pubCfg.tickerTexto&&!pubSched.tickerRunning){
-    if(enExo&&hasNat('mostrarTickerConFuente')){
-      nat('mostrarTickerConFuente',String(pubCfg.tickerTexto),'',pubCfg.tickerVelocidad,String(pubCfg.tickerBg),String(pubCfg.tickerAc),pubCfg.tickerTamano,String(pubCfg.tickerFuente));
-      pubSched.nativeTickerShown=true;
-      pubSched.tickerRunning=true;
-      setTimeout(function(){if(!pubSched.nativeTickerShown)return;pubSched.nativeTickerShown=false;pubSched.tickerRunning=false},pubCfg.tickerVelocidad*1000+1000);
+function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){ h=((h<<5)-h)+s.charCodeAt(i); h=h&h; } return h; }
+function quitarDelM3U(text, urlObjetivo){
+  const lines = text.split(/\r?\n/), out = [];
+  for(let i=0;i<lines.length;i++){
+    const l = lines[i];
+    if(l.indexOf("#EXTINF") === 0){
+      let j = i+1, url = "";
+      for(; j<lines.length && j<i+6; j++){ const l2 = lines[j].trim(); if(l2.indexOf("#EXTINF") === 0) break; if(l2.indexOf("http://")===0 || l2.indexOf("https://")===0){ url = l2; break; } }
+      if(url === urlObjetivo){ i = j; continue; }
     }
+    out.push(l);
   }
-  if(pubCfg.modalActivo&&pubCfg.modalUrl&&!pubSched.modalRunning){
-    if(enExo&&hasNat('mostrarModalPublicidad')){
-      nat('mostrarModalPublicidad',pubCfg.modalUrl,pubCfg.modalTipo==='video',pubCfg.modalDuracion);
-      pubSched.nativeModalShown=true;
-      pubSched.modalRunning=true;
-      setTimeout(function(){if(!pubSched.nativeModalShown)return;pubSched.nativeModalShown=false;pubSched.modalRunning=false},pubCfg.modalDuracion*1000+1000);
-    }
-  }
+  return out.join("\n");
 }
-function enExoNat(){if(hasNat('estaEnExo')){try{return !!nat('estaEnExo')}catch(e){}}return !!S.native}
-
-/* ===== GPLIS CINEMA ===== */
-var M={url:'',at:0,items:[],byUrl:new Map(),tiles:[],series:new Map(),genres:[],favs:ls.getJ('peliculasFavoritos',[]),hist:ls.getJ('peliculasHistory',[]),nuevo:{},reco:null};
-var G={list:[],n:0,caps:false};
-
-function iconoDe(u){if(/twitch\.tv/i.test(u))return '🎮';if(/youtube\.com|youtu\.be/i.test(u))return '▶️';return '📺'}
-var GEN={'romántica':'Romance','romantica':'Romance','accion':'Acción'};
-function normGenero(g){var k=g.toLowerCase();return GEN[k]||(g.charAt(0).toUpperCase()+g.slice(1).toLowerCase())}
-function detectarSerie(title){
-  var reT=/(^|[^a-z'’])(?:temporada|season|serie|temp|t|s)\s*0?(\d{1,2})(?!\d)/i;
-  var reC=/(^|[^a-z'’])(?:cap[ií]tulo|episodio|episode|cap|ep|c|e)\s*0?(\d{1,3})(?!\d)/i;
-  var s=title,temp=1,cap=0,es=false,m;
-  if((m=s.match(reT))){temp=parseInt(m[2],10);es=true;s=s.replace(m[0],m[1])}
-  if((m=s.match(reC))){cap=parseInt(m[2],10);es=true;s=s.replace(m[0],m[1])}
-  s=s.replace(/\s{2,}/g,' ').replace(/^[\s-]+|[\s-]+$/g,'');
-  if(!es||!s)return {es:false,nombre:title,temp:1,cap:0};
-  return {es:true,nombre:s,temp:temp,cap:cap};
+function paginaAccesoDenegado(){
+  return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Acceso Denegado</title><style>*{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;background:#000;color:#fff;font-family:Arial,sans-serif}body{display:flex;justify-content:center;align-items:center;text-align:center;padding:20px}h1{color:#FFD700;font-size:28px;margin:18px 0}.e{font-size:80px}p{color:#888}p strong{color:#FFD700}</style></head><body><div><div class="e">&#x1F60F;</div><h1>JAJAJA, &iquest;Pensaste que era tan f&aacute;cil?</h1><p>App creada por <strong>Gabitosila</strong></p></div></body></html>';
 }
-function serieDe(it){return it._s||(it._s=detectarSerie(it.title))}
-function slim(it){return {title:it.title,logo:it.logo,url:it.url,genre:it.genre,year:it.year}}
-function agrupar(items,prefix){
-  var map={},out=[];
-  items.forEach(function(it){
-    var s=serieDe(it);
-    if(!s.es){out.push(it);return}
-    var key=prefix+'|'+s.nombre+'|'+s.temp,t=map[key];
-    if(!t){t={serie:true,key:key,title:s.nombre+' T'+s.temp,serieNombre:s.nombre,temporada:s.temp,caps:[],logo:it.logo,year:it.year||'N/S',genre:it.genre};map[key]=t;out.push(t);M.series.set(key,t)}
-    t.caps.push(it);
-  });
-  out.forEach(function(t){if(t.serie)t.caps.sort(function(a,b){return serieDe(a).cap-serieDe(b).cap})});
-  return out;
-}
-function parsePelis(text){
-  var items=[],lines=text.split(/\r?\n/);
-  for(var i=0;i<lines.length;i++){
-    var fl=lines[i];
-    if(fl.indexOf('#EXTINF')!==0)continue;
-    var url='';
-    for(var j=i+1;j<i+5&&j<lines.length;j++){
-      var l2=lines[j].trim();
-      if(/^https?:\/\//i.test(l2)){url=l2;break}
-      if(l2.indexOf('#EXTINF')===0)break;
-    }
-    if(!url)continue;
-    var gm=fl.match(/group-title="([^"]*)"/i),genre=normGenero((gm&&gm[1].trim())||'General');
-    var lg=fl.match(/tvg-logo="([^"]*)"/i),logo=(lg&&lg[1])||FB_POSTER;
-    var title='',c=fl.lastIndexOf(',');
-    if(c!==-1&&c<fl.length-1)title=fl.substring(c+1).trim().replace(/^["']|["']$/g,'');
-    if(!title){var tn=fl.match(/tvg-name="([^"]*)"/i);if(tn)title=tn[1].trim()}
-    if(!title)title='Sin nombre';
-    var ym=title.match(/\b(19|20)\d{2}\b/),year;
-    if(ym)year=ym[0];
-    else{var all=fl.match(/\b(19|20)\d{2}\b/g);year=all?all[all.length-1]:'N/S'}
-    items.push({title:title,logo:logo,url:url,genre:genre,year:year,h:hnum(title+'|'+url)});
-  }
-  M.items=items;
-  M.byUrl=new Map();
-  items.forEach(function(it){M.byUrl.set(it.url,it)});
-  var prev=ls.getJ('gtv_pelis_fp',null),nuevo=ls.getJ('gtv_pelis_new',{}),now=Date.now();
-  if(prev){var ps=new Set(prev);items.forEach(function(it){if(!ps.has(it.h))nuevo[it.h]=now})}
-  Object.keys(nuevo).forEach(function(k){if(now-nuevo[k]>NUEVO_DIAS*86400000)delete nuevo[k]});
-  M.nuevo=nuevo;
-  ls.setJ('gtv_pelis_fp',items.map(function(it){return it.h}));
-  ls.setJ('gtv_pelis_new',nuevo);
-  M.series.clear();M.reco=null;
-  M.tiles=agrupar(items,'c');
-  var gm2={};
-  M.tiles.forEach(function(t){var g=t.genre||'General';(gm2[g]||(gm2[g]=[])).push(t)});
-  M.genres=Object.keys(gm2).map(function(g){return {name:g,tiles:gm2[g],prev:shuffle(gm2[g].slice()).slice(0,8)}});
-  shuffle(M.genres);
-}
-function ordenar(l){return l.slice().sort(function(a,b){var x=a._k||(a._k=a.title.toLowerCase()),y=b._k||(b._k=b.title.toLowerCase());return x<y?-1:x>y?1:0})}
-function esFav(u){for(var i=0;i<M.favs.length;i++)if(M.favs[i].url===u)return true;return false}
-function esNuevo(t){if(!M.nuevo)return false;if(t.serie){for(var i=0;i<t.caps.length;i++)if(M.nuevo[t.caps[i].h])return true;return false}return !!M.nuevo[t.h]}
-function buscarItem(u){var it=M.byUrl.get(u);if(it)return it;var i;for(i=0;i<M.favs.length;i++)if(M.favs[i].url===u)return M.favs[i];for(i=0;i<M.hist.length;i++)if(M.hist[i].url===u)return M.hist[i];return null}
-function cardHtml(t,o){
-  o=o||{};
-  var serie=!!t.serie,id=serie?'data-k="'+esc(t.key)+'"':'data-u="'+esc(t.url)+'"';
-  var b='<span class="pelicula-year-badge">'+esc(t.year||'N/S')+'</span><span class="pelicula-type-badge">'+(serie?'📺':iconoDe(t.url))+'</span>';
-  if(esNuevo(t))b+='<span class="pelicula-new-badge">NUEVO</span>';
-  if(o.hist)b+='<span class="delete-history-btn" data-act="del">🗑️</span>';
-  var titulo=t.title;
-  if(o.cap){var s=serieDe(t);titulo=s.cap>0?'Capítulo '+s.cap:t.title}
-  var fav='';
-  if(!serie){var f=esFav(t.url);fav='<span class="pelicula-fav-btn'+(f?' active':'')+'" data-act="fav">'+(f?'⭐':'☆')+'</span>'}
-  return '<div class="pelicula-card" tabindex="0" '+id+'><div class="pelicula-card-img"><img src="'+esc(t.logo||FB_POSTER)+'" alt="" loading="lazy" decoding="async">'+b+'</div><div class="pelicula-card-info"><div class="pelicula-card-title">'+esc(titulo)+'</div></div>'+fav+'</div>';
-}
-function seccion(titulo,tiles,o){
-  o=o||{};
-  var h='<div class="peliculas-section"'+(o.hist?' data-sec="hist"':'')+'><div class="section-header"><div class="section-title">'+esc(titulo)+'</div></div><div class="slider-container"><div class="cards-slider">';
-  for(var i=0;i<tiles.length;i++)h+=cardHtml(tiles[i],o);
-  if(o.genre)h+='<div class="ver-todos-card" tabindex="0" data-genre="'+esc(o.genre)+'"><div class="ico">📺</div><div class="txt">VER TODOS</div><div class="cnt">'+o.total+' títulos</div></div>';
-  return h+'</div></div></div>';
-}
-function renderPelis(){
-  var h=[];
-  if(M.favs.length)h.push(seccion('⭐ FAVORITOS',agrupar(M.favs,'f').slice(0,10)));
-  if(M.hist.length){
-    h.push(seccion('📺 YA VISTAS',agrupar(M.hist,'h').slice(0,8),{hist:true}));
-    var lw=M.hist[0];
-    if(!M.reco||M.reco.u!==lw.url){
-      var pool=M.items.filter(function(c){return c.genre===lw.genre&&c.url!==lw.url});
-      M.reco={u:lw.url,tiles:agrupar(shuffle(pool).slice(0,10),'r')};
-    }
-    if(M.reco.tiles.length)h.push(seccion('💡 RECOMENDADAS',M.reco.tiles));
-  }
-  M.genres.forEach(function(g){h.push(seccion(g.name.toUpperCase(),g.prev,{genre:g.name,total:g.tiles.length}))});
-  D.mc.innerHTML=h.join('')||'<div class="msg">⚠️ No hay títulos</div>';
-  $('mcount').textContent=M.items.length+' TÍTULOS';
-  S.pelisDirty=false;
-}
-function focoPelis(){setTimeout(function(){var c=buscarCard(D.mc,S.lastMovieUrl);if(!c)c=D.mc.querySelector('.pelicula-card,.ver-todos-card');if(c)c.focus()},30)}
-function buscarCard(root,id){
-  if(!id)return null;
-  var l=root.querySelectorAll('.pelicula-card,.ver-todos-card');
-  for(var i=0;i<l.length;i++){var d=l[i].dataset;if(d.u===id||d.k===id||d.genre===id)return l[i]}
-  return null;
-}
-function abrirPeliculas(url){
-  S.fromMovies=false;
-  setView('movies');
-  var fresco=M.url===url&&M.items.length&&(Date.now()-M.at)<300000;
-  if(M.items.length&&M.url===url){renderPelis();focoPelis();if(fresco)return}
-  else D.mc.innerHTML='<div class="msg">⏳ Cargando títulos…</div>';
-  M.url=url;
-  fetchW(url+'?t='+Date.now(),15000).then(function(r){return r.text()}).then(function(t){
-    parsePelis(t);M.at=Date.now();
-    if(S.view==='movies'&&!S.grid){renderPelis();focoPelis()}
-    else S.pelisDirty=true;
-  }).catch(function(){if(!M.items.length)D.mc.innerHTML='<div class="msg err">❌ Error al cargar</div>'});
-}
-function salirPeliculas(){S.fromMovies=false;if(S.grid)cerrarGrid(true);setView('list');restaurarFoco()}
-function toggleFav(u){
-  var it=buscarItem(u);if(!it)return;
-  var i=-1;
-  for(var k=0;k<M.favs.length;k++)if(M.favs[k].url===u){i=k;break}
-  if(i<0)M.favs.unshift(slim(it));else M.favs.splice(i,1);
-  ls.setJ('peliculasFavoritos',M.favs);
-  S.pelisDirty=true;
-}
-function quitarHist(u){M.hist=M.hist.filter(function(v){return v.url!==u});ls.setJ('peliculasHistory',M.hist);S.pelisDirty=true}
-function addHist(it){M.hist=M.hist.filter(function(v){return v.url!==it.url});M.hist.unshift(slim(it));if(M.hist.length>20)M.hist.length=20;ls.setJ('peliculasHistory',M.hist);S.pelisDirty=true}
-function longPress(card){
-  if(card.dataset.k||card.classList.contains('ver-todos-card'))return;
-  var u=card.dataset.u;
-  if(card.closest('[data-sec="hist"]'))quitarHist(u);else toggleFav(u);
-}
-function reproPeli(it){
-  var now=Date.now();
-  if(S.native||S.dlg||now-S.exitAt<BLOQUEO_MS)return;
-  if(S.lastU===it.url&&now-S.lastAt<1200)return;
-  S.lastU=it.url;S.lastAt=now;S.lastMovieUrl=it.url;
-  addHist(it);
-  S.fromMovies=true;
-  lanzar({nombre:it.title,logo:it.logo,url:it.url},0,1);
-}
-function activarCard(card){
-  if(!card)return;
-  if(card.classList.contains('ver-todos-card')){abrirGenero(card.dataset.genre);return}
-  if(card.dataset.k){var t=M.series.get(card.dataset.k);if(t)openGrid('📺 '+t.serieNombre+' - Temporada '+t.temporada,t.caps,true);return}
-  var it=buscarItem(card.dataset.u);
-  if(it)reproPeli(it);
-}
-function clickPelis(e){
-  if(Date.now()-S.suppressClick<700)return;
-  var card=e.target.closest?e.target.closest('.pelicula-card,.ver-todos-card'):null;
-  if(!card)return;
-  var act=e.target.closest('[data-act]');
-  if(act){
-    var a=act.dataset.act;
-    if(a==='fav')toggleFav(card.dataset.u);
-    else if(a==='del')quitarHist(card.dataset.u);
-    return;
-  }
-  activarCard(card);
-}
-function bindPress(el){
-  var t=null;
-  var clear=function(){clearTimeout(t);t=null};
-  var start=function(e){
-    var c=e.target.closest?e.target.closest('.pelicula-card'):null;
-    if(!c||e.target.closest('[data-act]'))return;
-    clear();
-    t=setTimeout(function(){t=null;S.suppressClick=Date.now();longPress(c)},800);
-  };
-  el.addEventListener('touchstart',start,{passive:true});
-  el.addEventListener('mousedown',start);
-  ['touchend','touchmove','touchcancel','mouseup','mouseleave'].forEach(function(n){el.addEventListener(n,clear,{passive:true})});
-  el.addEventListener('contextmenu',function(e){e.preventDefault()});
-}
-function openGrid(titulo,list,caps){
-  G.list=list;G.n=0;G.caps=!!caps;
-  D.gt.textContent=titulo;
-  D.gc.innerHTML='';
-  D.grid.scrollTop=0;
-  S.gridOpener=document.activeElement;
-  S.grid=true;
-  D.grid.classList.add('active');
-  masGrid();
-  setTimeout(function(){var c=D.gc.firstElementChild;if(c)c.focus();else $('gclose').focus()},40);
-}
-function masGrid(){
-  if(G.n>=G.list.length)return;
-  var end=Math.min(G.n+60,G.list.length),h='';
-  for(var i=G.n;i<end;i++)h+=cardHtml(G.list[i],{cap:G.caps});
-  G.n=end;
-  D.gc.insertAdjacentHTML('beforeend',h);
-}
-function cerrarGrid(silencioso){
-  S.grid=false;
-  D.grid.classList.remove('active');
-  if(silencioso)return;
-  if(S.pelisDirty){renderPelisKeep();return}
-  var o=S.gridOpener;
-  if(o&&document.body.contains(o))o.focus();else focoPelis();
-}
-function renderPelisKeep(){
-  var a=document.activeElement,id=a&&a.dataset?(a.dataset.u||a.dataset.k||a.dataset.genre):null,st=D.movies.scrollTop;
-  renderPelis();
-  D.movies.scrollTop=st;
-  var c=buscarCard(D.mc,id);
-  if(c){try{c.focus({preventScroll:true})}catch(e){c.focus()}}
-  else focoPelis();
-}
-function abrirGenero(nombre){
-  var g=null;
-  for(var i=0;i<M.genres.length;i++)if(M.genres[i].name===nombre){g=M.genres[i];break}
-  if(g)openGrid('📺 '+nombre.toUpperCase(),ordenar(g.tiles),false);
-}
-function abrirTodos(){if(M.items.length)openGrid('📺 TODOS LOS TÍTULOS',ordenar(M.tiles),false)}
-
-/* ===== NAVEGACIÓN ===== */
-function keyName(e){
-  switch(e.key){
-    case 'Enter':case 'OK':case 'Select':case 'Accept':return 'ok';
-    case 'Escape':case 'Backspace':case 'GoBack':case 'BrowserBack':return 'back';
-    case 'ArrowUp':return 'up';
-    case 'ArrowDown':return 'down';
-    case 'ArrowLeft':return 'left';
-    case 'ArrowRight':return 'right';
-    case 'ChannelUp':return 'chup';
-    case 'ChannelDown':return 'chdn';
-  }
-  switch(e.keyCode){
-    case 13:case 23:case 66:return 'ok';
-    case 4:case 8:case 27:return 'back';
-    case 38:return 'up';case 40:return 'down';case 37:return 'left';case 39:return 'right';
-    case 427:return 'chup';case 428:return 'chdn';
-  }
-  return null;
-}
-function atras(){
-  var now=Date.now();
-  if(now-S.backAt<250)return;
-  S.backAt=now;
-  if(S.dlg){cerrarDialogo();return}
-  if(S.grid){cerrarGrid();return}
-  if(S.view==='player'){detener();return}
-  if(S.view==='movies'){salirPeliculas();return}
-  try{if(hasNat('salirApp')){nat('salirApp');return}}catch(e){}
-  try{window.close()}catch(e){}
-}
-function navDialog(k,e){
-  var a=document.activeElement,enInput=a&&a.tagName==='INPUT';
-  /* Dentro de un campo de texto, izquierda/derecha/OK se dejan al teclado */
-  if(enInput&&(k==='left'||k==='right'||k==='ok'))return;
-  e.preventDefault();
-  var bs=dlgBtns();
-  if(!bs.length)return;
-  var i=bs.indexOf(a);
-  if(k==='right'||k==='down')bs[(i+1)%bs.length].focus();
-  else if(k==='left'||k==='up')bs[(i-1+bs.length)%bs.length].focus();
-  else if(k==='ok'&&!e.repeat)(i>=0?bs[i]:bs[0]).click();
-}
-function okDown(card){S.okDown=card;S.okFired=false;clearTimeout(S.okTimer);S.okTimer=setTimeout(function(){S.okFired=true;longPress(card)},800)}
-function navGrid(k,e){
-  var a=document.activeElement,close=$('gclose');
-  if(a===close){
-    if(k==='ok'){e.preventDefault();if(!e.repeat)cerrarGrid()}
-    else if(k==='down'){e.preventDefault();var f=D.gc.firstElementChild;if(f)f.focus()}
-    return;
-  }
-  var cards=D.gc.children,i=Array.prototype.indexOf.call(cards,a);
-  e.preventDefault();
-  if(i<0){var c0=cards[0];if(c0)c0.focus();else close.focus();return}
-  if(k==='ok'){if(!e.repeat)okDown(a);return}
-  var cols=colsDe(D.gc),n=i;
-  if(k==='right')n=i+1;
-  else if(k==='left')n=i-1;
-  else if(k==='down')n=i+cols;
-  else if(k==='up'){if(i<cols){close.focus();return}n=i-cols}
-  else return;
-  if(n>=cards.length&&G.n<G.list.length)masGrid();
-  if(n>=cards.length)n=cards.length-1;
-  if(n>=0&&n!==i)cards[n].focus();
-}
-function colsDe(el){
-  var c=el.children;if(!c.length)return 4;
-  var t=c[0].offsetTop,n=1;
-  while(n<c.length&&c[n].offsetTop===t)n++;
-  return n;
-}
-function navPelis(k,e){
-  var a=document.activeElement,hdr=[$('mback'),$('mcount')],hi=hdr.indexOf(a);
-  e.preventDefault();
-  if(hi>=0){
-    if(k==='right'&&hi<1)hdr[1].focus();
-    else if(k==='left'&&hi>0)hdr[0].focus();
-    else if(k==='down'){var c=D.mc.querySelector('.pelicula-card,.ver-todos-card');if(c)c.focus()}
-    else if(k==='ok'&&!e.repeat){if(hi===0)salirPeliculas();else abrirTodos()}
-    return;
-  }
-  var card=a&&a.closest?a.closest('.pelicula-card,.ver-todos-card'):null;
-  if(!card){var f=D.mc.querySelector('.pelicula-card,.ver-todos-card');if(f)f.focus();else hdr[0].focus();return}
-  if(k==='ok'){if(!e.repeat)okDown(card);return}
-  var row=card.parentNode,cards=row.children,i=Array.prototype.indexOf.call(cards,card);
-  if(k==='right'){if(cards[i+1])cards[i+1].focus()}
-  else if(k==='left'){if(cards[i-1])cards[i-1].focus()}
-  else if(k==='down'||k==='up'){
-    var sec=row.parentNode.parentNode,s=k==='down'?sec.nextElementSibling:sec.previousElementSibling;
-    if(!s){if(k==='up')hdr[0].focus();return}
-    var r2=s.querySelector('.cards-slider'),x=card.getBoundingClientRect().left,best=r2.children[0],bd=1e9;
-    for(var j=0;j<r2.children.length;j++){var d=Math.abs(r2.children[j].getBoundingClientRect().left-x);if(d<bd){bd=d;best=r2.children[j]}}
-    if(best)best.focus();
-  }
-}
-function navLista(k,e){
-  var a=document.activeElement;
-  if(a===D.btnMenu){
-    if(k==='left'){e.preventDefault();D.bar.focus()}
-    else if(k==='down'){e.preventDefault();focusCard(S.index)}
-    else if(k==='ok'){e.preventDefault();if(!e.repeat)abrirSettings()}
-    return;
-  }
-  if(a===D.bar){
-    if(k==='down'){e.preventDefault();focusCard(S.index)}
-    else if(k==='right'){e.preventDefault();D.btnMenu.focus()}
-    else if(k==='ok'){e.preventDefault();if(!e.repeat)infoDialog()}
-    return;
-  }
-  /* Estado vacío: el botón "AGREGAR LISTA" maneja OK; arriba vuelve a la barra */
-  var ab=$('btnAddList');
-  if(ab&&a===ab){
-    if(k==='up'){e.preventDefault();D.btnMenu.focus()}
-    else if(k==='ok'){e.preventDefault();if(!e.repeat)abrirSettings()}
-    return;
-  }
-  var idx=(a&&a.classList&&a.classList.contains('card'))?parseInt(a.dataset.i,10):-1;
-  if(idx<0){
-    if(k==='ok'||k==='up'||k==='down'||k==='left'||k==='right'){
-      e.preventDefault();
-      if(ab)ab.focus();else focusCard(S.index);
-    }
-    return;
-  }
-  if(k==='ok'){e.preventDefault();if(!e.repeat)play(idx,'user');return}
-  var vis=canalesVisibles(),len=vis.length,posVis=-1;
-  for(var q=0;q<len;q++)if(vis[q]===idx){posVis=q;break}
-  if(posVis<0){e.preventDefault();focusCard(S.index);return}
-  var cols=colsDe(D.list),n=posVis;
-  if(k==='down'){n=posVis+cols;if(n>=len&&Math.floor(posVis/cols)<Math.floor((len-1)/cols))n=len-1}
-  else if(k==='up'){if(posVis<cols){e.preventDefault();D.bar.focus();return}n=posVis-cols}
-  else if(k==='left')n=posVis-1;
-  else if(k==='right')n=posVis+1;
-  else return;
-  e.preventDefault();
-  if(n>=0&&n<len&&n!==posVis){S.index=vis[n];focusCard(vis[n])}
-}
-var navBusy=false;
-function frenar(e){if(e.repeat&&navBusy){e.preventDefault();return true}navBusy=true;(window.requestAnimationFrame||setTimeout)(function(){navBusy=false});return false}
-document.addEventListener('keydown',function(e){
-  if(S.locked)return;
-  var k=keyName(e);
-  if(!k)return;
-  if(k==='back'){
-    /* Backspace dentro de un campo de texto borra caracteres; no es "atrás" */
-    if(e.target&&e.target.tagName==='INPUT'&&(e.key==='Backspace'||e.keyCode===8))return;
-    e.preventDefault();e.stopPropagation();atras();return;
-  }
-  if(S.dlg){navDialog(k,e);return}
-  if(k!=='ok'&&(S.grid||S.view==='movies'||S.view==='list')&&frenar(e))return;
-  if(S.grid){navGrid(k,e);return}
-  if(S.view==='player'){e.preventDefault();showUI();if(k==='right'||k==='chup')zap(1);else if(k==='left'||k==='chdn')zap(-1);return}
-  if(S.view==='movies'){navPelis(k,e);return}
-  navLista(k,e);
-});
-document.addEventListener('keyup',function(e){
-  if(S.locked||!S.okDown||keyName(e)!=='ok')return;
-  e.preventDefault();
-  clearTimeout(S.okTimer);
-  var c=S.okDown;
-  S.okDown=null;
-  if(S.okFired){S.okFired=false;return}
-  activarCard(c);
-});
-
-/* ===== INICIALIZACIÓN ===== */
-function cargarListaInicial(){
-  var cached=ls.getJ('gtv_channels',null);
-  if(cached&&cached.length){
-    aplicarLista(cached,true);   // también sincroniza la lista con el nativo (setLista)
-  } else {
-    renderLista();
-  }
-}
-
-function iniciarApp(){
-  try{registrarDispositivo();verificarBaneo()}catch(e){}
-  fetchW(BAN_URL+'/api/fecha?device='+encodeURIComponent(deviceId),8000).then(function(r){return r.json()}).then(function(d){
-    if(d&&d.primeraVez){lic.demoStart=new Date(d.primeraVez).getTime();remote.demoSrv=true;guardarLic();actualizarBarra()}
-  }).catch(noop);
-  aplicarCacheEstado();
-  sincronizarEstadoCanales();
-  setInterval(actualizarBarra,30000);
-  setInterval(function(){if(!document.hidden||enExoNat())pubSchedulerTick()},1500);
-  setTimeout(pubSchedulerTick,2000);
-  setInterval(function(){if(!S.native&&!document.hidden)sincronizarEstadoCanales()},3*60*1000);
-  document.addEventListener('visibilitychange',function(){if(!document.hidden&&!S.native)sincronizarEstadoCanales();if(!document.hidden)setTimeout(pubSchedulerTick,500)});
-}
-
-/* ===== EVENTOS DE UI ===== */
-D.list.addEventListener('click',function(e){
-  var c=e.target.closest?e.target.closest('.card'):null;
-  if(c)play(parseInt(c.dataset.i,10),'user');
-});
-D.bar.addEventListener('click',function(){infoDialog()});
-D.btnMenu.addEventListener('click',function(e){e.stopPropagation();abrirSettings()});
-D.mc.addEventListener('click',clickPelis);
-D.gc.addEventListener('click',clickPelis);
-bindPress(D.mc);
-bindPress(D.gc);
-$('mback').addEventListener('click',salirPeliculas);
-$('mcount').addEventListener('click',abrirTodos);
-$('gclose').addEventListener('click',function(){cerrarGrid()});
-D.grid.addEventListener('scroll',function(){if(D.grid.scrollTop+D.grid.clientHeight>D.grid.scrollHeight-500)masGrid()});
-D.list.addEventListener('error',function(e){var t=e.target;if(t.tagName==='IMG'&&!t.dataset.fb){t.dataset.fb='1';t.src=FB_LOGO}},true);
-[D.mc,D.gc].forEach(function(r){r.addEventListener('error',function(e){var t=e.target;if(t.tagName==='IMG'&&!t.dataset.fb){t.dataset.fb='1';t.src=FB_POSTER}},true)});
-$('goPrev').onclick=function(){zap(-1)};
-$('goNext').onclick=function(){zap(1)};
-$('goBack').onclick=detener;
-$('goRot').onclick=function(){S.rotated=!S.rotated;ls.set('gtv_rot',String(S.rotated));aplicarRot();nat('rotarDesdeAndroid',S.rotated);showUI()};
-$('shield').onclick=showUI;
-
-window.addEventListener('resize',function(){S.cols=0});
-
-/* ===== ARRANQUE ===== */
-cargarLicLocal();
-actualizarBarra();
-cargarListaInicial();
-setTimeout(function(){
-  cargarConfig().then(function(r){
-    iniciarApp();
-  }).catch(function(e){
-    iniciarApp();
-  });
-},200);
-setTimeout(popupNovedades,2500);
-})();
-</script>
-</body>
-</html>
