@@ -22,24 +22,44 @@ jobs:
       - name: Bump Version
         id: bump
         run: |
-          LAST_TAG=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/abrel1990/gtv-play-r/releases/latest | grep -oP '"tag_name":\s*"v\K[0-9.]+')
-          
+          # Obtenemos el último tag de release (formato vX.Y)
+          LAST_TAG=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/abrel1990/gtv-play-r/releases/latest \
+            | grep -oP '"tag_name":\s*"v\K[0-9.]+')
+
           if [ -z "$LAST_TAG" ]; then
+            # No hay release previo: arrancamos en 10
             NEW_CODE=10
             NEW_NAME="0.10"
           else
-            if [[ "$LAST_TAG" == *.* ]]; then
-              NEW_CODE=$(echo "$LAST_TAG" | tr -d '.')
-            else
-              NEW_CODE=$LAST_TAG
+            # Tomamos la parte decimal del tag (ej: 0.10 -> 10)
+            MINOR=$(echo "$LAST_TAG" | cut -d'.' -f2)
+            if [ -z "$MINOR" ]; then
+              MINOR=10
             fi
-            NEW_CODE=$((NEW_CODE + 1))
+            # Sumamos 1 en base 10 (nunca octal)
+            NEW_CODE=$((10#$MINOR + 1))
             NEW_NAME="0.${NEW_CODE}"
           fi
 
+          # Sanity check: el código debe ser un entero positivo
+          if ! [[ "$NEW_CODE" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: NEW_CODE inválido ($NEW_CODE), usando 10 por defecto"
+            NEW_CODE=10
+            NEW_NAME="0.10"
+          fi
+
+          # Forzamos base 10 explícita para evitar interpretación octal
+          NEW_CODE=$((10#$NEW_CODE))
+
+          # Escribimos el versionCode y versionName en app/build.gradle
           sed -i "s/versionCode [0-9]*/versionCode $NEW_CODE/" app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"$NEW_NAME\"/" app/build.gradle
-          
+
+          # Verificamos que el sed haya funcionado
+          echo "--- app/build.gradle (líneas de versión) ---"
+          grep -E "versionCode|versionName" app/build.gradle || true
+
           echo "NEW_CODE=$NEW_CODE" >> $GITHUB_ENV
           echo "NEW_NAME=$NEW_NAME" >> $GITHUB_ENV
           echo "Generando versión: v$NEW_NAME (Code: $NEW_CODE)"
