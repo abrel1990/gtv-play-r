@@ -159,8 +159,6 @@ public class MainActivity extends AppCompatActivity {
     private Runnable pubModalClose;
 
     private volatile boolean webViewListo = false;
-
-    // Lista maestra guardada hasta que el splash + index.html estén listos
     private volatile String listaLegada = null;
     private volatile boolean splashTerminado = false;
     private volatile boolean indexListo = false;
@@ -380,7 +378,6 @@ public class MainActivity extends AppCompatActivity {
         configurarWebView();
         configurarBotones();
 
-        // 1) Cargar el splash primero
         myWebView.loadUrl("file:///android_asset/splash.html");
 
         ocultarBarrasSistema();
@@ -391,7 +388,6 @@ public class MainActivity extends AppCompatActivity {
             catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
         }, 5000);
 
-        // 2) Consultar la lista maestra en paralelo mientras el splash se ve
         handler.postDelayed(() -> consultarListaMaestraAlIniciar(0), 500);
     }
 
@@ -465,6 +461,9 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
         mostrarControles();
         playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+        overlayControls.setVisibility(View.VISIBLE);
+        overlayControls.bringToFront();
+        overlayControls.requestFocus();
     }
 
     private void reproducirEnYouTube(Canal c) {
@@ -511,6 +510,11 @@ public class MainActivity extends AppCompatActivity {
         }
         mostrarControles();
         playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+        youtubePlayerView.setFocusable(false);
+        youtubePlayerView.setFocusableInTouchMode(false);
+        overlayControls.setVisibility(View.VISIBLE);
+        overlayControls.bringToFront();
+        overlayControls.requestFocus();
     }
 
     private void cargarVideoEnYoutubeNativo(final String videoId, final int tok) {
@@ -613,6 +617,9 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(this::actualizarWatchNext, 5000);
         mostrarControles();
         playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+        overlayControls.setVisibility(View.VISIBLE);
+        overlayControls.bringToFront();
+        overlayControls.requestFocus();
     }
 
     private MediaSource construirMediaSource(Canal c) {
@@ -817,7 +824,6 @@ public class MainActivity extends AppCompatActivity {
                 if (url != null && url.contains("index.html")) {
                     indexListo = true;
                     Log.d(TAG, "index.html cargado, listo=" + (listaLegada != null));
-                    // Si ya tenemos la lista maestra, enviarla
                     if (listaLegada != null) {
                         enviarListaAlHtmlConReintentos(listaLegada, 0);
                     }
@@ -1369,17 +1375,14 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
-    // ===== CONSULTA DE LISTA MAESTRA AL INICIAR =====
     private void consultarListaMaestraAlIniciar(final int intento) {
         if (intento > 10) {
             Log.e(TAG, "Lista maestra: demasiados reintentos, usando fallback local");
             handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
             return;
         }
-
         new Thread(() -> {
             try {
-                // 1) Pedir la URL de la lista maestra
                 URL url = new URL(LISTA_MAESTRA_URL);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
@@ -1413,7 +1416,6 @@ public class MainActivity extends AppCompatActivity {
                     listaUrl = "https://gtv-portero.abrel03.workers.dev" + listaUrl;
                 }
 
-                // 2) Descargar la lista maestra
                 URL urlLista = new URL(listaUrl);
                 HttpURLConnection conn2 = (HttpURLConnection) urlLista.openConnection();
                 conn2.setRequestMethod("GET");
@@ -1449,9 +1451,7 @@ public class MainActivity extends AppCompatActivity {
                     indiceActual = 0;
                     listaLegada = contenido;
                     Log.d(TAG, "Lista maestra lista: " + lista.size() + " canales (esperando splash)");
-                    // Avisar al splash que la lista está lista → fade-out en 2.5s
                     avisarSplashListaLista();
-                    // Si el index.html ya cargó (splash rápido), enviarla ya
                     if (indexListo) {
                         enviarListaAlHtmlConReintentos(contenido, 0);
                     }
@@ -1488,7 +1488,6 @@ public class MainActivity extends AppCompatActivity {
             });
     }
 
-    // ===== INTERFACE DEL SPLASH =====
     public class SplashInterface {
         @JavascriptInterface
         public void onSplashTerminado() {
@@ -1496,8 +1495,6 @@ public class MainActivity extends AppCompatActivity {
                 splashTerminado = true;
                 Log.d(TAG, "Splash terminado → cargando index.html");
                 myWebView.loadUrl("file:///android_asset/index.html");
-                // Si ya tenemos la lista, la enviamos cuando el index.html termine de cargar
-                // (ver onPageFinished → enviarListaAlHtmlConReintentos)
             });
         }
     }
@@ -1808,8 +1805,7 @@ public class MainActivity extends AppCompatActivity {
             mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, tamPx, fuente);
         }
 
-        @JavascriptInterface
-        public void ocultarTicker() { runOnUiThread(() -> tickerDetener(true)); }
+        @JavascriptInterface public void ocultarTicker() { runOnUiThread(() -> tickerDetener(true)); }
 
         @JavascriptInterface
         public void mostrarModalPublicidad(final String url, final boolean esVideo, final int duracionSeg) {
