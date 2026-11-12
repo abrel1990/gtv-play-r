@@ -124,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
     private static final String VALIDAR_URL = "https://gtv-portero.abrel03.workers.dev/api/reproductor/validar";
     private static final String LISTA_MAESTRA_URL = "https://gtv-portero.abrel03.workers.dev/api/reproductor/lista-maestra";
+    private static final String CONFIG_URL = "https://gtv-portero.abrel03.workers.dev/api/config";
     private static final String SELLO = "gtv_app_2026_secreto_xyz789";
     private boolean enYouTubeWeb = false;
     private boolean enYouTubeNativo = false;
@@ -389,6 +390,81 @@ public class MainActivity extends AppCompatActivity {
         }, 5000);
 
         handler.postDelayed(() -> consultarListaMaestraAlIniciar(0), 500);
+        // ✅ NUEVO: forzar actualización de config al abrir
+        handler.postDelayed(this::forzarActualizacionConfig, 800);
+    }
+
+    // ✅ NUEVO: fuerza la recarga de la config (licencia, cuentas, publicidad) al abrir
+    private void forzarActualizacionConfig() {
+        new Thread(() -> {
+            try {
+                URL url = new URL(CONFIG_URL + "?t=" + System.currentTimeMillis());
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setRequestProperty("X-GTV-Origin", SELLO);
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                    br.close();
+                    final String cfgJson = sb.toString();
+                    runOnUiThread(() -> {
+                        if (myWebView != null && webViewListo) {
+                            try {
+                                String js = "javascript:(function(){try{var cfg=" + cfgJson + ";"
+                                    + "if(window.aplicarConfig) window.aplicarConfig(cfg);"
+                                    + "}catch(e){}})();";
+                                myWebView.evaluateJavascript(js, null);
+                                Log.d(TAG, "Config forzada al abrir");
+                            } catch (Exception ignored) {}
+                        }
+                    });
+                }
+                conn.disconnect();
+            } catch (Exception e) {
+                Log.e(TAG, "Error forzando config: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    // ✅ NUEVO: intercepta TODAS las teclas antes de que lleguen al youtubePlayerView
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        boolean enPlayer = enExoPlayer || enYouTubeNativo || enVlc;
+        if (enPlayer && playerContainer != null && playerContainer.getVisibility() == View.VISIBLE) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                switch (keyCode) {
+                    case KeyEvent.KEYCODE_DPAD_RIGHT:
+                        navegar(+1); mostrarControles(); return true;
+                    case KeyEvent.KEYCODE_DPAD_LEFT:
+                        navegar(-1); mostrarControles(); return true;
+                    case KeyEvent.KEYCODE_DPAD_CENTER:
+                    case KeyEvent.KEYCODE_ENTER:
+                    case KeyEvent.KEYCODE_DPAD_UP:
+                    case KeyEvent.KEYCODE_DPAD_DOWN:
+                        mostrarControles(); return true;
+                    case KeyEvent.KEYCODE_BACK:
+                        cerrarExoPlayer(); return true;
+                }
+            }
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                switch (keyCode) {
+                    case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    case KeyEvent.KEYCODE_DPAD_LEFT:
+                    case KeyEvent.KEYCODE_DPAD_CENTER:
+                    case KeyEvent.KEYCODE_ENTER:
+                    case KeyEvent.KEYCODE_DPAD_UP:
+                    case KeyEvent.KEYCODE_DPAD_DOWN:
+                    case KeyEvent.KEYCODE_BACK:
+                        return true;
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     private void inicializarVLC() {
