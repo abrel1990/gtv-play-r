@@ -124,7 +124,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
     private static final String VALIDAR_URL = "https://gtv-portero.abrel03.workers.dev/api/reproductor/validar";
     private static final String LISTA_MAESTRA_URL = "https://gtv-portero.abrel03.workers.dev/api/reproductor/lista-maestra";
-    private static final String CONFIG_URL = "https://gtv-portero.abrel03.workers.dev/api/config";
     private static final String SELLO = "gtv_app_2026_secreto_xyz789";
     private boolean enYouTubeWeb = false;
     private boolean enYouTubeNativo = false;
@@ -161,7 +160,6 @@ public class MainActivity extends AppCompatActivity {
 
     private volatile boolean webViewListo = false;
     private volatile String listaLegada = null;
-    private volatile boolean splashTerminado = false;
     private volatile boolean indexListo = false;
 
     private static final String WATCH_NEXT_CHANNEL_NAME = "GTV Play R Recientes";
@@ -390,56 +388,9 @@ public class MainActivity extends AppCompatActivity {
         }, 5000);
 
         handler.postDelayed(() -> consultarListaMaestraAlIniciar(0), 500);
-        handler.postDelayed(this::forzarActualizacionConfig, 800);
     }
 
-    // ============================================================================
-    // ✅ CAMBIO 2: Inyectar deviceId REAL junto con la config
-    // ============================================================================
-    private void forzarActualizacionConfig() {
-        new Thread(() -> {
-            try {
-                URL url = new URL(CONFIG_URL + "?t=" + System.currentTimeMillis());
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(8000);
-                conn.setReadTimeout(8000);
-                conn.setRequestProperty("X-GTV-Origin", SELLO);
-                if (conn.getResponseCode() == 200) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = br.readLine()) != null) sb.append(line);
-                    br.close();
-                    final String cfgJson = sb.toString();
-                    runOnUiThread(() -> {
-                        if (myWebView != null && webViewListo) {
-                            try {
-                                // ✅ FIX: inyectar deviceId REAL junto con la config
-                                final String devIdReal = generarDeviceId();
-                                String js = "javascript:(function(){try{"
-                                    + "window.__gtvDevIdReal='" + devIdReal + "';"
-                                    + "if(window.localStorage){localStorage.setItem('gtv_device_id','" + devIdReal + "');}"
-                                    + "var cfg=" + cfgJson + ";"
-                                    + "if(window.aplicarConfig) window.aplicarConfig(cfg);"
-                                    + "if(window.actualizarDeviceIdReal) window.actualizarDeviceIdReal('" + devIdReal + "');"
-                                    + "}catch(e){}})();";
-                                myWebView.evaluateJavascript(js, null);
-                                Log.d(TAG, "Config + deviceId forzados al abrir: " + devIdReal);
-                            } catch (Exception ignored) {}
-                        }
-                        if (!canales.isEmpty() && listaLegada != null) {
-                            enviarListaAlHtmlConReintentos(listaLegada, 0);
-                        }
-                    });
-                }
-                conn.disconnect();
-            } catch (Exception e) {
-                Log.e(TAG, "Error forzando config: " + e.getMessage());
-            }
-        }).start();
-    }
-
+    // ✅ NUEVO: Intercepta TODAS las teclas antes de que lleguen al youtubePlayerView
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
@@ -474,6 +425,48 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    // ✅ NUEVO: Device ID perpetuo (no cambia al desinstalar)
+    private String generarDeviceId() {
+        if (deviceIdCache != null) return deviceIdCache;
+        
+        SharedPreferences prefs = getSharedPreferences("gtv_r_prefs", MODE_PRIVATE);
+        String guardado = prefs.getString("device_id_guardado", null);
+        if (guardado != null && guardado.startsWith("GTV-R-") && guardado.length() == 10) {
+            deviceIdCache = guardado;
+            return deviceIdCache;
+        }
+        
+        String androidId = null;
+        try { 
+            androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID); 
+        } catch (Exception ignored) {}
+        
+        if (androidId == null || androidId.isEmpty()) {
+            androidId = "GTVR_" + Build.MANUFACTURER + "_" + Build.MODEL;
+        }
+        
+        final String ALFABETO = "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ";
+        long hash = 0;
+        for (int i = 0; i < androidId.length(); i++) {
+            hash = (hash * 31 + androidId.charAt(i)) & 0xFFFFFFFFL;
+        }
+        hash = hash ^ (hash >> 16);
+        hash = (hash * 0x45d9f3bL) & 0xFFFFFFFFL;
+        
+        StringBuilder sb = new StringBuilder("GTV-R-");
+        long h = hash;
+        for (int i = 0; i < 6; i++) {
+            sb.append(ALFABETO.charAt((int)(h % ALFABETO.length())));
+            h = h / ALFABETO.length();
+            h = h ^ (h >> 3);
+        }
+        deviceIdCache = sb.toString();
+        
+        prefs.edit().putString("device_id_guardado", deviceIdCache).apply();
+        
+        return deviceIdCache;
     }
 
     private void inicializarVLC() {
@@ -902,9 +895,6 @@ public class MainActivity extends AppCompatActivity {
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
 
         myWebView.setWebViewClient(new WebViewClient() {
-            // ====================================================================
-            // ✅ CAMBIO 1: Inyectar deviceId REAL del Android al HTML
-            // ====================================================================
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 webViewListo = true;
@@ -912,19 +902,6 @@ public class MainActivity extends AppCompatActivity {
                 if (url != null && url.contains("index.html")) {
                     indexListo = true;
                     Log.d(TAG, "index.html cargado, listo=" + (listaLegada != null));
-                    // ✅ FIX: inyectar deviceId REAL del Android al HTML
-                    final String devIdReal = generarDeviceId();
-                    myWebView.post(() -> {
-                        try {
-                            String js = "javascript:(function(){try{"
-                                + "window.__gtvDevIdReal='" + devIdReal + "';"
-                                + "if(window.localStorage){localStorage.setItem('gtv_device_id','" + devIdReal + "');}"
-                                + "if(window.actualizarDeviceIdReal){window.actualizarDeviceIdReal('" + devIdReal + "');}"
-                                + "}catch(e){}})();";
-                            myWebView.evaluateJavascript(js, null);
-                            Log.d(TAG, "DeviceId inyectado al HTML: " + devIdReal);
-                        } catch (Exception ignored) {}
-                    });
                     if (listaLegada != null) {
                         enviarListaAlHtmlConReintentos(listaLegada, 0);
                     }
@@ -1507,33 +1484,6 @@ public class MainActivity extends AppCompatActivity {
                 conn.disconnect();
 
                 JSONObject json = new JSONObject(sb.toString());
-                String tipo = json.optString("tipo", "full");
-                if ("demo".equals(tipo)) {
-                    JSONArray canalesDemo = json.optJSONArray("canales");
-                    if (canalesDemo == null || canalesDemo.length() == 0) {
-                        handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
-                        return;
-                    }
-                    final ArrayList<Canal> listaDemo = new ArrayList<>();
-                    for (int i = 0; i < canalesDemo.length(); i++) {
-                        String u = canalesDemo.optString(i, "");
-                        if (!u.isEmpty()) {
-                            listaDemo.add(new Canal(u, "Canal Demo " + (i + 1), ""));
-                        }
-                    }
-                    if (listaDemo.isEmpty()) {
-                        handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
-                        return;
-                    }
-                    runOnUiThread(() -> {
-                        canales.clear();
-                        canales.addAll(listaDemo);
-                        indiceActual = 0;
-                        Log.d(TAG, "Lista demo cargada en Android: " + listaDemo.size() + " canales");
-                    });
-                    return;
-                }
-
                 String listaUrl = json.optString("url", "");
                 if (listaUrl.isEmpty()) {
                     Log.e(TAG, "Lista maestra: URL vacía, usando fallback local");
@@ -1578,10 +1528,13 @@ public class MainActivity extends AppCompatActivity {
                     canales.addAll(lista);
                     indiceActual = 0;
                     listaLegada = contenido;
-                    Log.d(TAG, "Lista maestra lista: " + lista.size() + " canales (esperando splash)");
-                    avisarSplashListaLista();
+                    Log.d(TAG, "Lista maestra lista: " + lista.size() + " canales");
                     if (indexListo) {
                         enviarListaAlHtmlConReintentos(contenido, 0);
+                    } else {
+                        handler.postDelayed(() -> {
+                            if (indexListo) enviarListaAlHtmlConReintentos(contenido, 0);
+                        }, 1500);
                     }
                 });
 
@@ -1592,27 +1545,14 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    private void avisarSplashListaLista() {
-        if (myWebView == null) return;
-        myWebView.post(() -> {
-            try {
-                myWebView.evaluateJavascript(
-                    "window.gtvSplashListaLista && window.gtvSplashListaLista();", null);
-            } catch (Exception ignored) {}
-        });
-    }
-
     private void enviarListaAlHtmlConReintentos(final String contenido, final int intento) {
-        if (myWebView == null || intento > 30) {
-            Log.e(TAG, "No se pudo enviar la lista al HTML después de 30 intentos.");
-            return;
-        }
+        if (myWebView == null || intento > 30) return;
         myWebView.evaluateJavascript(
             "(function(){try{return typeof window.gtvSetCanales==='function';}catch(e){return false;}})()",
             value -> {
                 if ("true".equals(value)) {
                     enviarListaAlHtml(contenido);
-                    Log.d(TAG, "✅ Lista fresca enviada al index.html en intento " + intento);
+                    Log.d(TAG, "Lista enviada al index.html en intento " + intento);
                 } else {
                     handler.postDelayed(() -> enviarListaAlHtmlConReintentos(contenido, intento + 1), 300);
                 }
@@ -1623,7 +1563,6 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface
         public void onSplashTerminado() {
             runOnUiThread(() -> {
-                splashTerminado = true;
                 Log.d(TAG, "Splash terminado → cargando index.html");
                 myWebView.loadUrl("file:///android_asset/index.html");
             });
@@ -2169,23 +2108,6 @@ public class MainActivity extends AppCompatActivity {
         return u.contains("kick.com") || u.contains("twitch.tv")
             || u.contains("ok.ru") || u.contains("odnoklassniki.ru")
             || u.contains("dailymotion.com") || u.contains("tokyvideo.com");
-    }
-
-    private String generarDeviceId() {
-        if (deviceIdCache != null) return deviceIdCache;
-        String androidId = null;
-        try { androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID); } catch (Exception ignored) {}
-        if (androidId == null || androidId.isEmpty()) androidId = "GTVR_FALLBACK_" + Build.MODEL + Build.SERIAL;
-        final String ALFABETO = "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ";
-        long hash = 0;
-        for (int i = 0; i < androidId.length(); i++) hash = (hash * 31 + androidId.charAt(i)) & 0xFFFFFFFFL;
-        hash = hash ^ (hash >> 16);
-        hash = (hash * 0x45d9f3bL) & 0xFFFFFFFFL;
-        StringBuilder sb = new StringBuilder("GTV-R-");
-        long h = hash;
-        for (int i = 0; i < 6; i++) { sb.append(ALFABETO.charAt((int)(h % ALFABETO.length()))); h = h / ALFABETO.length(); h = h ^ (h >> 3); }
-        deviceIdCache = sb.toString();
-        return deviceIdCache;
     }
 
     @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
