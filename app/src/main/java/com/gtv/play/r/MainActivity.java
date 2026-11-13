@@ -393,9 +393,9 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(this::forzarActualizacionConfig, 800);
     }
 
-    // ✅ FIX: forzarActualizacionConfig ahora inyecta config al HTML correctamente.
-    // El HTML ya expone window.aplicarConfig, así que esto ahora sí funciona.
-    // Además, se envía la lista al HTML si ya la tenemos en memoria.
+    // ============================================================================
+    // ✅ CAMBIO 2: Inyectar deviceId REAL junto con la config
+    // ============================================================================
     private void forzarActualizacionConfig() {
         new Thread(() -> {
             try {
@@ -415,14 +415,19 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> {
                         if (myWebView != null && webViewListo) {
                             try {
-                                String js = "javascript:(function(){try{var cfg=" + cfgJson + ";"
+                                // ✅ FIX: inyectar deviceId REAL junto con la config
+                                final String devIdReal = generarDeviceId();
+                                String js = "javascript:(function(){try{"
+                                    + "window.__gtvDevIdReal='" + devIdReal + "';"
+                                    + "if(window.localStorage){localStorage.setItem('gtv_device_id','" + devIdReal + "');}"
+                                    + "var cfg=" + cfgJson + ";"
                                     + "if(window.aplicarConfig) window.aplicarConfig(cfg);"
+                                    + "if(window.actualizarDeviceIdReal) window.actualizarDeviceIdReal('" + devIdReal + "');"
                                     + "}catch(e){}})();";
                                 myWebView.evaluateJavascript(js, null);
-                                Log.d(TAG, "Config forzada al abrir");
+                                Log.d(TAG, "Config + deviceId forzados al abrir: " + devIdReal);
                             } catch (Exception ignored) {}
                         }
-                        // ✅ Si ya tenemos canales en memoria, enviarlos YA al webview
                         if (!canales.isEmpty() && listaLegada != null) {
                             enviarListaAlHtmlConReintentos(listaLegada, 0);
                         }
@@ -897,6 +902,9 @@ public class MainActivity extends AppCompatActivity {
             myWebView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
 
         myWebView.setWebViewClient(new WebViewClient() {
+            // ====================================================================
+            // ✅ CAMBIO 1: Inyectar deviceId REAL del Android al HTML
+            // ====================================================================
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 webViewListo = true;
@@ -904,6 +912,19 @@ public class MainActivity extends AppCompatActivity {
                 if (url != null && url.contains("index.html")) {
                     indexListo = true;
                     Log.d(TAG, "index.html cargado, listo=" + (listaLegada != null));
+                    // ✅ FIX: inyectar deviceId REAL del Android al HTML
+                    final String devIdReal = generarDeviceId();
+                    myWebView.post(() -> {
+                        try {
+                            String js = "javascript:(function(){try{"
+                                + "window.__gtvDevIdReal='" + devIdReal + "';"
+                                + "if(window.localStorage){localStorage.setItem('gtv_device_id','" + devIdReal + "');}"
+                                + "if(window.actualizarDeviceIdReal){window.actualizarDeviceIdReal('" + devIdReal + "');}"
+                                + "}catch(e){}})();";
+                            myWebView.evaluateJavascript(js, null);
+                            Log.d(TAG, "DeviceId inyectado al HTML: " + devIdReal);
+                        } catch (Exception ignored) {}
+                    });
                     if (listaLegada != null) {
                         enviarListaAlHtmlConReintentos(listaLegada, 0);
                     }
@@ -1455,8 +1476,6 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
-    // ✅ FIX: consultarListaMaestraAlIniciar ahora soporta respuesta tipo "demo" del worker
-    // (que devuelve solo URLs de canales demo cuando el usuario no tiene licencia).
     private void consultarListaMaestraAlIniciar(final int intento) {
         if (intento > 10) {
             Log.e(TAG, "Lista maestra: demasiados reintentos, usando fallback local");
@@ -1488,13 +1507,10 @@ public class MainActivity extends AppCompatActivity {
                 conn.disconnect();
 
                 JSONObject json = new JSONObject(sb.toString());
-
-                // ✅ FIX: soporte para tipo "demo" (sin licencia) y "full" (con licencia)
                 String tipo = json.optString("tipo", "full");
                 if ("demo".equals(tipo)) {
                     JSONArray canalesDemo = json.optJSONArray("canales");
                     if (canalesDemo == null || canalesDemo.length() == 0) {
-                        Log.d(TAG, "Lista maestra: demo vacío, esperando configuración del HTML");
                         handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
                         return;
                     }
@@ -1513,7 +1529,6 @@ public class MainActivity extends AppCompatActivity {
                         canales.clear();
                         canales.addAll(listaDemo);
                         indiceActual = 0;
-                        // No seteamos listaLegada: el HTML maneja el modo demo por su cuenta
                         Log.d(TAG, "Lista demo cargada en Android: " + listaDemo.size() + " canales");
                     });
                     return;
@@ -1562,7 +1577,7 @@ public class MainActivity extends AppCompatActivity {
                     canales.clear();
                     canales.addAll(lista);
                     indiceActual = 0;
-                    listaLegada = contenido; // ✅ Guardado en memoria volátil (seguro)
+                    listaLegada = contenido;
                     Log.d(TAG, "Lista maestra lista: " + lista.size() + " canales (esperando splash)");
                     avisarSplashListaLista();
                     if (indexListo) {
