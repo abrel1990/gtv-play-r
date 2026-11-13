@@ -390,11 +390,9 @@ public class MainActivity extends AppCompatActivity {
         }, 5000);
 
         handler.postDelayed(() -> consultarListaMaestraAlIniciar(0), 500);
-        // ✅ NUEVO: forzar actualización de config al abrir
         handler.postDelayed(this::forzarActualizacionConfig, 800);
     }
 
-    // ✅ NUEVO: fuerza la recarga de la config (licencia, cuentas, publicidad) al abrir
     private void forzarActualizacionConfig() {
         new Thread(() -> {
             try {
@@ -421,6 +419,10 @@ public class MainActivity extends AppCompatActivity {
                                 Log.d(TAG, "Config forzada al abrir");
                             } catch (Exception ignored) {}
                         }
+                        // ✅ NUEVO: Si ya tenemos canales en memoria, enviarlos YA al webview
+                        if (!canales.isEmpty() && listaLegada != null) {
+                            enviarListaAlHtmlConReintentos(listaLegada, 0);
+                        }
                     });
                 }
                 conn.disconnect();
@@ -430,7 +432,6 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    // ✅ NUEVO: intercepta TODAS las teclas antes de que lleguen al youtubePlayerView
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
@@ -1525,7 +1526,7 @@ public class MainActivity extends AppCompatActivity {
                     canales.clear();
                     canales.addAll(lista);
                     indiceActual = 0;
-                    listaLegada = contenido;
+                    listaLegada = contenido; // ✅ Guardado en memoria volátil (seguro)
                     Log.d(TAG, "Lista maestra lista: " + lista.size() + " canales (esperando splash)");
                     avisarSplashListaLista();
                     if (indexListo) {
@@ -1551,13 +1552,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void enviarListaAlHtmlConReintentos(final String contenido, final int intento) {
-        if (myWebView == null || intento > 30) return;
+        if (myWebView == null || intento > 30) {
+            Log.e(TAG, "No se pudo enviar la lista al HTML después de 30 intentos.");
+            return;
+        }
         myWebView.evaluateJavascript(
             "(function(){try{return typeof window.gtvSetCanales==='function';}catch(e){return false;}})()",
             value -> {
                 if ("true".equals(value)) {
                     enviarListaAlHtml(contenido);
-                    Log.d(TAG, "Lista enviada al index.html en intento " + intento);
+                    Log.d(TAG, "✅ Lista fresca enviada al index.html en intento " + intento);
                 } else {
                     handler.postDelayed(() -> enviarListaAlHtmlConReintentos(contenido, intento + 1), 300);
                 }
