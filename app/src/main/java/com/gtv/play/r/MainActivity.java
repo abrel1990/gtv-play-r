@@ -393,6 +393,9 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(this::forzarActualizacionConfig, 800);
     }
 
+    // ✅ FIX: forzarActualizacionConfig ahora inyecta config al HTML correctamente.
+    // El HTML ya expone window.aplicarConfig, así que esto ahora sí funciona.
+    // Además, se envía la lista al HTML si ya la tenemos en memoria.
     private void forzarActualizacionConfig() {
         new Thread(() -> {
             try {
@@ -419,7 +422,7 @@ public class MainActivity extends AppCompatActivity {
                                 Log.d(TAG, "Config forzada al abrir");
                             } catch (Exception ignored) {}
                         }
-                        // ✅ NUEVO: Si ya tenemos canales en memoria, enviarlos YA al webview
+                        // ✅ Si ya tenemos canales en memoria, enviarlos YA al webview
                         if (!canales.isEmpty() && listaLegada != null) {
                             enviarListaAlHtmlConReintentos(listaLegada, 0);
                         }
@@ -1452,6 +1455,8 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
+    // ✅ FIX: consultarListaMaestraAlIniciar ahora soporta respuesta tipo "demo" del worker
+    // (que devuelve solo URLs de canales demo cuando el usuario no tiene licencia).
     private void consultarListaMaestraAlIniciar(final int intento) {
         if (intento > 10) {
             Log.e(TAG, "Lista maestra: demasiados reintentos, usando fallback local");
@@ -1483,6 +1488,37 @@ public class MainActivity extends AppCompatActivity {
                 conn.disconnect();
 
                 JSONObject json = new JSONObject(sb.toString());
+
+                // ✅ FIX: soporte para tipo "demo" (sin licencia) y "full" (con licencia)
+                String tipo = json.optString("tipo", "full");
+                if ("demo".equals(tipo)) {
+                    JSONArray canalesDemo = json.optJSONArray("canales");
+                    if (canalesDemo == null || canalesDemo.length() == 0) {
+                        Log.d(TAG, "Lista maestra: demo vacío, esperando configuración del HTML");
+                        handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
+                        return;
+                    }
+                    final ArrayList<Canal> listaDemo = new ArrayList<>();
+                    for (int i = 0; i < canalesDemo.length(); i++) {
+                        String u = canalesDemo.optString(i, "");
+                        if (!u.isEmpty()) {
+                            listaDemo.add(new Canal(u, "Canal Demo " + (i + 1), ""));
+                        }
+                    }
+                    if (listaDemo.isEmpty()) {
+                        handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
+                        return;
+                    }
+                    runOnUiThread(() -> {
+                        canales.clear();
+                        canales.addAll(listaDemo);
+                        indiceActual = 0;
+                        // No seteamos listaLegada: el HTML maneja el modo demo por su cuenta
+                        Log.d(TAG, "Lista demo cargada en Android: " + listaDemo.size() + " canales");
+                    });
+                    return;
+                }
+
                 String listaUrl = json.optString("url", "");
                 if (listaUrl.isEmpty()) {
                     Log.e(TAG, "Lista maestra: URL vacía, usando fallback local");
