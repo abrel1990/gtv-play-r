@@ -814,7 +814,8 @@ window.nextFn=function(){zap(1)};
 window.prevFn=function(){zap(-1)};
 window.atrasNativo=function(){if(S.dlg||S.grid||S.view==='player'||S.view==='movies'){atras();return true}return false};
 window.rotarDesdeAndroid=function(n){S.rotated=!!n;ls.set('gtv_rot',String(S.rotated));aplicarRot()};
-window.aplicarConfig = aplicarConfig;
+window.actualizarDeviceIdReal=function(dev){var d=String(dev||'').trim().toUpperCase();if(!d)return;if(deviceId!==d){deviceId=d;ls.set('gtv_device_id',deviceId);console.log('[GTV-R] DeviceId actualizado:',deviceId);actualizarBarra();if(S.list.length===0&&tieneLicencia()){actualizarCanales();}}};
+  window.aplicarConfig = aplicarConfig;
 window.aplicarConfigPub = aplicarConfigPub;
 
 window.gtvSetCanales=function(json){
