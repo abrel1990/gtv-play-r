@@ -264,8 +264,13 @@ $('mhint').style.display = IS_TV ? '' : 'none';
 function ap(){return window.AndroidPlayer||null}
 function hasNat(n){var a=ap();return !!(a&&a[n])}
 function nat(n){var a=ap();if(!a||!a[n])return undefined;try{return a[n].apply(a,Array.prototype.slice.call(arguments,1))}catch(e){return undefined}}
-var deviceId = '';
-if(hasNat('getDeviceId')){try{deviceId=nat('getDeviceId')||''}catch(e){}}
+var deviceId = 'GTV-R-J7GELQ'; // Forzado para probar
+if(hasNat('getDeviceId')){
+  try{
+    var nativo = nat('getDeviceId');
+    if(nativo && nativo.startsWith('GTV-R-')) deviceId = nativo;
+  }catch(e){}
+}
 if(!deviceId){
   deviceId = ls.get('gtv_device_id','');
   if(!deviceId){
