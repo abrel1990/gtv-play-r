@@ -220,6 +220,7 @@ body.lite .pelicula-card,body.lite .ver-todos-card{transition:none!important}
 var WORKER = 'https://gtv-portero.abrel03.workers.dev/api/';
 var CONFIG_URL = WORKER + 'config';
 var ESTADO_URL = WORKER + 'estado-canales';
+var LISTA_MAESTRA_URL = WORKER + 'reproductor/lista-maestra';
 var BAN_URL = 'https://gtv-portero.abrel03.workers.dev';
 var SELLO = 'gtv_app_2026_secreto_xyz789';
 var BLOQUEO_MS = 250;
@@ -275,6 +276,8 @@ if(!deviceId){
     ls.set('gtv_device_id',deviceId);
   }
 }
+deviceId = String(deviceId).trim().toUpperCase();
+
 var S = {
   list: [], index: 0, raw: '', view: 'list',
   fromMovies: false, native: false, nativeAt: 0, exitAt: 0,
@@ -302,15 +305,18 @@ function cargarLicLocal(){var s=ls.getJ('gtv_license',null);if(s)Object.assign(l
 
 function tieneLicencia(){
   var hoy = hoyStr();
-  var devIdNorm = String(deviceId).trim().toUpperCase(); // ✅ Normalización estricta
+  var devIdNorm = String(deviceId).trim().toUpperCase();
   var cargado = (remote.cuentas && remote.cuentas.length) || Object.keys(remote.licencias).length;
-  
+
   if (cargado) {
-    for (var i = 0; i < remote.cuentas.length; i++) {
-      var c = remote.cuentas[i];
-      var devsNorm = Array.isArray(c.dispositivos) ? c.dispositivos.map(function(d) { return String(d).trim().toUpperCase(); }) : [];
-      if (devsNorm.indexOf(devIdNorm) >= 0 && c.vence && c.vence >= hoy) {
-        lic.hasLicense = true; lic.expirationDate = c.vence; lic.miCuenta = c; guardarLic(); return true;
+    if (Array.isArray(remote.cuentas)) {
+      for (var i = 0; i < remote.cuentas.length; i++) {
+        var c = remote.cuentas[i];
+        if (!c) continue;
+        var devsNorm = Array.isArray(c.dispositivos) ? c.dispositivos.map(function(d) { return String(d).trim().toUpperCase(); }) : [];
+        if (devsNorm.indexOf(devIdNorm) >= 0 && c.vence && c.vence >= hoy) {
+          lic.hasLicense = true; lic.expirationDate = c.vence; lic.miCuenta = c; guardarLic(); return true;
+        }
       }
     }
     for (var key in remote.licencias) {
@@ -474,8 +480,15 @@ function bloquear(modo){
   el.querySelector('#bWa').onclick=function(){window.open(wu,'_blank')};
   (r||el.querySelector('#bWa')).focus();
 }
-function registrarDispositivo(){if(!ap())return;fetch(BAN_URL+'/api/registrar?device='+encodeURIComponent(deviceId),{method:'POST'}).catch(noop)}
-function verificarBaneo(){if(!ap())return;fetch(BAN_URL+'/api/estado?device='+encodeURIComponent(deviceId)).then(function(r){return r.json()}).then(function(d){if(d&&d.baneado===true)bloquear('ban')}).catch(noop)}
+function registrarDispositivo(){
+  fetch(BAN_URL+'/api/registrar?device='+encodeURIComponent(deviceId),{method:'POST'}).catch(noop);
+}
+function verificarBaneo(){
+  fetch(BAN_URL+'/api/estado?device='+encodeURIComponent(deviceId))
+    .then(function(r){return r.json()})
+    .then(function(d){if(d&&d.baneado===true)bloquear('ban')})
+    .catch(noop);
+}
 function aplicarConfig(d){
   if(!d)return;
   remote.horasDemo=d.horasDemo||24;
@@ -484,7 +497,9 @@ function aplicarConfig(d){
   remote.maxGlobal=d.maxGlobalDispositivos||5;
   remote.whatsapp=d.whatsapp||'5491133550182';
   remote.licencias={};
-  if(Array.isArray(d.licencias))d.licencias.forEach(function(l){if(l&&l.id&&l.vence)remote.licencias[String(l.id).trim()]=l.vence});
+  if(Array.isArray(d.licencias))d.licencias.forEach(function(l){
+    if(l&&l.id&&l.vence)remote.licencias[String(l.id).trim().toUpperCase()]=l.vence;
+  });
   remote.mensaje=d.mensaje||'';
   remote.duracion=d.duracion||5;
   if(d.demoStart)remote.demoSrv=true;
@@ -494,7 +509,7 @@ function cargarConfig(){
   return fetchW(CONFIG_URL+'?t='+Date.now(),12000).then(function(r){
     if(!r.ok)return 'net';
     return r.json().then(function(d){
-      if(!d.hash_esperado||hashUrl(CONFIG_URL)!==d.hash_esperado)return 'hash';
+      if(!d || typeof d !== 'object') return 'net';
       aplicarConfig(d);
       return 'ok';
     });
@@ -582,6 +597,56 @@ function sincronizarEstadoCanales(){
 function aplicarCacheEstado(){
   S.caidos=ls.getJ('gtv_caidos_cache',{});
   S.ocultos=ls.getJ('gtv_ocultos_cache',{});
+}
+function cargarListaMaestraDesdeHTML(){
+  if(!tieneLicencia()) return;
+  fetchW(LISTA_MAESTRA_URL+'?t='+Date.now(), 15000, { headers: {'X-Device-Id': deviceId} })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      if(!d || !d.ok) return;
+      if(d.tipo === 'full' && d.url){
+        var m3uUrl = d.url.indexOf('/')===0 ? BAN_URL + d.url : d.url;
+        return fetchW(m3uUrl+'?t='+Date.now(), 25000).then(function(r){ return r.text(); });
+      }
+      if(d.tipo === 'demo' && Array.isArray(d.canales)){
+        return null;
+      }
+    })
+    .then(function(m3u){
+      if(!m3u || m3u.indexOf('#EXTINF') < 0) return;
+      if(S.list.length) return;
+      var arr = parsearM3UJS(m3u);
+      if(arr.length) aplicarLista(arr, false);
+    })
+    .catch(noop);
+}
+function parsearM3UJS(text){
+  var lines = text.split(/\r?\n/), out = [], cur = null;
+  for(var i=0;i<lines.length;i++){
+    var l = lines[i].trim();
+    if(!l) continue;
+    if(l.indexOf('#EXTM3U')===0) continue;
+    if(l.indexOf('#EXTINF')===0){ cur = l; continue; }
+    if(cur && /^https?:\/\//i.test(l)){
+      var name = '', c = cur.lastIndexOf(',');
+      if(c!==-1 && c<cur.length-1) name = cur.substring(c+1).trim().replace(/^["']|["']$/g,'');
+      var lg = cur.match(/tvg-logo\s*=\s*"([^"]*)"/i);
+      var gp = cur.match(/group-title\s*=\s*"([^"]*)"/i);
+      var rf = cur.match(/tvg-referer\s*=\s*"([^"]*)"/i);
+      var gn = cur.match(/tvg-gain\s*=\s*"([^"]*)"/i);
+      var gain = 1.0; if(gn){ try { var gv = parseFloat(gn[1]); if(gv>0 && gv<=2) gain = gv; } catch(e){} }
+      out.push({
+        nombre: name || 'Canal '+(out.length+1),
+        name: name || 'Canal '+(out.length+1),
+        url: l,
+        logo: lg ? lg[1] : '',
+        referer: rf ? rf[1] : '',
+        gain: gain
+      });
+      cur = null;
+    }
+  }
+  return out;
 }
 function setView(v){
   if(v!=='player'){
@@ -702,6 +767,10 @@ function play(i,origin){
     toastBloqueo();return;
   }
   var ch=S.list[i];
+  if(!tieneLicencia() && demoActiva()){
+    var esDemo = (remote.canalesDemo||[]).indexOf(ch.url) >= 0;
+    if(!esDemo){ toastBloqueo(); return; }
+  }
   if(S.caidos[ch.url]){mostrarSinSenal(ch);return}
   if(S.ocultos[ch.url]){zap(1);return}
   limpiarModales();
@@ -747,6 +816,8 @@ window.nextFn=function(){zap(1)};
 window.prevFn=function(){zap(-1)};
 window.atrasNativo=function(){if(S.dlg||S.grid||S.view==='player'||S.view==='movies'){atras();return true}return false};
 window.rotarDesdeAndroid=function(n){S.rotated=!!n;ls.set('gtv_rot',String(S.rotated));aplicarRot()};
+window.aplicarConfig = aplicarConfig;
+window.aplicarConfigPub = aplicarConfigPub;
 
 window.gtvSetCanales=function(json){
   try{
@@ -768,8 +839,6 @@ window.gtvSetCanales=function(json){
     }
     var igual=S.list.length===nl.length&&nl.length>0&&S.list[0].url===nl[0].url&&S.list[nl.length-1].url===nl[nl.length-1].url;
     aplicarLista(nl,igual);
-    
-    // Ocultar estado de carga si existe
     var loader = document.getElementById('loadingState');
     if (loader) loader.style.display = 'none';
   }catch(e){}
@@ -1217,18 +1286,20 @@ document.addEventListener('keyup',function(e){
 });
 
 function cargarListaInicial(){
-  // ✅ SIN CACHÉ: Siempre mostramos carga mientras el servidor responde
   D.list.innerHTML = '<div class="empty" id="loadingState">' +
     '<div class="icon" style="animation: spin 1s linear infinite">⚙️</div>' +
     '<div class="title">Conectando con el servidor...</div>' +
     '<div class="subtitle">Verificando licencia y actualizando lista de canales.</div>' +
     '</div>';
-    
   setTimeout(function() {
-    if (S.list.length === 0 && !S.native) {
-      renderLista(); // Muestra el botón de agregar lista si el servidor falló tras 8s
+    if (S.list.length === 0 && !S.native && !document.getElementById('loadingState')) {
+      return;
     }
-  }, 8000);
+    if (S.list.length === 0 && !S.native) {
+      var el = document.getElementById('loadingState');
+      if (el) renderLista();
+    }
+  }, 12000);
 }
 
 function iniciarApp(){
@@ -1238,11 +1309,19 @@ function iniciarApp(){
   }).catch(noop);
   aplicarCacheEstado();
   sincronizarEstadoCanales();
-  setInterval(actualizarBarra,30000);
+  setInterval(actualizarBarra, 30000);
+  setInterval(function(){
+    if(document.hidden || S.native) return;
+    fetchW(CONFIG_URL + '?t=' + Date.now(), 10000)
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){ if(d){ aplicarConfig(d); actualizarBarra(); } })
+      .catch(noop);
+  }, 60000);
   setInterval(function(){if(!document.hidden||enExoNat())pubSchedulerTick()},1500);
   setTimeout(pubSchedulerTick,2000);
   setInterval(function(){if(!S.native&&!document.hidden)sincronizarEstadoCanales()},3*60*1000);
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&!S.native)sincronizarEstadoCanales();if(!document.hidden)setTimeout(pubSchedulerTick,500)});
+  setTimeout(cargarListaMaestraDesdeHTML, 3000);
 }
 D.list.addEventListener('click',function(e){
   var c=e.target.closest?e.target.closest('.card'):null;
