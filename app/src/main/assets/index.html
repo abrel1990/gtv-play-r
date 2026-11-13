@@ -265,17 +265,15 @@ $('mhint').style.display = IS_TV ? '' : 'none';
 function ap(){return window.AndroidPlayer||null}
 function hasNat(n){var a=ap();return !!(a&&a[n])}
 function nat(n){var a=ap();if(!a||!a[n])return undefined;try{return a[n].apply(a,Array.prototype.slice.call(arguments,1))}catch(e){return undefined}}
-var deviceId = '';
-if(hasNat('getDeviceId')){try{deviceId=nat('getDeviceId')||''}catch(e){}}
-if(!deviceId){
-  deviceId = ls.get('gtv_device_id','');
-  if(!deviceId){
-    var chars='123456789ABCDEFGHIJKLMNPQRSTUVWXYZ', r='';
-    for(var i=0;i<6;i++) r+=chars.charAt(Math.floor(Math.random()*chars.length));
-    deviceId='GTV-R-'+r;
-    ls.set('gtv_device_id',deviceId);
-  }
-}
+var deviceId='';
+// ✅ FIX: prioridad 1: __gtvDevIdReal (inyectado por el Android)
+if(window.__gtvDevIdReal){deviceId=String(window.__gtvDevIdReal).trim().toUpperCase();ls.set('gtv_device_id',deviceId);}
+// Prioridad 2: bridge AndroidPlayer
+if(!deviceId&&hasNat('getDeviceId')){try{var d0=String(nat('getDeviceId')||'').trim().toUpperCase();if(d0){deviceId=d0;ls.set('gtv_device_id',deviceId);}}catch(e){}}
+// Prioridad 3: localStorage
+if(!deviceId){deviceId=ls.get('gtv_device_id','');if(!deviceId){var chars='123456789ABCDEFGHIJKLMNPQRSTUVWXYZ',r='';for(var i=0;i<6;i++)r+=chars.charAt(Math.floor(Math.random()*chars.length));deviceId='GTV-R-'+r;ls.set('gtv_device_id',deviceId);}deviceId=String(deviceId).trim().toUpperCase();}
+// ✅ FIX: SIEMPRE guardar el deviceId normalizado
+ls.set('gtv_device_id',deviceId);
 deviceId = String(deviceId).trim().toUpperCase();
 
 var S = {
