@@ -123,7 +123,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
     private static final String VALIDAR_URL = "https://gtv-portero.abrel03.workers.dev/api/reproductor/validar";
-    private static final String LISTA_MAESTRA_URL = "https://gtv-portero.abrel03.workers.dev/api/reproductor/lista-maestra";
+    private static final String CONFIG_URL = "https://gtv-portero.abrel03.workers.dev/api/config";
     private static final String SELLO = "gtv_app_2026_secreto_xyz789";
     private boolean enYouTubeWeb = false;
     private boolean enYouTubeNativo = false;
@@ -161,6 +161,7 @@ public class MainActivity extends AppCompatActivity {
     private volatile boolean webViewListo = false;
     private volatile String listaLegada = null;
     private volatile boolean indexListo = false;
+    private volatile boolean configAplicada = false;
 
     private static final String WATCH_NEXT_CHANNEL_NAME = "GTV Play R Recientes";
     private long watchNextChannelId = -1;
@@ -387,10 +388,46 @@ public class MainActivity extends AppCompatActivity {
             catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
         }, 5000);
 
-        handler.postDelayed(() -> consultarListaMaestraAlIniciar(0), 500);
+        // ✅ FIX: Aplicar config en el WebView al arrancar
+        handler.postDelayed(this::aplicarConfigEnWebView, 1500);
     }
 
-    // ✅ NUEVO: Intercepta TODAS las teclas antes de que lleguen al youtubePlayerView
+    // ✅ NUEVO: Fuerza la config en el WebView
+    private void aplicarConfigEnWebView() {
+        new Thread(() -> {
+            try {
+                URL url = new URL(CONFIG_URL + "?t=" + System.currentTimeMillis());
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setRequestProperty("X-GTV-Origin", SELLO);
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                    br.close();
+                    final String cfgJson = sb.toString();
+                    runOnUiThread(() -> {
+                        if (myWebView != null && webViewListo) {
+                            try {
+                                String js = "javascript:(function(){try{var cfg=" + cfgJson + ";"
+                                    + "if(window.aplicarConfig) window.aplicarConfig(cfg);"
+                                    + "}catch(e){}})();";
+                                myWebView.evaluateJavascript(js, null);
+                                Log.d(TAG, "Config aplicada en WebView");
+                            } catch (Exception ignored) {}
+                        }
+                    });
+                }
+                conn.disconnect();
+            } catch (Exception e) {
+                Log.e(TAG, "Error config: " + e.getMessage());
+            }
+        }).start();
+    }
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
@@ -427,7 +464,6 @@ public class MainActivity extends AppCompatActivity {
         return super.dispatchKeyEvent(event);
     }
 
-    // ✅ NUEVO: Device ID perpetuo (no cambia al desinstalar)
     private String generarDeviceId() {
         if (deviceIdCache != null) return deviceIdCache;
         
@@ -902,6 +938,10 @@ public class MainActivity extends AppCompatActivity {
                 if (url != null && url.contains("index.html")) {
                     indexListo = true;
                     Log.d(TAG, "index.html cargado, listo=" + (listaLegada != null));
+                    if (!configAplicada) {
+                        configAplicada = true;
+                        aplicarConfigEnWebView();
+                    }
                     if (listaLegada != null) {
                         enviarListaAlHtmlConReintentos(listaLegada, 0);
                     }
@@ -959,7 +999,6 @@ public class MainActivity extends AppCompatActivity {
         });
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
-        myWebView.addJavascriptInterface(new SplashInterface(), "AndroidSplash");
     }
 
     private void avisarAlWebView(String js) {
@@ -1461,24 +1500,21 @@ public class MainActivity extends AppCompatActivity {
         }
         new Thread(() -> {
             try {
-                // Usamos el endpoint de la gemela que SÍ funciona
-URL url = new URL(VALIDAR_URL);
-HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-conn.setRequestMethod("POST");
-conn.setConnectTimeout(10000);
-conn.setReadTimeout(10000);
-conn.setDoOutput(true);
-conn.setRequestProperty("Content-Type", "application/json");
-conn.setRequestProperty("X-GTV-Origin", SELLO);
+                URL url = new URL(VALIDAR_URL);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("X-GTV-Origin", SELLO);
 
-// Obtenemos el código secreto o la lista del usuario
-String textoParaValidar = "gtv_app_2026_secreto_xyz789"; // O el código que uses
-JSONObject body = new JSONObject();
-body.put("texto", textoParaValidar);
-body.put("deviceId", generarDeviceId());
-OutputStream os = conn.getOutputStream();
-os.write(body.toString().getBytes("UTF-8"));
-os.close();
+                JSONObject body = new JSONObject();
+                body.put("texto", "gtv_app_2026_secreto_xyz789");
+                body.put("deviceId", generarDeviceId());
+                OutputStream os = conn.getOutputStream();
+                os.write(body.toString().getBytes("UTF-8"));
+                os.close();
 
                 int code = conn.getResponseCode();
                 if (code != 200) {
@@ -1568,16 +1604,6 @@ os.close();
                     handler.postDelayed(() -> enviarListaAlHtmlConReintentos(contenido, intento + 1), 300);
                 }
             });
-    }
-
-    public class SplashInterface {
-        @JavascriptInterface
-        public void onSplashTerminado() {
-            runOnUiThread(() -> {
-                Log.d(TAG, "Splash terminado → cargando index.html");
-                myWebView.loadUrl("file:///android_asset/index.html");
-            });
-        }
     }
 
     private void guardarNuevaLista(String nombre, String contenidoM3U, String urlOriginal) {
