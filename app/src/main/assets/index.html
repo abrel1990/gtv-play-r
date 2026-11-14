@@ -244,7 +244,7 @@ var FB_POSTER = svgUri(300,450,'GPLIS','#1a1a1a','#E50914');
 function hoyStr(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
 function fetchW(url,ms,opts){
   opts=opts||{};
-  opts.headers=Object.assign({'X-GTV-Origin':SELLO},opts.headers||{});
+  opts.headers=Object.assign({'X-GTV-Origin':SELLO, 'Cache-Control':'no-cache'},opts.headers||{});
   var tid=null;
   if(ms&&window.AbortController){
     var c=new AbortController();
@@ -264,13 +264,8 @@ $('mhint').style.display = IS_TV ? '' : 'none';
 function ap(){return window.AndroidPlayer||null}
 function hasNat(n){var a=ap();return !!(a&&a[n])}
 function nat(n){var a=ap();if(!a||!a[n])return undefined;try{return a[n].apply(a,Array.prototype.slice.call(arguments,1))}catch(e){return undefined}}
-var deviceId = 'GTV-R-J7GELQ'; // Forzado para probar
-if(hasNat('getDeviceId')){
-  try{
-    var nativo = nat('getDeviceId');
-    if(nativo && nativo.startsWith('GTV-R-')) deviceId = nativo;
-  }catch(e){}
-}
+var deviceId = '';
+if(hasNat('getDeviceId')){try{deviceId=nat('getDeviceId')||''}catch(e){}}
 if(!deviceId){
   deviceId = ls.get('gtv_device_id','');
   if(!deviceId){
@@ -304,21 +299,30 @@ var remote = {horasDemo:24, canalesDemo:[], licencias:{}, cuentas:[], maxGlobal:
 var _licSrc = '';
 function guardarLic(){var c=Object.assign({},lic);if(remote.demoSrv)delete c.demoStart;var t=JSON.stringify(c);if(t===_licSrc)return;_licSrc=t;ls.set('gtv_license',t)}
 function cargarLicLocal(){var s=ls.getJ('gtv_license',null);if(s)Object.assign(lic,s);if(!remote.demoSrv&&!lic.demoStart){lic.demoStart=Date.now();guardarLic()}}
+function fNum(f) {
+    if (!f) return 0;
+    var s = String(f).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(s.slice(0, 10)).getTime();
+    var m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m) return new Date(m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0')).getTime();
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+}
 function tieneLicencia(){
-  var hoy=hoyStr();
+  var hoyNum = fNum(hoyStr());
   var cargado=(remote.cuentas&&remote.cuentas.length)||Object.keys(remote.licencias).length;
   if(cargado){
     for(var i=0;i<remote.cuentas.length;i++){
       var c=remote.cuentas[i];
-      if(Array.isArray(c.dispositivos)&&c.dispositivos.map(function(d){return String(d).trim()}).indexOf(deviceId)>=0&&c.vence&&c.vence>=hoy){
+      if(Array.isArray(c.dispositivos)&&c.dispositivos.map(function(d){return String(d).trim()}).indexOf(deviceId)>=0&&fNum(c.vence) >= hoyNum){
         lic.hasLicense=true;lic.expirationDate=c.vence;lic.miCuenta=c;guardarLic();return true;
       }
     }
     var re=remote.licencias[deviceId];
-    if(re&&re>=hoy){lic.hasLicense=true;lic.expirationDate=re;lic.miCuenta=null;guardarLic();return true}
+    if(fNum(re) >= hoyNum){lic.hasLicense=true;lic.expirationDate=re;lic.miCuenta=null;guardarLic();return true}
     lic.hasLicense=false;lic.expirationDate=null;lic.miCuenta=null;guardarLic();return false;
   }
-  return !!(lic.hasLicense&&lic.expirationDate&&lic.expirationDate>=hoy);
+  return !!(lic.hasLicense&&lic.expirationDate&&fNum(lic.expirationDate)>=hoyNum);
 }
 function demoActiva(){if(tieneLicencia())return false;return (Date.now()-(lic.demoStart||0))<(remote.horasDemo*3600000)}
 function setTxt(el,t){if(el.textContent!==t)el.textContent=t}
@@ -491,7 +495,6 @@ function cargarConfig(){
   return fetchW(CONFIG_URL+'?t='+Date.now(),12000).then(function(r){
     if(!r.ok)return 'net';
     return r.json().then(function(d){
-      // ✅ SE ELIMINÓ LA VALIDACIÓN DEL HASH QUE BLOQUEABA TODO
       aplicarConfig(d);
       return 'ok';
     });
