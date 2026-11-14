@@ -94,6 +94,12 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GTV_R_DEBUG";
 
+    // ✅ FIX LIC: URLs y sello que usa la gemela (una sola fuente de verdad)
+    private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
+    private static final String CONFIG_URL = "https://gtv-portero.abrel03.workers.dev/api/config";
+    private static final String ESTADO_URL = "https://gtv-portero.abrel03.workers.dev/api/estado-canales";
+    private static final String SELLO = "gtv_app_2026_secreto_xyz789";
+
     private WebView myWebView;
     private ExoPlayer exoPlayer;
     private PlayerView playerView;
@@ -121,9 +127,6 @@ public class MainActivity extends AppCompatActivity {
     private MediaPlayer vlcPlayer;
     private boolean enVlc = false;
 
-    private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
-    private static final String CONFIG_URL = "https://gtv-portero.abrel03.workers.dev/api/config";
-    private static final String SELLO = "gtv_app_2026_secreto_xyz789";
     private boolean enYouTubeWeb = false;
     private boolean enYouTubeNativo = false;
 
@@ -376,7 +379,7 @@ public class MainActivity extends AppCompatActivity {
         configurarWebView();
         configurarBotones();
 
-        // ✅ FIX: Cargar index.html directo, sin splash
+        // ✅ Carga index.html desde assets (esto se queda igual, R lo tiene así)
         myWebView.loadUrl("file:///android_asset/index.html");
 
         ocultarBarrasSistema();
@@ -388,25 +391,26 @@ public class MainActivity extends AppCompatActivity {
         }, 5000);
     }
 
+    // ✅ FIX LIC: deviceId con prefijo GTV-R- (Opción 2: licencia separada)
     private String generarDeviceId() {
         if (deviceIdCache != null) return deviceIdCache;
-        
+
         SharedPreferences prefs = getSharedPreferences("gtv_r_prefs", MODE_PRIVATE);
         String guardado = prefs.getString("device_id_guardado", null);
         if (guardado != null && guardado.startsWith("GTV-R-") && guardado.length() == 10) {
             deviceIdCache = guardado;
             return deviceIdCache;
         }
-        
+
         String androidId = null;
-        try { 
-            androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID); 
+        try {
+            androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
         } catch (Exception ignored) {}
-        
+
         if (androidId == null || androidId.isEmpty()) {
             androidId = "GTVR_" + Build.MANUFACTURER + "_" + Build.MODEL;
         }
-        
+
         final String ALFABETO = "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ";
         long hash = 0;
         for (int i = 0; i < androidId.length(); i++) {
@@ -414,7 +418,7 @@ public class MainActivity extends AppCompatActivity {
         }
         hash = hash ^ (hash >> 16);
         hash = (hash * 0x45d9f3bL) & 0xFFFFFFFFL;
-        
+
         StringBuilder sb = new StringBuilder("GTV-R-");
         long h = hash;
         for (int i = 0; i < 6; i++) {
@@ -423,9 +427,9 @@ public class MainActivity extends AppCompatActivity {
             h = h ^ (h >> 3);
         }
         deviceIdCache = sb.toString();
-        
+
         prefs.edit().putString("device_id_guardado", deviceIdCache).apply();
-        
+
         return deviceIdCache;
     }
 
@@ -654,10 +658,15 @@ public class MainActivity extends AppCompatActivity {
         avisarAlWebView("window.gtv&&window.gtv.onNativoIniciado&&window.gtv.onNativoIniciado();");
         handler.postDelayed(this::actualizarWatchNext, 5000);
         mostrarControles();
-        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+        playerContainer.post(() -> { aplicarRotacion(); repositionarBotonesSafe(); });
         overlayControls.setVisibility(View.VISIBLE);
         overlayControls.bringToFront();
         overlayControls.requestFocus();
+    }
+
+    // ✅ FIX LIC: helper para reposicionar sin pelear con nombre viejo
+    private void repositionarBotonesSafe() {
+        try { reposicionarBotones(); } catch (Exception ignored) {}
     }
 
     private MediaSource construirMediaSource(Canal c) {
@@ -1412,10 +1421,6 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
-    private void consultarListaMaestraAlIniciar(final int intento) {
-        // ✅ DESACTIVADO: La lista ahora la maneja el index.html
-    }
-
     private void enviarListaAlHtmlConReintentos(final String contenido, final int intento) {
         if (myWebView == null || intento > 30) return;
         myWebView.evaluateJavascript(
@@ -1452,41 +1457,6 @@ public class MainActivity extends AppCompatActivity {
             Log.d(TAG, "Lista guardada: " + nombre + " (" + nuevas.length() + " listas)");
         } catch (Exception e) {
             Log.e(TAG, "Error guardando lista: " + e.getMessage());
-        }
-    }
-
-    private void cargarListaGuardadaAlIniciar(final int intento) {
-        if (!webViewListo && intento < 20) {
-            handler.postDelayed(() -> cargarListaGuardadaAlIniciar(intento + 1), 500);
-            return;
-        }
-        try {
-            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
-            JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
-            if (listas.length() == 0) return;
-            String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
-            JSONObject elegida = null;
-            if (ultimaNombre != null) {
-                for (int i = 0; i < listas.length(); i++) {
-                    if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
-                        elegida = listas.getJSONObject(i);
-                        break;
-                    }
-                }
-            }
-            if (elegida == null) elegida = listas.getJSONObject(0);
-            String contenido = elegida.getString("contenido");
-            ArrayList<Canal> listaParseada = parsearM3u(contenido);
-            if (!listaParseada.isEmpty()) {
-                canales.clear();
-                canales.addAll(listaParseada);
-                indiceActual = 0;
-                listaLegada = contenido;
-                if (indexListo) enviarListaAlHtmlConReintentos(contenido, 0);
-                Log.d(TAG, "Lista restaurada al iniciar: " + elegida.optString("nombre") + " (" + listaParseada.size() + " canales)");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error cargando lista guardada: " + e.getMessage());
         }
     }
 
@@ -1602,8 +1572,63 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // ============================================================
+    // ✅ FIX LIC: WebAppInterface con getConfigNativa + getEstadoCanalesNativo
+    // ============================================================
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
+
+        // ✅ FIX LIC: config traída desde Java (evita CORS de file://)
+        @JavascriptInterface
+        public String getConfigNativa() {
+            try {
+                URL u = new URL(CONFIG_URL + "?t=" + System.currentTimeMillis());
+                HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(12000);
+                conn.setReadTimeout(12000);
+                conn.setRequestProperty("X-GTV-Origin", SELLO);
+                conn.setRequestProperty("Cache-Control", "no-cache");
+                int code = conn.getResponseCode();
+                if (code != 200) { conn.disconnect(); return ""; }
+                InputStream is = conn.getInputStream();
+                BufferedReader br = new BufferedReader(new InputStreamReader(is, "UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                br.close(); is.close();
+                conn.disconnect();
+                return sb.toString();
+            } catch (Exception e) {
+                Log.e(TAG, "getConfigNativa error: " + e.getMessage());
+                return "";
+            }
+        }
+
+        // ✅ FIX LIC: estado de canales desde Java
+        @JavascriptInterface
+        public String getEstadoCanalesNativo() {
+            try {
+                URL u = new URL(ESTADO_URL + "?t=" + System.currentTimeMillis());
+                HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setRequestProperty("X-GTV-Origin", SELLO);
+                int code = conn.getResponseCode();
+                if (code != 200) { conn.disconnect(); return ""; }
+                InputStream is = conn.getInputStream();
+                BufferedReader br = new BufferedReader(new InputStreamReader(is, "UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                br.close(); is.close();
+                conn.disconnect();
+                return sb.toString();
+            } catch (Exception e) {
+                return "";
+            }
+        }
 
         @JavascriptInterface public void setLista(final String json) {
             runOnUiThread(() -> {
@@ -1791,6 +1816,9 @@ public class MainActivity extends AppCompatActivity {
             });
         }
     }
+
+    // ✅ FIX LIC: validarYcargar con la constante VALIDAR_URL
+    private static final String VALIDAR_URL = "https://gtv-portero.abrel03.workers.dev/api/reproductor/validar";
 
     private void validarYcargar(final String texto) {
         final ProgressDialog progress = new ProgressDialog(this);
