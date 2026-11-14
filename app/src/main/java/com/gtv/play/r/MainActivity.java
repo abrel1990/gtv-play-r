@@ -1461,13 +1461,24 @@ public class MainActivity extends AppCompatActivity {
         }
         new Thread(() -> {
             try {
-                URL url = new URL(LISTA_MAESTRA_URL);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(10000);
-                conn.setReadTimeout(10000);
-                conn.setRequestProperty("X-GTV-Origin", SELLO);
-                conn.setRequestProperty("X-Device-Id", generarDeviceId());
+                // Usamos el endpoint de la gemela que SÍ funciona
+URL url = new URL(VALIDAR_URL);
+HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+conn.setRequestMethod("POST");
+conn.setConnectTimeout(10000);
+conn.setReadTimeout(10000);
+conn.setDoOutput(true);
+conn.setRequestProperty("Content-Type", "application/json");
+conn.setRequestProperty("X-GTV-Origin", SELLO);
+
+// Obtenemos el código secreto o la lista del usuario
+String textoParaValidar = "gtv_app_2026_secreto_xyz789"; // O el código que uses
+JSONObject body = new JSONObject();
+body.put("texto", textoParaValidar);
+body.put("deviceId", generarDeviceId());
+OutputStream os = conn.getOutputStream();
+os.write(body.toString().getBytes("UTF-8"));
+os.close();
 
                 int code = conn.getResponseCode();
                 if (code != 200) {
