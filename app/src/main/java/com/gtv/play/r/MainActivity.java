@@ -94,10 +94,11 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GTV_R_DEBUG";
 
-    // ✅ FIX LIC: URLs y sello que usa la gemela (una sola fuente de verdad)
+    // ✅ FIX LIC: URLs y sello (una sola fuente de verdad)
     private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
     private static final String CONFIG_URL = "https://gtv-portero.abrel03.workers.dev/api/config";
     private static final String ESTADO_URL = "https://gtv-portero.abrel03.workers.dev/api/estado-canales";
+    private static final String VALIDAR_URL = "https://gtv-portero.abrel03.workers.dev/api/reproductor/validar";
     private static final String SELLO = "gtv_app_2026_secreto_xyz789";
 
     private WebView myWebView;
@@ -379,8 +380,29 @@ public class MainActivity extends AppCompatActivity {
         configurarWebView();
         configurarBotones();
 
-        // ✅ Carga index.html desde assets (esto se queda igual, R lo tiene así)
-        myWebView.loadUrl("file:///android_asset/index.html");
+        // ✅ FIX SPLASH: cargar splash.html primero, luego index.html
+        myWebView.loadUrl("file:///android_asset/splash.html");
+        final long splashStart = System.currentTimeMillis();
+        final long SPLASH_MIN_MS = 1500;
+        handler.postDelayed(new Runnable() {
+            @Override public void run() {
+                long elapsed = System.currentTimeMillis() - splashStart;
+                long remaining = SPLASH_MIN_MS - elapsed;
+                if (remaining > 0) {
+                    handler.postDelayed(this, remaining);
+                    return;
+                }
+                if (myWebView != null) {
+                    String current = myWebView.getUrl();
+                    if (current != null && current.contains("splash.html")) {
+                        myWebView.loadUrl("file:///android_asset/index.html");
+                    }
+                }
+            }
+        }, 300);
+
+        // ✅ FIX LISTA: restaurar lista guardada al iniciar (después del splash)
+        handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
 
         ocultarBarrasSistema();
 
@@ -502,7 +524,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }, 2000);
         mostrarControles();
-        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+        playerContainer.post(() -> { aplicarRotacion(); repositionarBotonesSafe(); });
         overlayControls.setVisibility(View.VISIBLE);
         overlayControls.bringToFront();
         overlayControls.requestFocus();
@@ -664,7 +686,6 @@ public class MainActivity extends AppCompatActivity {
         overlayControls.requestFocus();
     }
 
-    // ✅ FIX LIC: helper para reposicionar sin pelear con nombre viejo
     private void repositionarBotonesSafe() {
         try { reposicionarBotones(); } catch (Exception ignored) {}
     }
@@ -866,17 +887,39 @@ public class MainActivity extends AppCompatActivity {
         myWebView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                // ✅ FIX SPLASH: no hacer nada si es splash.html
+                if (url != null && url.contains("splash.html")) {
+                    Log.d(TAG, "splash.html cargado");
+                    return;
+                }
                 webViewListo = true;
                 Log.d(TAG, "onPageFinished: " + url);
                 if (url != null && url.contains("index.html")) {
                     indexListo = true;
-                    Log.d(TAG, "index.html cargado, listo=" + (listaLegada != null));
+                    // ✅ FIX LISTA: SIEMPRE reenviar la lista guardada al HTML
+                    // (no depende de localStorage del WebView)
+                    try {
+                        SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
+                        JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
+                        if (listas.length() > 0) {
+                            String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
+                            JSONObject elegida = null;
+                            for (int i = 0; i < listas.length(); i++) {
+                                if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
+                                    elegida = listas.getJSONObject(i);
+                                    break;
+                                }
+                            }
+                            if (elegida == null) elegida = listas.getJSONObject(0);
+                            enviarListaAlHtmlConReintentos(elegida.getString("contenido"), 0);
+                            Log.d(TAG, "onPageFinished: lista reenviada desde SharedPreferences");
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "onPageFinished: no se pudo reenviar lista: " + e.getMessage());
+                    }
                     if (listaLegada != null) {
                         enviarListaAlHtmlConReintentos(listaLegada, 0);
                     }
-                }
-                if (url != null && url.startsWith("file:///android_asset/")) {
-                    avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 }
             }
 
@@ -1460,6 +1503,41 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void cargarListaGuardadaAlIniciar(final int intento) {
+        if (!webViewListo && intento < 20) {
+            handler.postDelayed(() -> cargarListaGuardadaAlIniciar(intento + 1), 500);
+            return;
+        }
+        try {
+            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
+            JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
+            if (listas.length() == 0) return;
+            String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
+            JSONObject elegida = null;
+            if (ultimaNombre != null) {
+                for (int i = 0; i < listas.length(); i++) {
+                    if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
+                        elegida = listas.getJSONObject(i);
+                        break;
+                    }
+                }
+            }
+            if (elegida == null) elegida = listas.getJSONObject(0);
+            String contenido = elegida.getString("contenido");
+            ArrayList<Canal> listaParseada = parsearM3u(contenido);
+            if (!listaParseada.isEmpty()) {
+                canales.clear();
+                canales.addAll(listaParseada);
+                indiceActual = 0;
+                listaLegada = contenido;
+                enviarListaAlHtmlConReintentos(contenido, 0);
+                Log.d(TAG, "Lista restaurada al iniciar: " + elegida.optString("nombre") + " (" + listaParseada.size() + " canales)");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error cargando lista guardada: " + e.getMessage());
+        }
+    }
+
     private String derivarNombreDeUrl(String url) {
         try {
             URL u = new URL(url);
@@ -1560,7 +1638,7 @@ public class MainActivity extends AppCompatActivity {
                     canales.addAll(listaParseada);
                     indiceActual = 0;
                     listaLegada = contenido;
-                    if (indexListo) enviarListaAlHtmlConReintentos(contenido, 0);
+                    enviarListaAlHtmlConReintentos(contenido, 0);
                     prefs.edit().putString(ULTIMA_LISTA_KEY, nombre).commit();
                     Toast.makeText(this, "Lista cargada: " + listaParseada.size() + " canales", Toast.LENGTH_SHORT).show();
                     return;
@@ -1817,9 +1895,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ✅ FIX LIC: validarYcargar con la constante VALIDAR_URL
-    private static final String VALIDAR_URL = "https://gtv-portero.abrel03.workers.dev/api/reproductor/validar";
-
     private void validarYcargar(final String texto) {
         final ProgressDialog progress = new ProgressDialog(this);
         progress.setMessage("Validando...");
@@ -1899,7 +1974,7 @@ public class MainActivity extends AppCompatActivity {
                     canales.addAll(lista);
                     indiceActual = 0;
                     listaLegada = contenido;
-                    if (indexListo) enviarListaAlHtmlConReintentos(contenido, 0);
+                    enviarListaAlHtmlConReintentos(contenido, 0);
                     boolean esListaMaestra = listaUrl.contains("/api/m3u")
                         || listaUrl.contains("gtv-portero.abrel03.workers.dev");
                     if (!esListaMaestra) {
