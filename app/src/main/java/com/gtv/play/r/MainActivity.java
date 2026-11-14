@@ -94,7 +94,6 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GTV_R_DEBUG";
 
-    // ✅ FIX LIC: URLs y sello (una sola fuente de verdad)
     private static final String WORKER_URL = "https://gtv-portero.abrel03.workers.dev/";
     private static final String CONFIG_URL = "https://gtv-portero.abrel03.workers.dev/api/config";
     private static final String ESTADO_URL = "https://gtv-portero.abrel03.workers.dev/api/estado-canales";
@@ -380,10 +379,19 @@ public class MainActivity extends AppCompatActivity {
         configurarWebView();
         configurarBotones();
 
-        // ✅ FIX SPLASH: cargar splash.html primero, luego index.html
+        // ✅ SPLASH: mínimo 3 segundos o hasta que index.html esté listo
         myWebView.loadUrl("file:///android_asset/splash.html");
         final long splashStart = System.currentTimeMillis();
-        final long SPLASH_MIN_MS = 1500;
+        final long SPLASH_MIN_MS = 3000;
+        final Runnable cargarIndex = new Runnable() {
+            @Override public void run() {
+                if (myWebView == null) return;
+                String current = myWebView.getUrl();
+                if (current != null && current.contains("splash.html")) {
+                    myWebView.loadUrl("file:///android_asset/index.html");
+                }
+            }
+        };
         handler.postDelayed(new Runnable() {
             @Override public void run() {
                 long elapsed = System.currentTimeMillis() - splashStart;
@@ -392,17 +400,9 @@ public class MainActivity extends AppCompatActivity {
                     handler.postDelayed(this, remaining);
                     return;
                 }
-                if (myWebView != null) {
-                    String current = myWebView.getUrl();
-                    if (current != null && current.contains("splash.html")) {
-                        myWebView.loadUrl("file:///android_asset/index.html");
-                    }
-                }
+                cargarIndex.run();
             }
         }, 300);
-
-        // ✅ FIX LISTA: restaurar lista guardada al iniciar (después del splash)
-        handler.postDelayed(() -> cargarListaGuardadaAlIniciar(0), 500);
 
         ocultarBarrasSistema();
 
@@ -413,7 +413,6 @@ public class MainActivity extends AppCompatActivity {
         }, 5000);
     }
 
-    // ✅ FIX LIC: deviceId con prefijo GTV-R- (Opción 2: licencia separada)
     private String generarDeviceId() {
         if (deviceIdCache != null) return deviceIdCache;
 
@@ -524,7 +523,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }, 2000);
         mostrarControles();
-        playerContainer.post(() -> { aplicarRotacion(); repositionarBotonesSafe(); });
+        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
         overlayControls.setVisibility(View.VISIBLE);
         overlayControls.bringToFront();
         overlayControls.requestFocus();
@@ -680,14 +679,10 @@ public class MainActivity extends AppCompatActivity {
         avisarAlWebView("window.gtv&&window.gtv.onNativoIniciado&&window.gtv.onNativoIniciado();");
         handler.postDelayed(this::actualizarWatchNext, 5000);
         mostrarControles();
-        playerContainer.post(() -> { aplicarRotacion(); repositionarBotonesSafe(); });
+        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
         overlayControls.setVisibility(View.VISIBLE);
         overlayControls.bringToFront();
         overlayControls.requestFocus();
-    }
-
-    private void repositionarBotonesSafe() {
-        try { reposicionarBotones(); } catch (Exception ignored) {}
     }
 
     private MediaSource construirMediaSource(Canal c) {
@@ -887,7 +882,6 @@ public class MainActivity extends AppCompatActivity {
         myWebView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // ✅ FIX SPLASH: no hacer nada si es splash.html
                 if (url != null && url.contains("splash.html")) {
                     Log.d(TAG, "splash.html cargado");
                     return;
@@ -896,30 +890,8 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "onPageFinished: " + url);
                 if (url != null && url.contains("index.html")) {
                     indexListo = true;
-                    // ✅ FIX LISTA: SIEMPRE reenviar la lista guardada al HTML
-                    // (no depende de localStorage del WebView)
-                    try {
-                        SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
-                        JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
-                        if (listas.length() > 0) {
-                            String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
-                            JSONObject elegida = null;
-                            for (int i = 0; i < listas.length(); i++) {
-                                if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
-                                    elegida = listas.getJSONObject(i);
-                                    break;
-                                }
-                            }
-                            if (elegida == null) elegida = listas.getJSONObject(0);
-                            enviarListaAlHtmlConReintentos(elegida.getString("contenido"), 0);
-                            Log.d(TAG, "onPageFinished: lista reenviada desde SharedPreferences");
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "onPageFinished: no se pudo reenviar lista: " + e.getMessage());
-                    }
-                    if (listaLegada != null) {
-                        enviarListaAlHtmlConReintentos(listaLegada, 0);
-                    }
+                    // ✅ RESTAURAR LISTA SIEMPRE DESDE SharedPreferences
+                    restaurarListaAlHtml();
                 }
             }
 
@@ -1464,6 +1436,41 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
+    // ✅ RESTAURAR LISTA: lee de SharedPreferences y envía al HTML
+    private void restaurarListaAlHtml() {
+        try {
+            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
+            JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
+            if (listas.length() == 0) {
+                Log.d(TAG, "restaurarListaAlHtml: no hay listas guardadas");
+                return;
+            }
+            String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
+            JSONObject elegida = null;
+            if (ultimaNombre != null) {
+                for (int i = 0; i < listas.length(); i++) {
+                    if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
+                        elegida = listas.getJSONObject(i);
+                        break;
+                    }
+                }
+            }
+            if (elegida == null) elegida = listas.getJSONObject(0);
+            String contenido = elegida.getString("contenido");
+            ArrayList<Canal> listaParseada = parsearM3u(contenido);
+            if (!listaParseada.isEmpty()) {
+                canales.clear();
+                canales.addAll(listaParseada);
+                indiceActual = 0;
+                listaLegada = contenido;
+                enviarListaAlHtmlConReintentos(contenido, 0);
+                Log.d(TAG, "restaurarListaAlHtml: " + elegida.optString("nombre") + " (" + listaParseada.size() + " canales)");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "restaurarListaAlHtml error: " + e.getMessage());
+        }
+    }
+
     private void enviarListaAlHtmlConReintentos(final String contenido, final int intento) {
         if (myWebView == null || intento > 30) return;
         myWebView.evaluateJavascript(
@@ -1497,44 +1504,9 @@ public class MainActivity extends AppCompatActivity {
                 .putString(LISTAS_KEY, nuevas.toString())
                 .putString(ULTIMA_LISTA_KEY, nombre)
                 .commit();
-            Log.d(TAG, "Lista guardada: " + nombre + " (" + nuevas.length() + " listas)");
+            Log.d(TAG, "guardarNuevaLista: " + nombre + " (" + nuevas.length() + " listas)");
         } catch (Exception e) {
             Log.e(TAG, "Error guardando lista: " + e.getMessage());
-        }
-    }
-
-    private void cargarListaGuardadaAlIniciar(final int intento) {
-        if (!webViewListo && intento < 20) {
-            handler.postDelayed(() -> cargarListaGuardadaAlIniciar(intento + 1), 500);
-            return;
-        }
-        try {
-            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
-            JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
-            if (listas.length() == 0) return;
-            String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
-            JSONObject elegida = null;
-            if (ultimaNombre != null) {
-                for (int i = 0; i < listas.length(); i++) {
-                    if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
-                        elegida = listas.getJSONObject(i);
-                        break;
-                    }
-                }
-            }
-            if (elegida == null) elegida = listas.getJSONObject(0);
-            String contenido = elegida.getString("contenido");
-            ArrayList<Canal> listaParseada = parsearM3u(contenido);
-            if (!listaParseada.isEmpty()) {
-                canales.clear();
-                canales.addAll(listaParseada);
-                indiceActual = 0;
-                listaLegada = contenido;
-                enviarListaAlHtmlConReintentos(contenido, 0);
-                Log.d(TAG, "Lista restaurada al iniciar: " + elegida.optString("nombre") + " (" + listaParseada.size() + " canales)");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error cargando lista guardada: " + e.getMessage());
         }
     }
 
@@ -1650,13 +1622,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ============================================================
-    // ✅ FIX LIC: WebAppInterface con getConfigNativa + getEstadoCanalesNativo
-    // ============================================================
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
 
-        // ✅ FIX LIC: config traída desde Java (evita CORS de file://)
         @JavascriptInterface
         public String getConfigNativa() {
             try {
@@ -1683,7 +1651,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // ✅ FIX LIC: estado de canales desde Java
         @JavascriptInterface
         public String getEstadoCanalesNativo() {
             try {
@@ -1975,11 +1942,13 @@ public class MainActivity extends AppCompatActivity {
                     indiceActual = 0;
                     listaLegada = contenido;
                     enviarListaAlHtmlConReintentos(contenido, 0);
+                    // ✅ GUARDAR SIEMPRE en SharedPreferences (incluida lista maestra)
+                    //    para poder restaurarla al abrir sin localStorage
                     boolean esListaMaestra = listaUrl.contains("/api/m3u")
                         || listaUrl.contains("gtv-portero.abrel03.workers.dev");
+                    String nombre = esListaMaestra ? "Lista maestra" : derivarNombreDeUrl(listaUrl);
+                    guardarNuevaLista(nombre, contenido, listaUrl);
                     if (!esListaMaestra) {
-                        String nombre = derivarNombreDeUrl(listaUrl);
-                        guardarNuevaLista(nombre, contenido, listaUrl);
                         registrarListaEnWorker(listaUrl, nombre);
                     }
                     Toast.makeText(this, "Lista cargada: " + lista.size() + " canales", Toast.LENGTH_SHORT).show();
