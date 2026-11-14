@@ -503,7 +503,6 @@ function aplicarConfig(d){
   aplicarConfigPub(d);
 }
 function cargarConfig(){
-  // 1) Nativo (Java hace el fetch con el header correcto)
   if(hasNat('getConfigNativa')){
     try{
       var raw = nat('getConfigNativa');
@@ -518,14 +517,10 @@ function cargarConfig(){
       }
     }catch(e){}
   }
-  // 2) Fallback: fetch normal
   return fetchW(CONFIG_URL+'?t='+Date.now(),12000).then(function(r){
     if(!r.ok)return 'net';
     return r.json().then(function(d){
-      if(!d.hash_esperado || hashUrl(CONFIG_URL)===d.hash_esperado){
-        aplicarConfig(d);
-        return 'ok';
-      }
+      if(!d.hash_esperado || hashUrl(CONFIG_URL)===d.hash_esperado){ aplicarConfig(d); return 'ok'; }
       aplicarConfig(d);
       return 'hash';
     });
@@ -588,7 +583,6 @@ function syncNativo(){
     nat('setLista',JSON.stringify(arr));
   }catch(e){}
 }
-// ✅ FIX SEGURIDAD: aplicarLista NO guarda en localStorage (solo Java tiene la lista)
 function aplicarLista(nl,keepIndex){
   S.list=nl;
   renderLista();
@@ -600,7 +594,6 @@ function aplicarLista(nl,keepIndex){
   nat('sincronizarIndice',li);
   if(S.view==='list'&&!S.dlg&&!S.native)setTimeout(function(){focusCard(li)},40);
 }
-// ✅ FIX SEGURIDAD: estado canales vía nativo primero
 function sincronizarEstadoCanales(){
   var aplicarEstado = function(d){
     if(!d||!d.ok)return;
@@ -790,7 +783,6 @@ window.nextFn=function(){zap(1)};
 window.prevFn=function(){zap(-1)};
 window.atrasNativo=function(){if(S.dlg||S.grid||S.view==='player'||S.view==='movies'){atras();return true}return false};
 window.rotarDesdeAndroid=function(n){S.rotated=!!n;ls.set('gtv_rot',String(S.rotated));aplicarRot()};
-// ✅ FIX SEGURIDAD: gtvSetCanales NO guarda en localStorage
 window.gtvSetCanales=function(json){
   try{
     var arr=typeof json==='string'?JSON.parse(json):json;
@@ -1253,10 +1245,9 @@ document.addEventListener('keyup',function(e){
   if(S.okFired){S.okFired=false;return}
   activarCard(c);
 });
-// ✅ FIX SEGURIDAD: cargarListaInicial NO lee de localStorage
 function cargarListaInicial(){
-  // La lista la manda Java vía setLista (desde SharedPreferences).
-  // No leemos de localStorage para evitar manipulación externa.
+  // ✅ La lista viene SOLO desde Java (SharedPreferences) vía gtvSetCanales.
+  // NO leemos de localStorage (seguridad).
   renderLista();
 }
 function iniciarApp(){
