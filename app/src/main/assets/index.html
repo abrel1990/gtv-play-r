@@ -308,10 +308,8 @@ function fNum(f) {
     var d = new Date(s);
     return isNaN(d.getTime()) ? 0 : d.getTime();
 }
-// ✅ FIX LIC: tieneLicencia blindada con fNum y Array.isArray
 function tieneLicencia(){
   var hoyNum = fNum(hoyStr());
-  // 1. Cuentas (array de dispositivos)
   if(remote.cuentas && remote.cuentas.length){
     for(var i=0;i<remote.cuentas.length;i++){
       var c=remote.cuentas[i];
@@ -322,7 +320,6 @@ function tieneLicencia(){
       }
     }
   }
-  // 2. Licencias por ID
   if(remote.licencias && typeof remote.licencias==='object' && !Array.isArray(remote.licencias)){
     var re = remote.licencias[deviceId];
     if(re && fNum(re) >= hoyNum){
@@ -330,7 +327,6 @@ function tieneLicencia(){
       guardarLic(); return true;
     }
   }
-  // 3. Fallback local (cache)
   return !!(lic.hasLicense && lic.expirationDate && fNum(lic.expirationDate) >= hoyNum);
 }
 function demoActiva(){if(tieneLicencia())return false;return (Date.now()-(lic.demoStart||0))<(remote.horasDemo*3600000)}
@@ -486,7 +482,6 @@ function bloquear(modo){
 }
 function registrarDispositivo(){if(!ap())return;fetch(BAN_URL+'/api/registrar?device='+encodeURIComponent(deviceId),{method:'POST'}).catch(noop)}
 function verificarBaneo(){if(!ap())return;fetch(BAN_URL+'/api/estado?device='+encodeURIComponent(deviceId)).then(function(r){return r.json()}).then(function(d){if(d&&d.baneado===true)bloquear('ban')}).catch(noop)}
-// ✅ FIX LIC: aplicarConfig blindada para licencias array u objeto
 function aplicarConfig(d){
   if(!d)return;
   remote.horasDemo=d.horasDemo||24;
@@ -507,7 +502,6 @@ function aplicarConfig(d){
   if(d.demoStart)remote.demoSrv=true;
   aplicarConfigPub(d);
 }
-// ✅ FIX LIC: cargarConfig usa NATIVO primero (evita CORS de file://)
 function cargarConfig(){
   // 1) Nativo (Java hace el fetch con el header correcto)
   if(hasNat('getConfigNativa')){
@@ -519,13 +513,12 @@ function cargarConfig(){
           aplicarConfig(d);
           return Promise.resolve('ok');
         }
-        // hash no coincide, igual aplicamos (no bloqueamos por esto)
         aplicarConfig(d);
         return Promise.resolve('hash');
       }
     }catch(e){}
   }
-  // 2) Fallback: fetch normal (solo funciona si el origen es https)
+  // 2) Fallback: fetch normal
   return fetchW(CONFIG_URL+'?t='+Date.now(),12000).then(function(r){
     if(!r.ok)return 'net';
     return r.json().then(function(d){
@@ -595,6 +588,7 @@ function syncNativo(){
     nat('setLista',JSON.stringify(arr));
   }catch(e){}
 }
+// ✅ FIX SEGURIDAD: aplicarLista NO guarda en localStorage (solo Java tiene la lista)
 function aplicarLista(nl,keepIndex){
   S.list=nl;
   renderLista();
@@ -606,7 +600,7 @@ function aplicarLista(nl,keepIndex){
   nat('sincronizarIndice',li);
   if(S.view==='list'&&!S.dlg&&!S.native)setTimeout(function(){focusCard(li)},40);
 }
-// ✅ FIX LIC: estado de canales vía nativo primero
+// ✅ FIX SEGURIDAD: estado canales vía nativo primero
 function sincronizarEstadoCanales(){
   var aplicarEstado = function(d){
     if(!d||!d.ok)return;
@@ -796,6 +790,7 @@ window.nextFn=function(){zap(1)};
 window.prevFn=function(){zap(-1)};
 window.atrasNativo=function(){if(S.dlg||S.grid||S.view==='player'||S.view==='movies'){atras();return true}return false};
 window.rotarDesdeAndroid=function(n){S.rotated=!!n;ls.set('gtv_rot',String(S.rotated));aplicarRot()};
+// ✅ FIX SEGURIDAD: gtvSetCanales NO guarda en localStorage
 window.gtvSetCanales=function(json){
   try{
     var arr=typeof json==='string'?JSON.parse(json):json;
@@ -1258,13 +1253,11 @@ document.addEventListener('keyup',function(e){
   if(S.okFired){S.okFired=false;return}
   activarCard(c);
 });
+// ✅ FIX SEGURIDAD: cargarListaInicial NO lee de localStorage
 function cargarListaInicial(){
-  var cached=ls.getJ('gtv_channels',null);
-  if(cached&&cached.length){
-    aplicarLista(cached,true);
-  } else {
-    renderLista();
-  }
+  // La lista la manda Java vía setLista (desde SharedPreferences).
+  // No leemos de localStorage para evitar manipulación externa.
+  renderLista();
 }
 function iniciarApp(){
   try{registrarDispositivo();verificarBaneo()}catch(e){}
