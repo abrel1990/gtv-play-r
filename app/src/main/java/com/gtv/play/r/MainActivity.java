@@ -836,8 +836,13 @@ private String resolverUrlFinalHls(String masterUrl) {
                     .setAllowChunklessPreparation(false)
                     .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6));
 
-            return hlsFactory.createMediaSource(mediaItem);
+                        return hlsFactory.createMediaSource(mediaItem);
         }
+
+        return new DefaultMediaSourceFactory(f, extractors)
+            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
+            .createMediaSource(mediaItem);
+    }
 
     private String mimeDe(String u) {
         String s = u.toLowerCase();
