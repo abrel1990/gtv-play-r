@@ -793,9 +793,7 @@ private String resolverUrlFinalHls(String masterUrl) {
         return masterUrl;
     }
 }
-
-private MediaSource construirMediaSource(Canal c) {
-    
+  
     private MediaSource construirMediaSource(Canal c) {
         DefaultHttpDataSource.Factory f = new DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
