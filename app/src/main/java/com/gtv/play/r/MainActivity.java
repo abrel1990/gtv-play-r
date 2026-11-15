@@ -24,6 +24,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
@@ -56,6 +57,8 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory;
+import androidx.media3.exoplayer.hls.HlsMediaSource;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy;
@@ -372,15 +375,14 @@ public class MainActivity extends AppCompatActivity {
                     try { exoPlayer.seekToDefaultPosition(); exoPlayer.prepare(); } catch (Exception e) {}
                     return;
                 }
-                                if (reintentar()) return;
+                if (reintentar()) return;
 
                 String uErr = canalActual != null ? canalActual.url.toLowerCase() : "";
                 if (uErr.contains(".m3u8") && !probandoVlc && canalActual != null) {
                     probandoVlc = true;
                     reintentosVlc = 0;
-                    String urlFinal = resolverUrlFinalHls(canalActual.url);
-                    Log.e(TAG, "ExoPlayer falló en HLS, probando VLC con URL resuelta: " + urlFinal);
-                    Canal cVlc = new Canal(urlFinal, canalActual.nombre, canalActual.logo, canalActual.referer, canalActual.gain);
+                    Log.e(TAG, "ExoPlayer falló en HLS, probando VLC: " + canalActual.url);
+                    Canal cVlc = new Canal(canalActual.url, canalActual.nombre, canalActual.logo, canalActual.referer, canalActual.gain);
                     reproducirConVLC(cVlc);
                     return;
                 }
@@ -392,6 +394,7 @@ public class MainActivity extends AppCompatActivity {
                     reproducirConVLC(canalActual);
                     return;
                 }
+
                 detenerLoaderAnim();
                 mostrarLoaderError();
                 Log.e(TAG, "ExoPlayer error (" + error.errorCode + "): " + error.getMessage());
@@ -412,7 +415,6 @@ public class MainActivity extends AppCompatActivity {
         });
 
         inicializarVLC();
-        // ✅ FIX VIDEO: attach del surface UNA SOLA VEZ
         if (vlcPlayer != null && vlcSurface != null) {
             try {
                 IVLCVout vout = vlcPlayer.getVLCVout();
@@ -426,7 +428,6 @@ public class MainActivity extends AppCompatActivity {
         configurarWebView();
         configurarBotones();
 
-        // ✅ SPLASH: mínimo 3 segundos o hasta que index.html esté listo
         myWebView.loadUrl("file:///android_asset/splash.html");
         final long splashStart = System.currentTimeMillis();
         final long SPLASH_MIN_MS = 3000;
@@ -460,7 +461,6 @@ public class MainActivity extends AppCompatActivity {
         }, 5000);
     }
 
-    // ✅ FIX: detiene TODOS los motores antes de arrancar uno nuevo
     private void detenerTodo() {
         enExoPlayer = false;
         enVlc = false;
@@ -727,18 +727,9 @@ public class MainActivity extends AppCompatActivity {
         nombreCanal.setText(c.nombre);
         numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
         if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
-                try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
         mostrarLoaderSintonizando();
-        Canal canalResuelto = c;
-        String urlLower = c.url.toLowerCase();
-        if (urlLower.contains(".m3u8") || urlLower.contains("type=m3u8") || urlLower.contains("format=m3u8")) {
-            String urlFinal = resolverUrlFinalHls(c.url);
-            if (!urlFinal.equals(c.url)) {
-                Log.d(TAG, "Master HLS resuelto: " + c.url + " -> " + urlFinal);
-                canalResuelto = new Canal(urlFinal, c.nombre, c.logo, c.referer, c.gain);
-            }
-        }
-        exoPlayer.setMediaSource(construirMediaSource(canalResuelto));
+        exoPlayer.setMediaSource(construirMediaSource(c));
         exoPlayer.prepare();
         exoPlayer.setPlayWhenReady(true);
         exoPlayer.play();
@@ -754,47 +745,8 @@ public class MainActivity extends AppCompatActivity {
         overlayControls.setFocusableInTouchMode(true);
         overlayControls.requestFocus();
     }
-private String resolverUrlFinalHls(String masterUrl) {
-    try {
-        URL u = new URL(masterUrl);
-        HttpURLConnection conn = (HttpURLConnection) u.openConnection();
-        conn.setRequestMethod("GET");
-        conn.setConnectTimeout(8000);
-        conn.setReadTimeout(8000);
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36");
-        conn.setRequestProperty("Accept", "*/*");
-        if (conn.getResponseCode() != 200) {
-            conn.disconnect();
-            return masterUrl;
-        }
-        BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-        String line;
-        String relative = null;
-        boolean esMediaPlaylist = false;
-        while ((line = br.readLine()) != null) {
-            String t = line.trim();
-            if (t.isEmpty()) continue;
-            if (t.startsWith("#EXTINF")) {
-                esMediaPlaylist = true;
-                break;
-            }
-            if (t.startsWith("#")) continue;
-            relative = t;
-            break;
-        }
-        br.close();
-        conn.disconnect();
-        if (esMediaPlaylist || relative == null) return masterUrl;
-        if (relative.startsWith("http://") || relative.startsWith("https://")) return relative;
-        URL base = new URL(masterUrl);
-        return new URL(base, relative).toString();
-    } catch (Exception e) {
-        Log.e(TAG, "resolverUrlFinalHls error: " + e.getMessage());
-        return masterUrl;
-    }
-}
-  
-        private MediaSource construirMediaSource(Canal c) {
+
+    private MediaSource construirMediaSource(Canal c) {
         DefaultHttpDataSource.Factory f = new DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(10000)
@@ -814,27 +766,21 @@ private String resolverUrlFinalHls(String masterUrl) {
             .setTsExtractorFlags(
                 DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
                     | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS);
-                MediaItem.Builder ib = new MediaItem.Builder().setUri(c.url);
+        MediaItem.Builder ib = new MediaItem.Builder().setUri(c.url);
         String mime = mimeDe(c.url);
         if (mime != null) ib.setMimeType(mime);
 
-        // ✅ FIX TELEFE: Forzar extractor HLS con detección real de video
+        // ✅ FIX HLS: forzar extractor con detección real de video
         MediaItem mediaItem = ib.build();
         String urlLower = c.url.toLowerCase();
         if (urlLower.contains(".m3u8") || urlLower.contains("type=m3u8") || urlLower.contains("format=m3u8")) {
-            // 1. Crear el extractor con el flag para permitir frames no-IDR
-                        int tsFlags = androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES;
-
-            androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory hlsExtractorFactory =
-                new androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory(tsFlags, false);
-            // 2. Crear el factory HLS con ese extractor
-            androidx.media3.exoplayer.hls.HlsMediaSource.Factory hlsFactory =
-                new androidx.media3.exoplayer.hls.HlsMediaSource.Factory(f)
-                    .setExtractorFactory(hlsExtractorFactory) // <-- La clave está acá
-                    .setAllowChunklessPreparation(false)
-                    .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6));
-
-                        return hlsFactory.createMediaSource(mediaItem);
+            int tsFlags = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES;
+            DefaultHlsExtractorFactory hlsExtractorFactory = new DefaultHlsExtractorFactory(tsFlags, false);
+            HlsMediaSource.Factory hlsFactory = new HlsMediaSource.Factory(f)
+                .setExtractorFactory(hlsExtractorFactory)
+                .setAllowChunklessPreparation(false)
+                .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6));
+            return hlsFactory.createMediaSource(mediaItem);
         }
 
         return new DefaultMediaSourceFactory(f, extractors)
@@ -1020,7 +966,6 @@ private String resolverUrlFinalHls(String masterUrl) {
                 Log.d(TAG, "onPageFinished: " + url);
                 if (url != null && url.contains("index.html")) {
                     indexListo = true;
-                    // ✅ FIX: siempre pedir lista fresca (remota) al abrir
                     refrescarListaRemota();
                 }
             }
@@ -1098,6 +1043,31 @@ private String resolverUrlFinalHls(String masterUrl) {
             }
             return false;
         });
+        // ✅ FIX: swipe táctil para zapping en móvil
+        overlayControls.setOnTouchListener(new View.OnTouchListener() {
+            private float startX = 0, startY = 0;
+            private long startTime = 0;
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        startX = event.getX(); startY = event.getY();
+                        startTime = System.currentTimeMillis();
+                        return false;
+                    case MotionEvent.ACTION_UP:
+                        float diffX = event.getX() - startX;
+                        float diffY = event.getY() - startY;
+                        long dur = System.currentTimeMillis() - startTime;
+                        if (Math.abs(diffX) > 80 && Math.abs(diffY) < 120 && dur < 500) {
+                            if (diffX > 0) navegar(-1); else navegar(+1);
+                            mostrarControles();
+                            return true;
+                        }
+                        return false;
+                    default: return false;
+                }
+            }
+        });
     }
 
     private void mostrarControles() {
@@ -1112,6 +1082,14 @@ private String resolverUrlFinalHls(String masterUrl) {
         if (overlayControls != null) {
             overlayControls.setVisibility(View.VISIBLE);
             overlayControls.bringToFront();
+            // ✅ FIX TÁCTIL: los controles vuelven a quedar ENCIMA del overlay
+            // para recibir los toques en celular (en TV no cambia nada: el DPAD
+            // va por el OnKeyListener del overlay, no por toque)
+            infoCanal.bringToFront();
+            btnPrev.bringToFront();
+            btnNext.bringToFront();
+            btnClose.bringToFront();
+            btnRotate.bringToFront();
             overlayControls.setFocusable(true);
             overlayControls.setFocusableInTouchMode(true);
             overlayControls.requestFocus();
@@ -1181,7 +1159,6 @@ private String resolverUrlFinalHls(String masterUrl) {
                   + "window.volverDelExo&&window.volverDelExo();", null);
             } catch (Exception ignored) {}
         }, 32);
-        // ✅ Re-attach para la próxima
         handler.postDelayed(() -> {
             if (vlcPlayer != null && vlcSurface != null) {
                 try {
@@ -1584,10 +1561,6 @@ private String resolverUrlFinalHls(String masterUrl) {
         }, 2000);
     }
 
-    // ✅ FIX: refresca la lista REMOTA. No cachea lista.
-    //   - Si el usuario cargó una lista manual con código, se guardó su URL en SharedPreferences.
-    //     Esa URL se usa para refrescar.
-    //   - Si no hay lista guardada, se pide al Worker con deviceId+auto.
     private void refrescarListaRemota() {
         final int miToken = ++listaToken;
         new Thread(() -> {
@@ -1612,7 +1585,6 @@ private String resolverUrlFinalHls(String masterUrl) {
             } catch (Exception ignored) {}
 
             if (listaUrl == null || listaUrl.isEmpty()) {
-                // Pedir al Worker con deviceId+auto
                 try {
                     URL uVal = new URL(VALIDAR_URL);
                     HttpURLConnection connVal = (HttpURLConnection) uVal.openConnection();
@@ -1658,7 +1630,6 @@ private String resolverUrlFinalHls(String masterUrl) {
                 return;
             }
 
-            // Descargar la lista fresca
             try {
                 URL uList = new URL(listaUrl);
                 HttpURLConnection connList = (HttpURLConnection) uList.openConnection();
@@ -1690,7 +1661,6 @@ private String resolverUrlFinalHls(String masterUrl) {
                     canales.addAll(listaNueva);
                     indiceActual = 0;
                     listaLegada = contenidoNuevo;
-                    // ✅ NO guardar la lista en SharedPreferences (solo la URL que ya está)
                     enviarListaAlHtmlConReintentos(contenidoNuevo, 0);
                     Log.d(TAG, "refrescarListaRemota: lista fresca (" + listaNueva.size() + " canales)");
                 });
@@ -1726,7 +1696,6 @@ private String resolverUrlFinalHls(String masterUrl) {
             });
     }
 
-    // ✅ FIX: guarda SOLO la URL. La lista NUNCA se cachea.
     private void guardarNuevaLista(String nombre, String contenidoM3U, String urlOriginal) {
         try {
             SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
@@ -1822,7 +1791,6 @@ private String resolverUrlFinalHls(String masterUrl) {
                 item.put("nombre", obj.optString("nombre"));
                 item.put("url", obj.optString("url"));
                 item.put("fecha", obj.optLong("fecha", 0));
-                // ✅ La lista no está cacheada. Mostramos "—"
                 item.put("canales", "—");
                 out.put(item);
             }
@@ -2179,7 +2147,6 @@ private String resolverUrlFinalHls(String masterUrl) {
                     boolean esListaMaestra = listaUrl.contains("/api/m3u")
                         || listaUrl.contains("gtv-portero.abrel03.workers.dev");
                     String nombre = esListaMaestra ? "Lista maestra" : derivarNombreDeUrl(listaUrl);
-                    // ✅ guarda SOLO la URL (no el contenido)
                     guardarNuevaLista(nombre, contenido, listaUrl);
                     if (!esListaMaestra) {
                         registrarListaEnWorker(listaUrl, nombre);
