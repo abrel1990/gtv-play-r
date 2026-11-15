@@ -41,9 +41,9 @@
                 app:resize_mode="fit"
                 android:keepScreenOn="true" />
 
-            <!-- ✅ FIX: Cambiado de SurfaceView a TextureView para que VLC llene la pantalla y rote bien -->
-            <TextureView
-                android:id="@+id/vlc_surface"
+            <!-- ✅ FIX: Reemplazamos SurfaceView de VLC por GSYVideoPlayer -->
+            <com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
+                android:id="@+id/gsy_player"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:visibility="gone" />
@@ -61,6 +61,7 @@
                 android:background="#00000000"
                 android:focusable="false" />
 
+            <!-- Sintonizando (letra amarilla, SIN halo) -->
             <TextView
                 android:id="@+id/exo_loader"
                 android:layout_width="wrap_content"
@@ -79,6 +80,7 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
+            <!-- Señal con problemas (letra roja CON halo blanco) -->
             <TextView
                 android:id="@+id/exo_loader_error"
                 android:layout_width="wrap_content"
