@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "com.gtv.play.r"
-        minSdk 21
+        minSdk 23        // ✅ Cambiado de 21 a 23 para GSYVideoPlayer
         targetSdk 34
         versionCode 10
         versionName "0.10"
@@ -50,9 +50,13 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer-dash:1.4.1'
     implementation 'androidx.media3:media3-ui:1.4.1'
     implementation 'com.pierfrancescosoffritti.androidyoutubeplayer:core:13.0.0'
-    implementation 'org.videolan.android:libvlc-all:3.6.0'
     implementation 'com.github.bumptech.glide:glide:4.16.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.tvprovider:tvprovider:1.1.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // ✅ GSYVideoPlayer con IJK/FFmpeg (reemplaza a VLC)
+    // El módulo 'ex_so' es el que incluye el soporte para MPEG-2
+    implementation 'io.github.carguo:gsyvideoplayer:14.1.0'
+    implementation 'io.github.carguo:gsyvideoplayer-ex_so:14.1.0'
 }
