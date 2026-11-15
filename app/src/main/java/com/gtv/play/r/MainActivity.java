@@ -72,6 +72,7 @@ import com.bumptech.glide.Glide;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView;
+import com.shuyu.gsyvideoplayer.utils.GSYVideoType;
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer;
 
 import org.json.JSONArray;
@@ -117,8 +118,6 @@ public class MainActivity extends AppCompatActivity {
     private View btnShield;
     private View overlayControls;
     private YouTubePlayerView youtubePlayerView;
-    
-    // ✅ GSYPlayer reemplaza a VLC
     private StandardGSYVideoPlayer gsyPlayer;
 
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
@@ -127,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
     private YouTubePlayer ytPlayer = null;
     private String ytVideoPendiente = null;
 
-    private boolean enGSY = false; // Reemplaza a enVlc
+    private boolean enGSY = false;
     private boolean enYouTubeWeb = false;
     private boolean enYouTubeNativo = false;
 
@@ -261,7 +260,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ✅ FIX: detecta si el canal es "problemático" y debe ir directo a GSY
     private boolean esCanalProblematicoParaGSY(String url) {
         if (url == null) return false;
         String u = url.toLowerCase();
@@ -302,17 +300,13 @@ public class MainActivity extends AppCompatActivity {
         exoLoaderError = findViewById(R.id.exo_loader_error);
         overlayControls = findViewById(R.id.overlay_controls);
         youtubePlayerView = findViewById(R.id.youtube_player_view);
-        
-        // ✅ GSYPlayer
         gsyPlayer = findViewById(R.id.gsy_player);
+
+        // ✅ FIX: Ocultar solo los controles que SÍ existen en GSY 14
         if (gsyPlayer != null) {
-            // Ocultar controles nativos de GSY
             gsyPlayer.getTitleTextView().setVisibility(View.GONE);
             gsyPlayer.getBackButton().setVisibility(View.GONE);
             gsyPlayer.getStartButton().setVisibility(View.GONE);
-            gsyPlayer.getBottomProgressBar().setVisibility(View.GONE);
-            gsyPlayer.getTopProgressBar().setVisibility(View.GONE);
-            gsyPlayer.getLoadingProgressBar().setVisibility(View.GONE);
         }
 
         if (overlayControls != null) {
@@ -540,18 +534,16 @@ public class MainActivity extends AppCompatActivity {
         numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
         if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
         gsyPlayer.setVisibility(View.VISIBLE);
+
+        // ✅ FIX CLAVE: Forzar a GSY a llenar la pantalla (como ExoPlayer)
+        // SCREEN_MATCH_FULL estira el video para ocupar todo el FrameLayout [citation:1]
+        GSYVideoType.setShowType(GSYVideoType.SCREEN_MATCH_FULL);
+
         try {
             gsyPlayer.setUp(c.url, false, c.nombre);
             gsyPlayer.startPlayLogic();
         } catch (Exception e) { mostrarLoaderError(); return; }
         mostrarLoaderSintonizando();
-        
-        // ✅ FIX: Forzar la rotación del video si es necesario
-        if (rotado) {
-            gsyPlayer.setRotateView(90);
-        } else {
-            gsyPlayer.setRotateView(0);
-        }
 
         handler.postDelayed(new Runnable() {
             @Override public void run() {
@@ -822,16 +814,7 @@ public class MainActivity extends AppCompatActivity {
     private void rotar() {
         rotado = !rotado;
         getSharedPreferences("gtv_r_prefs", MODE_PRIVATE).edit().putBoolean("rotado", rotado).apply();
-        
-        // ✅ FIX GSY: Rotar el video dentro del reproductor
-        if (enGSY && gsyPlayer != null) {
-            if (rotado) {
-                gsyPlayer.setRotateView(90); // O -90, dependiendo de cómo se vea
-            } else {
-                gsyPlayer.setRotateView(0);
-            }
-        }
-
+        // ✅ FIX: NO tocar GSY acá. Tu rotWrapper ya rota todo el contenedor (incluido GSY).
         aplicarRotacion();
         reposicionarBotones();
         reiniciarTickerSiVisible();
