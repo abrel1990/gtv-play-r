@@ -25,6 +25,7 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.Surface;
 import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
@@ -120,7 +121,10 @@ public class MainActivity extends AppCompatActivity {
     private View btnShield;
     private View overlayControls;
     private YouTubePlayerView youtubePlayerView;
-    private SurfaceView vlcSurface;
+    
+    // ✅ FIX: Ahora es TextureView, no SurfaceView
+    private TextureView vlcSurface; 
+    
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
     private boolean bgGuardado = false;
 
@@ -269,12 +273,9 @@ public class MainActivity extends AppCompatActivity {
         if (url == null) return false;
         String u = url.toLowerCase();
         if (!u.startsWith("http://")) return false;
-        // Servidores con puerto raro + /play/ (estilo IPTV MPEG-2)
         if (u.contains(":8000/play/") || u.contains(":8080/play/")
             || u.contains(":25461/play/") || u.contains(":9000/play/")) return true;
-        // IPs específicas conocidas como problemáticas
         if (u.contains("45.170.130.224")) return true;
-        // M3U8 en HTTP plano con puerto no estándar (probable MPEG-2 o HLS roto)
         if (u.contains(".m3u8")) {
             try {
                 URL parsed = new URL(url);
@@ -308,6 +309,8 @@ public class MainActivity extends AppCompatActivity {
         exoLoaderError = findViewById(R.id.exo_loader_error);
         overlayControls = findViewById(R.id.overlay_controls);
         youtubePlayerView = findViewById(R.id.youtube_player_view);
+        
+        // ✅ FIX: Cast a TextureView (debe coincidir con el XML)
         vlcSurface = findViewById(R.id.vlc_surface);
 
         if (overlayControls != null) {
@@ -425,16 +428,28 @@ public class MainActivity extends AppCompatActivity {
         });
 
         inicializarVLC();
-        if (vlcPlayer != null && vlcSurface != null) {
-            try {
-                IVLCVout vout = vlcPlayer.getVLCVout();
-                vout.setVideoView(vlcSurface);
-                vout.attachViews();
-                Log.d(TAG, "VLC video surface attached");
-            } catch (Exception e) {
-                Log.e(TAG, "VLC attachViews error: " + e.getMessage());
-            }
+        
+        // ✅ FIX: Listener para el TextureView de VLC
+        if (vlcSurface != null) {
+            vlcSurface.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+                @Override
+                public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+                    if (vlcPlayer != null) {
+                        try {
+                            vlcPlayer.getVLCVout().setVideoSurface(new Surface(surface), null);
+                            vlcPlayer.getVLCVout().attachViews();
+                        } catch (Exception e) { Log.e(TAG, "VLC surface ready error", e); }
+                    }
+                }
+                @Override
+                public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {}
+                @Override
+                public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) { return true; }
+                @Override
+                public void onSurfaceTextureUpdated(SurfaceTexture surface) {}
+            });
         }
+
         configurarWebView();
         configurarBotones();
 
@@ -577,14 +592,16 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) { mostrarLoaderError(); return; }
         mostrarLoaderSintonizando();
 
-        // ✅ FIX: forzar re-attach del surface para que se vea la imagen (evita pantalla negra)
+        // ✅ FIX: re-attach del TextureView
         handler.postDelayed(() -> {
             if (vlcPlayer != null && vlcSurface != null && enVlc) {
                 try {
                     vlcPlayer.getVLCVout().detachViews();
-                    vlcPlayer.getVLCVout().setVideoView(vlcSurface);
+                    if (vlcSurface.getSurfaceTexture() != null) {
+                        vlcPlayer.getVLCVout().setVideoSurface(new Surface(vlcSurface.getSurfaceTexture()), null);
+                    }
                     vlcPlayer.getVLCVout().attachViews();
-                    Log.d(TAG, "VLC surface re-attached (fix pantalla negra)");
+                    Log.d(TAG, "VLC surface re-attached");
                 } catch (Exception e) {
                     Log.e(TAG, "Error re-attach VLC", e);
                 }
@@ -733,9 +750,7 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
-    // ✅ FIX: canales problemáticos van directo a VLC, sin pasar por ExoPlayer
     private void reproducirEnExo(Canal c) {
-        // ✅ FIX MPEG-2: detección de canales problemáticos
         if (esCanalProblematicoParaVlc(c.url)) {
             Log.d(TAG, "Canal problemático detectado, usando VLC directo: " + c.url);
             reproducirConVLC(c);
@@ -803,7 +818,6 @@ public class MainActivity extends AppCompatActivity {
         String mime = mimeDe(c.url);
         if (mime != null) ib.setMimeType(mime);
 
-        // ✅ FIX TELEFE: forzar extractor HLS con detección real de video
         MediaItem mediaItem = ib.build();
         String urlLower = c.url.toLowerCase();
         if (urlLower.contains(".m3u8") || urlLower.contains("type=m3u8") || urlLower.contains("format=m3u8")) {
@@ -1191,9 +1205,10 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(() -> {
             if (vlcPlayer != null && vlcSurface != null) {
                 try {
-                    IVLCVout vout = vlcPlayer.getVLCVout();
-                    vout.setVideoView(vlcSurface);
-                    vout.attachViews();
+                    if (vlcSurface.getSurfaceTexture() != null) {
+                        vlcPlayer.getVLCVout().setVideoSurface(new Surface(vlcSurface.getSurfaceTexture()), null);
+                    }
+                    vlcPlayer.getVLCVout().attachViews();
                 } catch (Exception ignored) {}
             }
         }, 500);
