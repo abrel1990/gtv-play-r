@@ -520,16 +520,26 @@ public class MainActivity extends AppCompatActivity {
         vlcSurface.setVisibility(View.VISIBLE);
         try {
             final Media media = new Media(libVlc, Uri.parse(c.url));
-            if (c.referer != null && !c.referer.isEmpty()) media.addOption(":http-referrer=" + c.referer);
-            media.addOption(":network-caching=3000");
-            vlcPlayer.setMedia(media);
-            media.release();
-            vlcPlayer.setVolume((int)(c.gain * 100));
-            vlcPlayer.play();
-        } catch (Exception e) { mostrarLoaderError(); return; }
-        mostrarLoaderSintonizando();
-        handler.postDelayed(new Runnable() {
-            @Override public void run() {
+if (c.referer != null && !c.referer.isEmpty()) {
+    media.addOption(":http-referrer=" + c.referer);
+}
+media.addOption(":network-caching=3000");
+media.addOption(":live-caching=3000");
+media.addOption(":http-user-agent=Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+// ✅ FIX HLS: opciones específicas para HLS
+media.addOption(":adaptive-logic=highest");
+media.addOption(":hls-live-edge=3");
+media.addOption(":hls-segment-threads=3");
+media.addOption(":no-http-forward-cookies");
+vlcPlayer.setMedia(media);
+media.release();
+vlcPlayer.setVolume((int)(c.gain * 100));
+vlcPlayer.play();
+} catch (Exception e) { mostrarLoaderError(); return; }
+mostrarLoaderSintonizando();
+handler.postDelayed(new Runnable() {
+    @Override public void run() {
+        if (!enVlc) return;
                 if (!enVlc) return;
                 if (vlcPlayer != null && vlcPlayer.isPlaying()) {
                     detenerLoaderAnim(); ocultarLoaders();
