@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "com.gtv.play.r"
-        minSdk 23        // ✅ Cambiado de 21 a 23 para GSYVideoPlayer
+        minSdk 23
         targetSdk 34
         versionCode 10
         versionName "0.10"
@@ -55,8 +55,9 @@ dependencies {
     implementation 'androidx.tvprovider:tvprovider:1.1.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
-    // ✅ GSYVideoPlayer con IJK/FFmpeg (reemplaza a VLC)
-    // El módulo 'ex_so' es el que incluye el soporte para MPEG-2
-    implementation 'io.github.carguo:gsyvideoplayer:14.1.0'
-    implementation 'io.github.carguo:gsyvideoplayer-ex_so:14.1.0'
+    // ✅ GSYVideoPlayer SOLO Java (sin ex_so, sin la versión completa)
+    implementation 'io.github.carguo:gsyvideoplayer-java:14.1.0'
+
+    // ✅ Tu .aar con el soporte MP2 (el que subiste a app/libs/)
+    implementation files('libs/ijkplayer-cmake-release.aar')
 }
