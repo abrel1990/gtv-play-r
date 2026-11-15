@@ -823,12 +823,10 @@ private String resolverUrlFinalHls(String masterUrl) {
         String urlLower = c.url.toLowerCase();
         if (urlLower.contains(".m3u8") || urlLower.contains("type=m3u8") || urlLower.contains("format=m3u8")) {
             // 1. Crear el extractor con el flag para permitir frames no-IDR
-            androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.Flags tsFlags =
-                androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES;
+                        int tsFlags = androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES;
 
             androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory hlsExtractorFactory =
-                new androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory(tsFlags);
-
+                new androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory(tsFlags, false);
             // 2. Crear el factory HLS con ese extractor
             androidx.media3.exoplayer.hls.HlsMediaSource.Factory hlsFactory =
                 new androidx.media3.exoplayer.hls.HlsMediaSource.Factory(f)
