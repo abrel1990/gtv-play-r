@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace 'com.gtv.play.r'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.gtv.play.r"
