@@ -372,7 +372,19 @@ public class MainActivity extends AppCompatActivity {
                     try { exoPlayer.seekToDefaultPosition(); exoPlayer.prepare(); } catch (Exception e) {}
                     return;
                 }
-                if (reintentar()) return;
+                                if (reintentar()) return;
+
+                String uErr = canalActual != null ? canalActual.url.toLowerCase() : "";
+                if (uErr.contains(".m3u8") && !probandoVlc && canalActual != null) {
+                    probandoVlc = true;
+                    reintentosVlc = 0;
+                    String urlFinal = resolverUrlFinalHls(canalActual.url);
+                    Log.e(TAG, "ExoPlayer falló en HLS, probando VLC con URL resuelta: " + urlFinal);
+                    Canal cVlc = new Canal(urlFinal, canalActual.nombre, canalActual.logo, canalActual.referer, canalActual.gain);
+                    reproducirConVLC(cVlc);
+                    return;
+                }
+
                 if (!probandoVlc && canalActual != null) {
                     probandoVlc = true;
                     reintentosVlc = 0;
