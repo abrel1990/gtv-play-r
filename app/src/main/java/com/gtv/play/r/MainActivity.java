@@ -733,7 +733,48 @@ public class MainActivity extends AppCompatActivity {
         overlayControls.setFocusableInTouchMode(true);
         overlayControls.requestFocus();
     }
+private String resolverUrlFinalHls(String masterUrl) {
+    try {
+        URL u = new URL(masterUrl);
+        HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(8000);
+        conn.setReadTimeout(8000);
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36");
+        conn.setRequestProperty("Accept", "*/*");
+        if (conn.getResponseCode() != 200) {
+            conn.disconnect();
+            return masterUrl;
+        }
+        BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+        String line;
+        String relative = null;
+        boolean esMediaPlaylist = false;
+        while ((line = br.readLine()) != null) {
+            String t = line.trim();
+            if (t.isEmpty()) continue;
+            if (t.startsWith("#EXTINF")) {
+                esMediaPlaylist = true;
+                break;
+            }
+            if (t.startsWith("#")) continue;
+            relative = t;
+            break;
+        }
+        br.close();
+        conn.disconnect();
+        if (esMediaPlaylist || relative == null) return masterUrl;
+        if (relative.startsWith("http://") || relative.startsWith("https://")) return relative;
+        URL base = new URL(masterUrl);
+        return new URL(base, relative).toString();
+    } catch (Exception e) {
+        Log.e(TAG, "resolverUrlFinalHls error: " + e.getMessage());
+        return masterUrl;
+    }
+}
 
+private MediaSource construirMediaSource(Canal c) {
+    
     private MediaSource construirMediaSource(Canal c) {
         DefaultHttpDataSource.Factory f = new DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
