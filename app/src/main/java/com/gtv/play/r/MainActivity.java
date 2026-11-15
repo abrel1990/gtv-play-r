@@ -283,6 +283,27 @@ public class MainActivity extends AppCompatActivity {
         youtubePlayerView = findViewById(R.id.youtube_player_view);
         vlcSurface = findViewById(R.id.vlc_surface);
 
+        // ✅ FIX ZAPPING: overlay siempre focusable
+        if (overlayControls != null) {
+            overlayControls.setFocusable(true);
+            overlayControls.setFocusableInTouchMode(true);
+        }
+        if (youtubePlayerView != null) {
+            youtubePlayerView.setFocusable(false);
+            youtubePlayerView.setFocusableInTouchMode(false);
+            youtubePlayerView.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus && enYouTubeNativo && overlayControls != null) {
+                    handler.postDelayed(() -> {
+                        if (enYouTubeNativo && overlayControls != null) {
+                            overlayControls.setFocusable(true);
+                            overlayControls.setFocusableInTouchMode(true);
+                            overlayControls.requestFocus();
+                        }
+                    }, 200);
+                }
+            });
+        }
+
         inicializarPublicidadNativa();
 
         rotado = getSharedPreferences("gtv_r_prefs", MODE_PRIVATE).getBoolean("rotado", false);
@@ -573,11 +594,27 @@ public class MainActivity extends AppCompatActivity {
         }
         mostrarControles();
         playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+        // ✅ FIX ZAPPING YT: overlay con foco forzado
         youtubePlayerView.setFocusable(false);
         youtubePlayerView.setFocusableInTouchMode(false);
         overlayControls.setVisibility(View.VISIBLE);
         overlayControls.bringToFront();
+        overlayControls.setFocusable(true);
+        overlayControls.setFocusableInTouchMode(true);
         overlayControls.requestFocus();
+        handler.postDelayed(() -> {
+            if (enYouTubeNativo && overlayControls != null) {
+                overlayControls.setFocusable(true);
+                overlayControls.setFocusableInTouchMode(true);
+                overlayControls.requestFocus();
+                mostrarControles();
+            }
+        }, 800);
+        handler.postDelayed(() -> {
+            if (enYouTubeNativo && overlayControls != null) {
+                overlayControls.requestFocus();
+            }
+        }, 1800);
     }
 
     private void cargarVideoEnYoutubeNativo(final String videoId, final int tok) {
@@ -682,6 +719,8 @@ public class MainActivity extends AppCompatActivity {
         playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
         overlayControls.setVisibility(View.VISIBLE);
         overlayControls.bringToFront();
+        overlayControls.setFocusable(true);
+        overlayControls.setFocusableInTouchMode(true);
         overlayControls.requestFocus();
     }
 
@@ -890,7 +929,6 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "onPageFinished: " + url);
                 if (url != null && url.contains("index.html")) {
                     indexListo = true;
-                    // ✅ RESTAURAR LISTA SIEMPRE DESDE SharedPreferences
                     restaurarListaAlHtml();
                 }
             }
@@ -964,6 +1002,7 @@ public class MainActivity extends AppCompatActivity {
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { navegar(+1); mostrarControles(); return true; }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { navegar(-1); mostrarControles(); return true; }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) { mostrarControles(); return true; }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) { mostrarControles(); return true; }
             }
             return false;
         });
@@ -971,10 +1010,22 @@ public class MainActivity extends AppCompatActivity {
 
     private void mostrarControles() {
         if (!enExoPlayer && !enYouTubeNativo && !enVlc) return;
+        // ✅ FIX ZAPPING: forzar playerContainer visible
+        if (playerContainer != null && playerContainer.getVisibility() != View.VISIBLE) {
+            playerContainer.setVisibility(View.VISIBLE);
+        }
         controlesVisibles = true;
         infoCanal.setVisibility(View.VISIBLE);
         btnPrev.setVisibility(View.VISIBLE); btnNext.setVisibility(View.VISIBLE);
         btnClose.setVisibility(View.VISIBLE); btnRotate.setVisibility(View.VISIBLE);
+        // ✅ FIX ZAPPING YT: forzar foco al overlay
+        if (overlayControls != null) {
+            overlayControls.setVisibility(View.VISIBLE);
+            overlayControls.bringToFront();
+            overlayControls.setFocusable(true);
+            overlayControls.setFocusableInTouchMode(true);
+            overlayControls.requestFocus();
+        }
         if (ocultarControlesRunnable != null) handler.removeCallbacks(ocultarControlesRunnable);
         ocultarControlesRunnable = this::ocultarControlesNativos;
         handler.postDelayed(ocultarControlesRunnable, 5000);
@@ -1436,7 +1487,6 @@ public class MainActivity extends AppCompatActivity {
         }, 2000);
     }
 
-    // ✅ RESTAURAR LISTA: lee de SharedPreferences y envía al HTML
     private void restaurarListaAlHtml() {
         try {
             SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
@@ -1942,8 +1992,6 @@ public class MainActivity extends AppCompatActivity {
                     indiceActual = 0;
                     listaLegada = contenido;
                     enviarListaAlHtmlConReintentos(contenido, 0);
-                    // ✅ GUARDAR SIEMPRE en SharedPreferences (incluida lista maestra)
-                    //    para poder restaurarla al abrir sin localStorage
                     boolean esListaMaestra = listaUrl.contains("/api/m3u")
                         || listaUrl.contains("gtv-portero.abrel03.workers.dev");
                     String nombre = esListaMaestra ? "Lista maestra" : derivarNombreDeUrl(listaUrl);
