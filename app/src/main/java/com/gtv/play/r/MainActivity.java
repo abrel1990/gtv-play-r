@@ -681,8 +681,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void reproducirEnExo(Canal c) {
-        ytToken++;
-        mostrarEscudo(false);
+    // ✅ FIX HTTP+HLS: si es HTTP puro con m3u8, ir directo a VLC
+    String uCheck = c.url.toLowerCase();
+    if (uCheck.startsWith("http://") && (uCheck.contains(".m3u8") || uCheck.contains("type=m3u8"))) {
+        Log.d(TAG, "Canal HTTP+HLS detectado, usando VLC directo: " + c.url);
+        reproducirConVLC(c);
+        return;
+    }
+    ytToken++;
+    mostrarEscudo(false);
         handler.removeCallbacks(reintentoRunnable);
         if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
         try { if (vlcPlayer != null) vlcPlayer.stop(); } catch (Exception ignored) {}
