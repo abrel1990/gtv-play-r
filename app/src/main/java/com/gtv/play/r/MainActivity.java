@@ -75,6 +75,7 @@ import org.json.JSONObject;
 import org.videolan.libvlc.LibVLC;
 import org.videolan.libvlc.Media;
 import org.videolan.libvlc.MediaPlayer;
+import org.videolan.libvlc.interfaces.IVLCVout;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -186,6 +187,9 @@ public class MainActivity extends AppCompatActivity {
     private int reintentosVlc = 0;
     private boolean probandoVlc = false;
 
+    // ✅ FIX: token para evitar que se superpongan cargas de lista
+    private volatile int listaToken = 0;
+
     private final Runnable reintentoRunnable = new Runnable() {
         @Override public void run() {
             if (!enExoPlayer || exoPlayer == null || canalActual == null) return;
@@ -216,7 +220,7 @@ public class MainActivity extends AppCompatActivity {
             if (esYT) {
                 reproducirEnYouTube(c);
             } else if (esEmbedTercero) {
-                if (enExoPlayer || enVlc || enYouTubeNativo) detenerMotores();
+                detenerTodo();
                 playerContainer.setVisibility(View.GONE);
                 youtubePlayerView.setVisibility(View.GONE);
                 vlcSurface.setVisibility(View.GONE);
@@ -283,7 +287,6 @@ public class MainActivity extends AppCompatActivity {
         youtubePlayerView = findViewById(R.id.youtube_player_view);
         vlcSurface = findViewById(R.id.vlc_surface);
 
-        // ✅ FIX ZAPPING: overlay siempre focusable
         if (overlayControls != null) {
             overlayControls.setFocusable(true);
             overlayControls.setFocusableInTouchMode(true);
@@ -397,6 +400,17 @@ public class MainActivity extends AppCompatActivity {
         });
 
         inicializarVLC();
+        // ✅ FIX VIDEO: attach del surface UNA SOLA VEZ
+        if (vlcPlayer != null && vlcSurface != null) {
+            try {
+                IVLCVout vout = vlcPlayer.getVLCVout();
+                vout.setVideoView(vlcSurface);
+                vout.attachViews();
+                Log.d(TAG, "VLC video surface attached");
+            } catch (Exception e) {
+                Log.e(TAG, "VLC attachViews error: " + e.getMessage());
+            }
+        }
         configurarWebView();
         configurarBotones();
 
@@ -432,6 +446,17 @@ public class MainActivity extends AppCompatActivity {
             try { inicializarWatchNext(); }
             catch (Throwable t) { Log.e(TAG, "WatchNext init error: " + t); }
         }, 5000);
+    }
+
+    // ✅ FIX: detiene TODOS los motores antes de arrancar uno nuevo
+    private void detenerTodo() {
+        enExoPlayer = false;
+        enVlc = false;
+        enYouTubeNativo = false;
+        try { if (exoPlayer != null) { exoPlayer.setPlayWhenReady(false); exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
+        try { if (vlcPlayer != null) { vlcPlayer.stop(); } } catch (Exception ignored) {}
+        try { if (ytPlayer != null) { ytPlayer.pause(); } } catch (Exception ignored) {}
+        ytVideoPendiente = null;
     }
 
     private String generarDeviceId() {
@@ -502,10 +527,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void reproducirConVLC(Canal c) {
         if (vlcPlayer == null) { mostrarLoaderError(); return; }
-        enExoPlayer = false;
+        detenerTodo();
         enVlc = true;
-        enYouTubeNativo = false;
-        enYouTubeWeb = false;
         canalActual = c;
         detenerLoaderAnim();
         myWebView.setVisibility(View.GONE);
@@ -513,33 +536,26 @@ public class MainActivity extends AppCompatActivity {
         playerView.setVisibility(View.GONE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
-        try { if (exoPlayer != null) { exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
         nombreCanal.setText(c.nombre);
         numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
         if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
         vlcSurface.setVisibility(View.VISIBLE);
         try {
+            try { vlcPlayer.stop(); } catch (Exception ignored) {}
             final Media media = new Media(libVlc, Uri.parse(c.url));
-if (c.referer != null && !c.referer.isEmpty()) {
-    media.addOption(":http-referrer=" + c.referer);
-}
-media.addOption(":network-caching=3000");
-media.addOption(":live-caching=3000");
-media.addOption(":http-user-agent=Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
-// ✅ FIX HLS: opciones específicas para HLS
-media.addOption(":adaptive-logic=highest");
-media.addOption(":hls-live-edge=3");
-media.addOption(":hls-segment-threads=3");
-media.addOption(":no-http-forward-cookies");
-vlcPlayer.setMedia(media);
-media.release();
-vlcPlayer.setVolume((int)(c.gain * 100));
-vlcPlayer.play();
-} catch (Exception e) { mostrarLoaderError(); return; }
-mostrarLoaderSintonizando();
-handler.postDelayed(new Runnable() {
-    @Override public void run() {
-        if (!enVlc) return;
+            if (c.referer != null && !c.referer.isEmpty()) {
+                media.addOption(":http-referrer=" + c.referer);
+            }
+            media.addOption(":network-caching=3000");
+            media.addOption(":live-caching=3000");
+            vlcPlayer.setMedia(media);
+            media.release();
+            vlcPlayer.setVolume((int)(c.gain * 100));
+            vlcPlayer.play();
+        } catch (Exception e) { mostrarLoaderError(); return; }
+        mostrarLoaderSintonizando();
+        handler.postDelayed(new Runnable() {
+            @Override public void run() {
                 if (!enVlc) return;
                 if (vlcPlayer != null && vlcPlayer.isPlaying()) {
                     detenerLoaderAnim(); ocultarLoaders();
@@ -557,6 +573,8 @@ handler.postDelayed(new Runnable() {
         playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
         overlayControls.setVisibility(View.VISIBLE);
         overlayControls.bringToFront();
+        overlayControls.setFocusable(true);
+        overlayControls.setFocusableInTouchMode(true);
         overlayControls.requestFocus();
     }
 
@@ -564,8 +582,7 @@ handler.postDelayed(new Runnable() {
         ytToken++;
         handler.removeCallbacks(reintentoRunnable);
         if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
-        detenerMotores();
-        enYouTubeWeb = false;
+        detenerTodo();
         enYouTubeNativo = true;
         canalActual = c;
         myWebView.setVisibility(View.GONE);
@@ -604,7 +621,6 @@ handler.postDelayed(new Runnable() {
         }
         mostrarControles();
         playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
-        // ✅ FIX ZAPPING YT: overlay con foco forzado
         youtubePlayerView.setFocusable(false);
         youtubePlayerView.setFocusableInTouchMode(false);
         overlayControls.setVisibility(View.VISIBLE);
@@ -680,35 +696,12 @@ handler.postDelayed(new Runnable() {
         return null;
     }
 
-    private void detenerMotores() {
-        enExoPlayer = false;
-        enVlc = false;
-        enYouTubeNativo = false;
-        try { if (exoPlayer != null) { exoPlayer.setPlayWhenReady(false); exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
-        try { if (vlcPlayer != null) { vlcPlayer.stop(); } } catch (Exception ignored) {}
-        try { if (ytPlayer != null) { ytPlayer.pause(); } } catch (Exception ignored) {}
-        ytVideoPendiente = null;
-    }
-
     private void reproducirEnExo(Canal c) {
-    // ✅ FIX HTTP+HLS: si es HTTP puro con m3u8, ir directo a VLC
-    String uCheck = c.url.toLowerCase();
-    if (uCheck.startsWith("http://") && (uCheck.contains(".m3u8") || uCheck.contains("type=m3u8"))) {
-        Log.d(TAG, "Canal HTTP+HLS detectado, usando VLC directo: " + c.url);
-        reproducirConVLC(c);
-        return;
-    }
-    ytToken++;
-    mostrarEscudo(false);
+        ytToken++;
+        mostrarEscudo(false);
         handler.removeCallbacks(reintentoRunnable);
         if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
-        try { if (vlcPlayer != null) vlcPlayer.stop(); } catch (Exception ignored) {}
-        try { if (ytPlayer != null) ytPlayer.pause(); } catch (Exception ignored) {}
-        ytVideoPendiente = null;
-        enYouTubeWeb = false;
-        enYouTubeNativo = false;
-        enVlc = false;
-        probandoVlc = false;
+        detenerTodo();
         enExoPlayer = true;
         canalActual = c;
         reintentos = 0;
@@ -748,6 +741,7 @@ handler.postDelayed(new Runnable() {
             .setReadTimeoutMs(10000);
         Map<String, String> h = new HashMap<>();
         h.put("User-Agent", "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+        h.put("Accept", "*/*");
         if (c.referer != null && !c.referer.isEmpty()) {
             h.put("Referer", c.referer);
             try {
@@ -946,7 +940,8 @@ handler.postDelayed(new Runnable() {
                 Log.d(TAG, "onPageFinished: " + url);
                 if (url != null && url.contains("index.html")) {
                     indexListo = true;
-                    restaurarListaAlHtml();
+                    // ✅ FIX: siempre pedir lista fresca (remota) al abrir
+                    refrescarListaRemota();
                 }
             }
 
@@ -1027,7 +1022,6 @@ handler.postDelayed(new Runnable() {
 
     private void mostrarControles() {
         if (!enExoPlayer && !enYouTubeNativo && !enVlc) return;
-        // ✅ FIX ZAPPING: forzar playerContainer visible
         if (playerContainer != null && playerContainer.getVisibility() != View.VISIBLE) {
             playerContainer.setVisibility(View.VISIBLE);
         }
@@ -1035,7 +1029,6 @@ handler.postDelayed(new Runnable() {
         infoCanal.setVisibility(View.VISIBLE);
         btnPrev.setVisibility(View.VISIBLE); btnNext.setVisibility(View.VISIBLE);
         btnClose.setVisibility(View.VISIBLE); btnRotate.setVisibility(View.VISIBLE);
-        // ✅ FIX ZAPPING YT: forzar foco al overlay
         if (overlayControls != null) {
             overlayControls.setVisibility(View.VISIBLE);
             overlayControls.bringToFront();
@@ -1086,15 +1079,12 @@ handler.postDelayed(new Runnable() {
     private void cerrarExoPlayer() {
         tickerDetener(true);
         mostrarEscudo(false);
-        enExoPlayer = false;
-        enVlc = false;
-        enYouTubeNativo = false;
-        enYouTubeWeb = false;
+        detenerTodo();
         canalActual = null;
         handler.removeCallbacks(reintentoRunnable);
         handler.removeCallbacks(zapRun);
         zapPend = -1;
-        detenerMotores();
+        try { if (vlcPlayer != null) vlcPlayer.getVLCVout().detachViews(); } catch (Exception ignored) {}
         playerContainer.setVisibility(View.GONE);
         youtubePlayerView.setVisibility(View.GONE);
         vlcSurface.setVisibility(View.GONE);
@@ -1111,6 +1101,16 @@ handler.postDelayed(new Runnable() {
                   + "window.volverDelExo&&window.volverDelExo();", null);
             } catch (Exception ignored) {}
         }, 32);
+        // ✅ Re-attach para la próxima
+        handler.postDelayed(() -> {
+            if (vlcPlayer != null && vlcSurface != null) {
+                try {
+                    IVLCVout vout = vlcPlayer.getVLCVout();
+                    vout.setVideoView(vlcSurface);
+                    vout.attachViews();
+                } catch (Exception ignored) {}
+            }
+        }, 500);
     }
 
     private void inicializarPublicidadNativa() {
@@ -1504,37 +1504,131 @@ handler.postDelayed(new Runnable() {
         }, 2000);
     }
 
-    private void restaurarListaAlHtml() {
-        try {
-            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
-            JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
-            if (listas.length() == 0) {
-                Log.d(TAG, "restaurarListaAlHtml: no hay listas guardadas");
-                return;
-            }
-            String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
-            JSONObject elegida = null;
-            if (ultimaNombre != null) {
-                for (int i = 0; i < listas.length(); i++) {
-                    if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
-                        elegida = listas.getJSONObject(i);
-                        break;
+    // ✅ FIX: refresca la lista REMOTA. No cachea lista.
+    //   - Si el usuario cargó una lista manual con código, se guardó su URL en SharedPreferences.
+    //     Esa URL se usa para refrescar.
+    //   - Si no hay lista guardada, se pide al Worker con deviceId+auto.
+    private void refrescarListaRemota() {
+        final int miToken = ++listaToken;
+        new Thread(() -> {
+            String listaUrl = null;
+            try {
+                SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
+                JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
+                if (listas.length() > 0) {
+                    String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
+                    JSONObject elegida = null;
+                    if (ultimaNombre != null) {
+                        for (int i = 0; i < listas.length(); i++) {
+                            if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
+                                elegida = listas.getJSONObject(i);
+                                break;
+                            }
+                        }
                     }
+                    if (elegida == null) elegida = listas.getJSONObject(0);
+                    listaUrl = elegida.optString("url", "");
+                }
+            } catch (Exception ignored) {}
+
+            if (listaUrl == null || listaUrl.isEmpty()) {
+                // Pedir al Worker con deviceId+auto
+                try {
+                    URL uVal = new URL(VALIDAR_URL);
+                    HttpURLConnection connVal = (HttpURLConnection) uVal.openConnection();
+                    connVal.setRequestMethod("POST");
+                    connVal.setConnectTimeout(10000);
+                    connVal.setReadTimeout(10000);
+                    connVal.setDoOutput(true);
+                    connVal.setRequestProperty("Content-Type", "application/json");
+                    connVal.setRequestProperty("X-GTV-Origin", SELLO);
+                    JSONObject body = new JSONObject();
+                    body.put("deviceId", generarDeviceId());
+                    body.put("auto", true);
+                    OutputStream os = connVal.getOutputStream();
+                    os.write(body.toString().getBytes("UTF-8"));
+                    os.close();
+
+                    int code = connVal.getResponseCode();
+                    InputStream is = code == 200 ? connVal.getInputStream() : connVal.getErrorStream();
+                    BufferedReader br = new BufferedReader(new InputStreamReader(is, "UTF-8"));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                    br.close();
+                    JSONObject json = new JSONObject(sb.toString());
+                    String error = json.optString("error", "");
+                    if (!error.isEmpty()) {
+                        if (miToken == listaToken)
+                            runOnUiThread(() -> mostrarErrorLista("Error: " + error));
+                        return;
+                    }
+                    listaUrl = json.optString("url", "");
+                    if (listaUrl.startsWith("/")) listaUrl = "https://gtv-portero.abrel03.workers.dev" + listaUrl;
+                } catch (Exception e) {
+                    if (miToken == listaToken)
+                        runOnUiThread(() -> mostrarErrorLista("Sin conexión. Verificá tu internet."));
+                    return;
                 }
             }
-            if (elegida == null) elegida = listas.getJSONObject(0);
-            String contenido = elegida.getString("contenido");
-            ArrayList<Canal> listaParseada = parsearM3u(contenido);
-            if (!listaParseada.isEmpty()) {
-                canales.clear();
-                canales.addAll(listaParseada);
-                indiceActual = 0;
-                listaLegada = contenido;
-                enviarListaAlHtmlConReintentos(contenido, 0);
-                Log.d(TAG, "restaurarListaAlHtml: " + elegida.optString("nombre") + " (" + listaParseada.size() + " canales)");
+
+            if (listaUrl == null || listaUrl.isEmpty()) {
+                if (miToken == listaToken)
+                    runOnUiThread(() -> mostrarErrorLista("No tenés lista. Cargala desde el menú."));
+                return;
             }
-        } catch (Exception e) {
-            Log.e(TAG, "restaurarListaAlHtml error: " + e.getMessage());
+
+            // Descargar la lista fresca
+            try {
+                URL uList = new URL(listaUrl);
+                HttpURLConnection connList = (HttpURLConnection) uList.openConnection();
+                connList.setRequestMethod("GET");
+                connList.setConnectTimeout(15000);
+                connList.setReadTimeout(20000);
+                connList.setRequestProperty("X-GTV-Origin", SELLO);
+                connList.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+                if (connList.getResponseCode() != 200) {
+                    if (miToken == listaToken)
+                        runOnUiThread(() -> mostrarErrorLista("Error al descargar la lista."));
+                    return;
+                }
+                BufferedReader br = new BufferedReader(new InputStreamReader(connList.getInputStream(), "UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line).append("\n");
+                br.close();
+                final String contenidoNuevo = sb.toString();
+                final ArrayList<Canal> listaNueva = parsearM3u(contenidoNuevo);
+                if (listaNueva.isEmpty()) {
+                    if (miToken == listaToken)
+                        runOnUiThread(() -> mostrarErrorLista("La lista está vacía."));
+                    return;
+                }
+                runOnUiThread(() -> {
+                    if (miToken != listaToken) return;
+                    canales.clear();
+                    canales.addAll(listaNueva);
+                    indiceActual = 0;
+                    listaLegada = contenidoNuevo;
+                    // ✅ NO guardar la lista en SharedPreferences (solo la URL que ya está)
+                    enviarListaAlHtmlConReintentos(contenidoNuevo, 0);
+                    Log.d(TAG, "refrescarListaRemota: lista fresca (" + listaNueva.size() + " canales)");
+                });
+            } catch (Exception e) {
+                if (miToken == listaToken)
+                    runOnUiThread(() -> mostrarErrorLista("Sin conexión. Verificá tu internet."));
+            }
+        }).start();
+    }
+
+    private void mostrarErrorLista(String msg) {
+        if (myWebView != null && webViewListo) {
+            String msgEscapado = msg.replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ");
+            myWebView.evaluateJavascript(
+                "javascript:(function(){try{" +
+                "var d=document.getElementById('list');" +
+                "if(d)d.innerHTML='<div class=\"empty\"><div class=\"icon\">⚠️</div><div class=\"title\">Sin lista</div><div class=\"subtitle\">" + msgEscapado + "</div><button onclick=\"location.reload()\">🔄 Reintentar</button></div>';" +
+                "}catch(e){}})();", null);
         }
     }
 
@@ -1552,6 +1646,7 @@ handler.postDelayed(new Runnable() {
             });
     }
 
+    // ✅ FIX: guarda SOLO la URL. La lista NUNCA se cachea.
     private void guardarNuevaLista(String nombre, String contenidoM3U, String urlOriginal) {
         try {
             SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
@@ -1563,7 +1658,6 @@ handler.postDelayed(new Runnable() {
             }
             JSONObject nueva = new JSONObject();
             nueva.put("nombre", nombre);
-            nueva.put("contenido", contenidoM3U);
             nueva.put("url", urlOriginal);
             nueva.put("fecha", System.currentTimeMillis());
             nuevas.put(nueva);
@@ -1571,7 +1665,7 @@ handler.postDelayed(new Runnable() {
                 .putString(LISTAS_KEY, nuevas.toString())
                 .putString(ULTIMA_LISTA_KEY, nombre)
                 .commit();
-            Log.d(TAG, "guardarNuevaLista: " + nombre + " (" + nuevas.length() + " listas)");
+            Log.d(TAG, "guardarNuevaLista: " + nombre + " (solo URL)");
         } catch (Exception e) {
             Log.e(TAG, "Error guardando lista: " + e.getMessage());
         }
@@ -1648,10 +1742,8 @@ handler.postDelayed(new Runnable() {
                 item.put("nombre", obj.optString("nombre"));
                 item.put("url", obj.optString("url"));
                 item.put("fecha", obj.optLong("fecha", 0));
-                String contenido = obj.optString("contenido", "");
-                int n = 0;
-                for (String line : contenido.split("\n")) if (line.startsWith("#EXTINF")) n++;
-                item.put("canales", n);
+                // ✅ La lista no está cacheada. Mostramos "—"
+                item.put("canales", "—");
                 out.put(item);
             }
             return out.toString();
@@ -1667,19 +1759,14 @@ handler.postDelayed(new Runnable() {
             for (int i = 0; i < listas.length(); i++) {
                 JSONObject obj = listas.getJSONObject(i);
                 if (obj.optString("nombre").equals(nombre)) {
-                    String contenido = obj.getString("contenido");
-                    ArrayList<Canal> listaParseada = parsearM3u(contenido);
-                    if (listaParseada.isEmpty()) {
-                        Toast.makeText(this, "La lista está vacía", Toast.LENGTH_SHORT).show();
+                    String url = obj.optString("url", "");
+                    if (url.isEmpty()) {
+                        Toast.makeText(this, "La lista no tiene URL guardada", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    canales.clear();
-                    canales.addAll(listaParseada);
-                    indiceActual = 0;
-                    listaLegada = contenido;
-                    enviarListaAlHtmlConReintentos(contenido, 0);
                     prefs.edit().putString(ULTIMA_LISTA_KEY, nombre).commit();
-                    Toast.makeText(this, "Lista cargada: " + listaParseada.size() + " canales", Toast.LENGTH_SHORT).show();
+                    refrescarListaRemota();
+                    Toast.makeText(this, "Actualizando lista...", Toast.LENGTH_SHORT).show();
                     return;
                 }
             }
@@ -1837,7 +1924,7 @@ handler.postDelayed(new Runnable() {
                 tickerDetener(true);
                 handler.removeCallbacks(zapRun);
                 zapPend = -1;
-                detenerMotores();
+                detenerTodo();
                 playerContainer.setVisibility(View.GONE);
                 youtubePlayerView.setVisibility(View.GONE);
                 vlcSurface.setVisibility(View.GONE);
@@ -2012,6 +2099,7 @@ handler.postDelayed(new Runnable() {
                     boolean esListaMaestra = listaUrl.contains("/api/m3u")
                         || listaUrl.contains("gtv-portero.abrel03.workers.dev");
                     String nombre = esListaMaestra ? "Lista maestra" : derivarNombreDeUrl(listaUrl);
+                    // ✅ guarda SOLO la URL (no el contenido)
                     guardarNuevaLista(nombre, contenido, listaUrl);
                     if (!esListaMaestra) {
                         registrarListaEnWorker(listaUrl, nombre);
