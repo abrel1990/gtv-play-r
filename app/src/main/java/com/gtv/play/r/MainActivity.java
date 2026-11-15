@@ -794,7 +794,7 @@ private String resolverUrlFinalHls(String masterUrl) {
     }
 }
   
-    private MediaSource construirMediaSource(Canal c) {
+        private MediaSource construirMediaSource(Canal c) {
         DefaultHttpDataSource.Factory f = new DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(10000)
@@ -817,9 +817,11 @@ private String resolverUrlFinalHls(String masterUrl) {
         MediaItem.Builder ib = new MediaItem.Builder().setUri(c.url);
         String mime = mimeDe(c.url);
         if (mime != null) ib.setMimeType(mime);
-        return new DefaultMediaSourceFactory(f, extractors)
-            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
-            .createMediaSource(ib.build());
+        // ✅ FIX TELEFE: forzar descarga de un segmento para detectar códecs reales
+        DefaultMediaSourceFactory factory = new DefaultMediaSourceFactory(f, extractors)
+            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6));
+        factory.setAllowChunklessPreparation(false);
+        return factory.createMediaSource(ib.build());
     }
 
     private String mimeDe(String u) {
