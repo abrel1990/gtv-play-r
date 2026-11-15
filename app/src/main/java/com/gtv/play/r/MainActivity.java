@@ -190,7 +190,6 @@ public class MainActivity extends AppCompatActivity {
     private int reintentosVlc = 0;
     private boolean probandoVlc = false;
 
-    // ✅ FIX: token para evitar que se superpongan cargas de lista
     private volatile int listaToken = 0;
 
     private final Runnable reintentoRunnable = new Runnable() {
@@ -263,6 +262,27 @@ public class MainActivity extends AppCompatActivity {
             this.gain = (gain > 0f && gain <= 2f) ? gain : 1.0f;
             this.oculto = oculto;
         }
+    }
+
+    // ✅ FIX: detecta si el canal es "problemático" y debe ir directo a VLC
+    private boolean esCanalProblematicoParaVlc(String url) {
+        if (url == null) return false;
+        String u = url.toLowerCase();
+        if (!u.startsWith("http://")) return false;
+        // Servidores con puerto raro + /play/ (estilo IPTV MPEG-2)
+        if (u.contains(":8000/play/") || u.contains(":8080/play/")
+            || u.contains(":25461/play/") || u.contains(":9000/play/")) return true;
+        // IPs específicas conocidas como problemáticas
+        if (u.contains("45.170.130.224")) return true;
+        // M3U8 en HTTP plano con puerto no estándar (probable MPEG-2 o HLS roto)
+        if (u.contains(".m3u8")) {
+            try {
+                URL parsed = new URL(url);
+                int port = parsed.getPort();
+                if (port > 0 && port != 80 && port != 443) return true;
+            } catch (Exception ignored) {}
+        }
+        return false;
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -376,16 +396,6 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 if (reintentar()) return;
-
-                String uErr = canalActual != null ? canalActual.url.toLowerCase() : "";
-                if (uErr.contains(".m3u8") && !probandoVlc && canalActual != null) {
-                    probandoVlc = true;
-                    reintentosVlc = 0;
-                    Log.e(TAG, "ExoPlayer falló en HLS, probando VLC: " + canalActual.url);
-                    Canal cVlc = new Canal(canalActual.url, canalActual.nombre, canalActual.logo, canalActual.referer, canalActual.gain);
-                    reproducirConVLC(cVlc);
-                    return;
-                }
 
                 if (!probandoVlc && canalActual != null) {
                     probandoVlc = true;
@@ -566,6 +576,21 @@ public class MainActivity extends AppCompatActivity {
             vlcPlayer.play();
         } catch (Exception e) { mostrarLoaderError(); return; }
         mostrarLoaderSintonizando();
+
+        // ✅ FIX: forzar re-attach del surface para que se vea la imagen (evita pantalla negra)
+        handler.postDelayed(() -> {
+            if (vlcPlayer != null && vlcSurface != null && enVlc) {
+                try {
+                    vlcPlayer.getVLCVout().detachViews();
+                    vlcPlayer.getVLCVout().setVideoView(vlcSurface);
+                    vlcPlayer.getVLCVout().attachViews();
+                    Log.d(TAG, "VLC surface re-attached (fix pantalla negra)");
+                } catch (Exception e) {
+                    Log.e(TAG, "Error re-attach VLC", e);
+                }
+            }
+        }, 300);
+
         handler.postDelayed(new Runnable() {
             @Override public void run() {
                 if (!enVlc) return;
@@ -708,7 +733,15 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
+    // ✅ FIX: canales problemáticos van directo a VLC, sin pasar por ExoPlayer
     private void reproducirEnExo(Canal c) {
+        // ✅ FIX MPEG-2: detección de canales problemáticos
+        if (esCanalProblematicoParaVlc(c.url)) {
+            Log.d(TAG, "Canal problemático detectado, usando VLC directo: " + c.url);
+            reproducirConVLC(c);
+            return;
+        }
+
         ytToken++;
         mostrarEscudo(false);
         handler.removeCallbacks(reintentoRunnable);
@@ -770,7 +803,7 @@ public class MainActivity extends AppCompatActivity {
         String mime = mimeDe(c.url);
         if (mime != null) ib.setMimeType(mime);
 
-        // ✅ FIX HLS: forzar extractor con detección real de video
+        // ✅ FIX TELEFE: forzar extractor HLS con detección real de video
         MediaItem mediaItem = ib.build();
         String urlLower = c.url.toLowerCase();
         if (urlLower.contains(".m3u8") || urlLower.contains("type=m3u8") || urlLower.contains("format=m3u8")) {
@@ -1043,7 +1076,6 @@ public class MainActivity extends AppCompatActivity {
             }
             return false;
         });
-        // ✅ FIX: swipe táctil para zapping en móvil
         overlayControls.setOnTouchListener(new View.OnTouchListener() {
             private float startX = 0, startY = 0;
             private long startTime = 0;
@@ -1082,9 +1114,6 @@ public class MainActivity extends AppCompatActivity {
         if (overlayControls != null) {
             overlayControls.setVisibility(View.VISIBLE);
             overlayControls.bringToFront();
-            // ✅ FIX TÁCTIL: los controles vuelven a quedar ENCIMA del overlay
-            // para recibir los toques en celular (en TV no cambia nada: el DPAD
-            // va por el OnKeyListener del overlay, no por toque)
             infoCanal.bringToFront();
             btnPrev.bringToFront();
             btnNext.bringToFront();
