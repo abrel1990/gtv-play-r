@@ -814,14 +814,24 @@ private String resolverUrlFinalHls(String masterUrl) {
             .setTsExtractorFlags(
                 DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
                     | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS);
-        MediaItem.Builder ib = new MediaItem.Builder().setUri(c.url);
+                MediaItem.Builder ib = new MediaItem.Builder().setUri(c.url);
         String mime = mimeDe(c.url);
         if (mime != null) ib.setMimeType(mime);
-        // ✅ FIX TELEFE: forzar descarga de un segmento para detectar códecs reales
-        DefaultMediaSourceFactory factory = new DefaultMediaSourceFactory(f, extractors)
-            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6));
-        factory.setAllowChunklessPreparation(false);
-        return factory.createMediaSource(ib.build());
+
+        // ✅ FIX TELEFE: HlsMediaSource.Factory SÍ tiene setAllowChunklessPreparation
+        MediaItem mediaItem = ib.build();
+        String urlLower = c.url.toLowerCase();
+        if (urlLower.contains(".m3u8") || urlLower.contains("type=m3u8") || urlLower.contains("format=m3u8")) {
+            androidx.media3.exoplayer.hls.HlsMediaSource.Factory hlsFactory =
+                new androidx.media3.exoplayer.hls.HlsMediaSource.Factory(f)
+                    .setAllowChunklessPreparation(false)
+                    .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6));
+            return hlsFactory.createMediaSource(mediaItem);
+        }
+
+        return new DefaultMediaSourceFactory(f, extractors)
+            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(6))
+            .createMediaSource(mediaItem);
     }
 
     private String mimeDe(String u) {
