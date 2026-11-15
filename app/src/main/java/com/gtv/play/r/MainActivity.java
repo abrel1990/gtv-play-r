@@ -715,9 +715,18 @@ public class MainActivity extends AppCompatActivity {
         nombreCanal.setText(c.nombre);
         numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
         if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
-        try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
+                try { exoPlayer.stop(); exoPlayer.clearMediaItems(); } catch (Exception ignored) {}
         mostrarLoaderSintonizando();
-        exoPlayer.setMediaSource(construirMediaSource(c));
+        Canal canalResuelto = c;
+        String urlLower = c.url.toLowerCase();
+        if (urlLower.contains(".m3u8") || urlLower.contains("type=m3u8") || urlLower.contains("format=m3u8")) {
+            String urlFinal = resolverUrlFinalHls(c.url);
+            if (!urlFinal.equals(c.url)) {
+                Log.d(TAG, "Master HLS resuelto: " + c.url + " -> " + urlFinal);
+                canalResuelto = new Canal(urlFinal, c.nombre, c.logo, c.referer, c.gain);
+            }
+        }
+        exoPlayer.setMediaSource(construirMediaSource(canalResuelto));
         exoPlayer.prepare();
         exoPlayer.setPlayWhenReady(true);
         exoPlayer.play();
