@@ -25,7 +25,6 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
-import android.view.Surface;
 import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
@@ -73,13 +72,10 @@ import com.bumptech.glide.Glide;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView;
+import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.videolan.libvlc.LibVLC;
-import org.videolan.libvlc.Media;
-import org.videolan.libvlc.MediaPlayer;
-import org.videolan.libvlc.interfaces.IVLCVout;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -122,19 +118,16 @@ public class MainActivity extends AppCompatActivity {
     private View overlayControls;
     private YouTubePlayerView youtubePlayerView;
     
-    // ✅ FIX: Ahora es TextureView, no SurfaceView
-    private TextureView vlcSurface; 
-    
+    // ✅ GSYPlayer reemplaza a VLC
+    private StandardGSYVideoPlayer gsyPlayer;
+
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
     private boolean bgGuardado = false;
 
     private YouTubePlayer ytPlayer = null;
     private String ytVideoPendiente = null;
 
-    private LibVLC libVlc;
-    private MediaPlayer vlcPlayer;
-    private boolean enVlc = false;
-
+    private boolean enGSY = false; // Reemplaza a enVlc
     private boolean enYouTubeWeb = false;
     private boolean enYouTubeNativo = false;
 
@@ -191,8 +184,8 @@ public class MainActivity extends AppCompatActivity {
 
     private Canal canalActual;
     private int reintentos = 0;
-    private int reintentosVlc = 0;
-    private boolean probandoVlc = false;
+    private int reintentosGSY = 0;
+    private boolean probandoGSY = false;
 
     private volatile int listaToken = 0;
 
@@ -229,7 +222,7 @@ public class MainActivity extends AppCompatActivity {
                 detenerTodo();
                 playerContainer.setVisibility(View.GONE);
                 youtubePlayerView.setVisibility(View.GONE);
-                vlcSurface.setVisibility(View.GONE);
+                gsyPlayer.setVisibility(View.GONE);
                 playerView.setVisibility(View.GONE);
                 myWebView.setVisibility(View.VISIBLE);
                 myWebView.onResume();
@@ -268,8 +261,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ✅ FIX: detecta si el canal es "problemático" y debe ir directo a VLC
-    private boolean esCanalProblematicoParaVlc(String url) {
+    // ✅ FIX: detecta si el canal es "problemático" y debe ir directo a GSY
+    private boolean esCanalProblematicoParaGSY(String url) {
         if (url == null) return false;
         String u = url.toLowerCase();
         if (!u.startsWith("http://")) return false;
@@ -310,8 +303,17 @@ public class MainActivity extends AppCompatActivity {
         overlayControls = findViewById(R.id.overlay_controls);
         youtubePlayerView = findViewById(R.id.youtube_player_view);
         
-        // ✅ FIX: Cast a TextureView (debe coincidir con el XML)
-        vlcSurface = findViewById(R.id.vlc_surface);
+        // ✅ GSYPlayer
+        gsyPlayer = findViewById(R.id.gsy_player);
+        if (gsyPlayer != null) {
+            // Ocultar controles nativos de GSY
+            gsyPlayer.getTitleTextView().setVisibility(View.GONE);
+            gsyPlayer.getBackButton().setVisibility(View.GONE);
+            gsyPlayer.getStartButton().setVisibility(View.GONE);
+            gsyPlayer.getBottomProgressBar().setVisibility(View.GONE);
+            gsyPlayer.getTopProgressBar().setVisibility(View.GONE);
+            gsyPlayer.getLoadingProgressBar().setVisibility(View.GONE);
+        }
 
         if (overlayControls != null) {
             overlayControls.setFocusable(true);
@@ -400,11 +402,11 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (reintentar()) return;
 
-                if (!probandoVlc && canalActual != null) {
-                    probandoVlc = true;
-                    reintentosVlc = 0;
-                    Log.e(TAG, "ExoPlayer falló, probando LibVLC: " + canalActual.url);
-                    reproducirConVLC(canalActual);
+                if (!probandoGSY && canalActual != null) {
+                    probandoGSY = true;
+                    reintentosGSY = 0;
+                    Log.e(TAG, "ExoPlayer falló, probando GSY: " + canalActual.url);
+                    reproducirConGSY(canalActual);
                     return;
                 }
 
@@ -426,29 +428,6 @@ public class MainActivity extends AppCompatActivity {
             @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) { return true; }
             @Override public void onSurfaceTextureUpdated(SurfaceTexture st) {}
         });
-
-        inicializarVLC();
-        
-        // ✅ FIX: Listener para el TextureView de VLC
-        if (vlcSurface != null) {
-            vlcSurface.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-                @Override
-                public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-                    if (vlcPlayer != null) {
-                        try {
-                            vlcPlayer.getVLCVout().setVideoSurface(new Surface(surface), null);
-                            vlcPlayer.getVLCVout().attachViews();
-                        } catch (Exception e) { Log.e(TAG, "VLC surface ready error", e); }
-                    }
-                }
-                @Override
-                public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {}
-                @Override
-                public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) { return true; }
-                @Override
-                public void onSurfaceTextureUpdated(SurfaceTexture surface) {}
-            });
-        }
 
         configurarWebView();
         configurarBotones();
@@ -488,10 +467,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void detenerTodo() {
         enExoPlayer = false;
-        enVlc = false;
+        enGSY = false;
         enYouTubeNativo = false;
         try { if (exoPlayer != null) { exoPlayer.setPlayWhenReady(false); exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
-        try { if (vlcPlayer != null) { vlcPlayer.stop(); } } catch (Exception ignored) {}
+        try { if (gsyPlayer != null) { gsyPlayer.release(); } } catch (Exception ignored) {}
         try { if (ytPlayer != null) { ytPlayer.pause(); } } catch (Exception ignored) {}
         ytVideoPendiente = null;
     }
@@ -537,22 +516,6 @@ public class MainActivity extends AppCompatActivity {
         return deviceIdCache;
     }
 
-    private void inicializarVLC() {
-        try {
-            ArrayList<String> args = new ArrayList<>();
-            args.add("--no-drop-late-frames");
-            args.add("--no-skip-frames");
-            args.add("--rtsp-tcp");
-            args.add("--network-caching=3000");
-            libVlc = new LibVLC(this, args);
-            vlcPlayer = new MediaPlayer(libVlc);
-            vlcPlayer.setEventListener(event -> {});
-        } catch (Throwable t) {
-            libVlc = null;
-            vlcPlayer = null;
-        }
-    }
-
     private boolean reintentar() {
         if (reintentos >= 3 || canalActual == null || !enExoPlayer) return false;
         reintentos++;
@@ -562,10 +525,10 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    private void reproducirConVLC(Canal c) {
-        if (vlcPlayer == null) { mostrarLoaderError(); return; }
+    private void reproducirConGSY(Canal c) {
+        if (gsyPlayer == null) { mostrarLoaderError(); return; }
         detenerTodo();
-        enVlc = true;
+        enGSY = true;
         canalActual = c;
         detenerLoaderAnim();
         myWebView.setVisibility(View.GONE);
@@ -576,46 +539,28 @@ public class MainActivity extends AppCompatActivity {
         nombreCanal.setText(c.nombre);
         numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
         if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
-        vlcSurface.setVisibility(View.VISIBLE);
+        gsyPlayer.setVisibility(View.VISIBLE);
         try {
-            try { vlcPlayer.stop(); } catch (Exception ignored) {}
-            final Media media = new Media(libVlc, Uri.parse(c.url));
-            if (c.referer != null && !c.referer.isEmpty()) {
-                media.addOption(":http-referrer=" + c.referer);
-            }
-            media.addOption(":network-caching=3000");
-            media.addOption(":live-caching=3000");
-            vlcPlayer.setMedia(media);
-            media.release();
-            vlcPlayer.setVolume((int)(c.gain * 100));
-            vlcPlayer.play();
+            gsyPlayer.setUp(c.url, false, c.nombre);
+            gsyPlayer.startPlayLogic();
         } catch (Exception e) { mostrarLoaderError(); return; }
         mostrarLoaderSintonizando();
-
-        // ✅ FIX: re-attach del TextureView
-        handler.postDelayed(() -> {
-            if (vlcPlayer != null && vlcSurface != null && enVlc) {
-                try {
-                    vlcPlayer.getVLCVout().detachViews();
-                    if (vlcSurface.getSurfaceTexture() != null) {
-                        vlcPlayer.getVLCVout().setVideoSurface(new Surface(vlcSurface.getSurfaceTexture()), null);
-                    }
-                    vlcPlayer.getVLCVout().attachViews();
-                    Log.d(TAG, "VLC surface re-attached");
-                } catch (Exception e) {
-                    Log.e(TAG, "Error re-attach VLC", e);
-                }
-            }
-        }, 300);
+        
+        // ✅ FIX: Forzar la rotación del video si es necesario
+        if (rotado) {
+            gsyPlayer.setRotateView(90);
+        } else {
+            gsyPlayer.setRotateView(0);
+        }
 
         handler.postDelayed(new Runnable() {
             @Override public void run() {
-                if (!enVlc) return;
-                if (vlcPlayer != null && vlcPlayer.isPlaying()) {
+                if (!enGSY) return;
+                if (gsyPlayer != null) {
                     detenerLoaderAnim(); ocultarLoaders();
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
-                } else if (reintentosVlc < 2) {
-                    reintentosVlc++;
+                } else if (reintentosGSY < 2) {
+                    reintentosGSY++;
                     handler.postDelayed(this, 3000);
                 } else {
                     detenerLoaderAnim(); mostrarLoaderError();
@@ -643,7 +588,7 @@ public class MainActivity extends AppCompatActivity {
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
         playerView.setVisibility(View.GONE);
-        vlcSurface.setVisibility(View.GONE);
+        gsyPlayer.setVisibility(View.GONE);
         youtubePlayerView.setVisibility(View.VISIBLE);
         nombreCanal.setText(c.nombre);
         numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
@@ -751,9 +696,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void reproducirEnExo(Canal c) {
-        if (esCanalProblematicoParaVlc(c.url)) {
-            Log.d(TAG, "Canal problemático detectado, usando VLC directo: " + c.url);
-            reproducirConVLC(c);
+        if (esCanalProblematicoParaGSY(c.url)) {
+            Log.d(TAG, "Canal problemático detectado, usando GSY directo: " + c.url);
+            reproducirConGSY(c);
             return;
         }
 
@@ -768,7 +713,7 @@ public class MainActivity extends AppCompatActivity {
         myWebView.setVisibility(View.GONE);
         myWebView.onPause();
         youtubePlayerView.setVisibility(View.GONE);
-        vlcSurface.setVisibility(View.GONE);
+        gsyPlayer.setVisibility(View.GONE);
         playerView.setVisibility(View.VISIBLE);
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
@@ -877,6 +822,16 @@ public class MainActivity extends AppCompatActivity {
     private void rotar() {
         rotado = !rotado;
         getSharedPreferences("gtv_r_prefs", MODE_PRIVATE).edit().putBoolean("rotado", rotado).apply();
+        
+        // ✅ FIX GSY: Rotar el video dentro del reproductor
+        if (enGSY && gsyPlayer != null) {
+            if (rotado) {
+                gsyPlayer.setRotateView(90); // O -90, dependiendo de cómo se vea
+            } else {
+                gsyPlayer.setRotateView(0);
+            }
+        }
+
         aplicarRotacion();
         reposicionarBotones();
         reiniciarTickerSiVisible();
@@ -1117,7 +1072,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void mostrarControles() {
-        if (!enExoPlayer && !enYouTubeNativo && !enVlc) return;
+        if (!enExoPlayer && !enYouTubeNativo && !enGSY) return;
         if (playerContainer != null && playerContainer.getVisibility() != View.VISIBLE) {
             playerContainer.setVisibility(View.VISIBLE);
         }
@@ -1185,10 +1140,9 @@ public class MainActivity extends AppCompatActivity {
         handler.removeCallbacks(reintentoRunnable);
         handler.removeCallbacks(zapRun);
         zapPend = -1;
-        try { if (vlcPlayer != null) vlcPlayer.getVLCVout().detachViews(); } catch (Exception ignored) {}
         playerContainer.setVisibility(View.GONE);
         youtubePlayerView.setVisibility(View.GONE);
-        vlcSurface.setVisibility(View.GONE);
+        gsyPlayer.setVisibility(View.GONE);
         playerView.setVisibility(View.GONE);
         ocultarControlesNativos();
         detenerLoaderAnim(); ocultarLoaders();
@@ -1202,16 +1156,6 @@ public class MainActivity extends AppCompatActivity {
                   + "window.volverDelExo&&window.volverDelExo();", null);
             } catch (Exception ignored) {}
         }, 32);
-        handler.postDelayed(() -> {
-            if (vlcPlayer != null && vlcSurface != null) {
-                try {
-                    if (vlcSurface.getSurfaceTexture() != null) {
-                        vlcPlayer.getVLCVout().setVideoSurface(new Surface(vlcSurface.getSurfaceTexture()), null);
-                    }
-                    vlcPlayer.getVLCVout().attachViews();
-                } catch (Exception ignored) {}
-            }
-        }, 500);
     }
 
     private void inicializarPublicidadNativa() {
@@ -2019,7 +1963,7 @@ public class MainActivity extends AppCompatActivity {
                 detenerTodo();
                 playerContainer.setVisibility(View.GONE);
                 youtubePlayerView.setVisibility(View.GONE);
-                vlcSurface.setVisibility(View.GONE);
+                gsyPlayer.setVisibility(View.GONE);
                 playerView.setVisibility(View.GONE);
                 myWebView.setVisibility(View.VISIBLE);
                 myWebView.onResume(); myWebView.resumeTimers();
@@ -2307,7 +2251,7 @@ public class MainActivity extends AppCompatActivity {
             cerrarExoPlayer();
             return;
         }
-        if (enExoPlayer || enVlc || enYouTubeNativo) { ytToken++; cerrarExoPlayer(); return; }
+        if (enExoPlayer || enGSY || enYouTubeNativo) { ytToken++; cerrarExoPlayer(); return; }
         ytToken++;
         if (myWebView == null) { finish(); return; }
         myWebView.evaluateJavascript(
@@ -2347,8 +2291,7 @@ public class MainActivity extends AppCompatActivity {
         handler.removeCallbacks(zapRun);
         try { File f = new File(getCacheDir(), "update.apk"); if (f.exists()) f.delete(); } catch (Exception ignored) {}
         if (exoPlayer != null) { try { exoPlayer.release(); } catch (Exception ignored) {} exoPlayer = null; }
-        if (vlcPlayer != null) { try { vlcPlayer.release(); } catch (Exception ignored) {} vlcPlayer = null; }
-        if (libVlc != null) { try { libVlc.release(); } catch (Exception ignored) {} libVlc = null; }
+        if (gsyPlayer != null) { try { gsyPlayer.release(); } catch (Exception ignored) {} gsyPlayer = null; }
         if (youtubePlayerView != null) { try { youtubePlayerView.release(); } catch (Exception ignored) {} }
         if (myWebView != null) {
             try {
