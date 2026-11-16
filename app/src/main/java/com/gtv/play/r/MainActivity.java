@@ -2345,7 +2345,6 @@ public class MainActivity extends AppCompatActivity {
         if (exoPlayer != null) { try { exoPlayer.release(); } catch (Exception ignored) {} exoPlayer = null; }
         if (gsyPlayer != null) { try { gsyPlayer.release(); } catch (Exception ignored) {} gsyPlayer = null; }
         if (mpvView != null) { try { mpvView.destroy(); } catch (Exception ignored) {} }
-        if (mpvView != null) { try { if (mpvView.getParent() != null) ((ViewGroup)mpvView.getParent()).removeView(mpvView); } catch (Exception ignored) {} mpvView = null; }
         if (youtubePlayerView != null) { try { youtubePlayerView.release(); } catch (Exception ignored) {} }
         if (myWebView != null) {
             try {
