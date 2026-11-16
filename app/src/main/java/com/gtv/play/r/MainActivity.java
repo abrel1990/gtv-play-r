@@ -76,7 +76,7 @@ import com.shuyu.gsyvideoplayer.utils.GSYVideoType;
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer;
 
 import is.xyz.mpv.MPV;
-import is.xyz.mpv.MPVView;
+import is.xyz.mpv.BaseMPVView;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
