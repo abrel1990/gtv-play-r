@@ -75,6 +75,9 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTube
 import com.shuyu.gsyvideoplayer.utils.GSYVideoType;
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer;
 
+import is.xyz.mpv.MPV;
+import is.xyz.mpv.MPVView;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -120,6 +123,9 @@ public class MainActivity extends AppCompatActivity {
     private YouTubePlayerView youtubePlayerView;
     private StandardGSYVideoPlayer gsyPlayer;
 
+    private MPVView mpvView;
+    private MPV mpvPlayer;
+
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
     private boolean bgGuardado = false;
 
@@ -127,6 +133,7 @@ public class MainActivity extends AppCompatActivity {
     private String ytVideoPendiente = null;
 
     private boolean enGSY = false;
+    private boolean enMPV = false;
     private boolean enYouTubeWeb = false;
     private boolean enYouTubeNativo = false;
 
@@ -302,7 +309,6 @@ public class MainActivity extends AppCompatActivity {
         youtubePlayerView = findViewById(R.id.youtube_player_view);
         gsyPlayer = findViewById(R.id.gsy_player);
 
-        // ✅ FIX: Ocultar solo los controles que SÍ existen en GSY 14
         if (gsyPlayer != null) {
             gsyPlayer.getTitleTextView().setVisibility(View.GONE);
             gsyPlayer.getBackButton().setVisibility(View.GONE);
@@ -462,9 +468,11 @@ public class MainActivity extends AppCompatActivity {
     private void detenerTodo() {
         enExoPlayer = false;
         enGSY = false;
+        enMPV = false;
         enYouTubeNativo = false;
         try { if (exoPlayer != null) { exoPlayer.setPlayWhenReady(false); exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
         try { if (gsyPlayer != null) { gsyPlayer.release(); } } catch (Exception ignored) {}
+        try { if (mpvPlayer != null) { mpvPlayer.destroy(); } } catch (Exception ignored) {}
         try { if (ytPlayer != null) { ytPlayer.pause(); } } catch (Exception ignored) {}
         ytVideoPendiente = null;
     }
@@ -535,8 +543,6 @@ public class MainActivity extends AppCompatActivity {
         if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
         gsyPlayer.setVisibility(View.VISIBLE);
 
-        // ✅ FIX CLAVE: Forzar a GSY a llenar la pantalla (como ExoPlayer)
-        // SCREEN_MATCH_FULL estira el video para ocupar todo el FrameLayout [citation:1]
         GSYVideoType.setShowType(GSYVideoType.SCREEN_MATCH_FULL);
 
         try {
@@ -560,6 +566,52 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }, 2000);
+        mostrarControles();
+        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+        overlayControls.setVisibility(View.VISIBLE);
+        overlayControls.bringToFront();
+        overlayControls.setFocusable(true);
+        overlayControls.setFocusableInTouchMode(true);
+        overlayControls.requestFocus();
+    }
+
+    private void reproducirConMPV(Canal c) {
+        detenerTodo();
+        enMPV = true;
+        canalActual = c;
+        myWebView.setVisibility(View.GONE);
+        youtubePlayerView.setVisibility(View.GONE);
+        gsyPlayer.setVisibility(View.GONE);
+        playerView.setVisibility(View.GONE);
+        playerContainer.setVisibility(View.VISIBLE);
+        playerContainer.bringToFront();
+        nombreCanal.setText(c.nombre);
+        numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+        if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
+
+        if (mpvView != null && mpvView.getParent() != null) {
+            ((ViewGroup) mpvView.getParent()).removeView(mpvView);
+        }
+        
+        mpvView = new MPVView(this);
+        rotWrapper.addView(mpvView);
+        
+        mpvPlayer = mpvView.getPlayer();
+        mpvPlayer.setOptionString("hwdec", "auto");
+        mpvPlayer.setOptionString("vo", "gpu");
+        
+        mpvPlayer.command(new String[]{"loadfile", c.url});
+        
+        mostrarLoaderSintonizando();
+        handler.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (!enMPV) return;
+                detenerLoaderAnim(); 
+                ocultarLoaders();
+                avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
+            }
+        }, 2000);
+        
         mostrarControles();
         playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
         overlayControls.setVisibility(View.VISIBLE);
@@ -689,8 +741,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void reproducirEnExo(Canal c) {
         if (esCanalProblematicoParaGSY(c.url)) {
-            Log.d(TAG, "Canal problemático detectado, usando GSY directo: " + c.url);
-            reproducirConGSY(c);
+            Log.d(TAG, "Canal problemático detectado, usando MPV: " + c.url);
+            reproducirConMPV(c);
             return;
         }
 
@@ -814,7 +866,6 @@ public class MainActivity extends AppCompatActivity {
     private void rotar() {
         rotado = !rotado;
         getSharedPreferences("gtv_r_prefs", MODE_PRIVATE).edit().putBoolean("rotado", rotado).apply();
-        // ✅ FIX: NO tocar GSY acá. Tu rotWrapper ya rota todo el contenedor (incluido GSY).
         aplicarRotacion();
         reposicionarBotones();
         reiniciarTickerSiVisible();
@@ -1055,7 +1106,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void mostrarControles() {
-        if (!enExoPlayer && !enYouTubeNativo && !enGSY) return;
+        if (!enExoPlayer && !enYouTubeNativo && !enGSY && !enMPV) return;
         if (playerContainer != null && playerContainer.getVisibility() != View.VISIBLE) {
             playerContainer.setVisibility(View.VISIBLE);
         }
@@ -1127,6 +1178,9 @@ public class MainActivity extends AppCompatActivity {
         youtubePlayerView.setVisibility(View.GONE);
         gsyPlayer.setVisibility(View.GONE);
         playerView.setVisibility(View.GONE);
+        if (mpvView != null && mpvView.getParent() != null) {
+            ((ViewGroup) mpvView.getParent()).removeView(mpvView);
+        }
         ocultarControlesNativos();
         detenerLoaderAnim(); ocultarLoaders();
         if (timeoutCanalCaido != null) { handler.removeCallbacks(timeoutCanalCaido); timeoutCanalCaido = null; }
@@ -2234,7 +2288,7 @@ public class MainActivity extends AppCompatActivity {
             cerrarExoPlayer();
             return;
         }
-        if (enExoPlayer || enGSY || enYouTubeNativo) { ytToken++; cerrarExoPlayer(); return; }
+        if (enExoPlayer || enGSY || enYouTubeNativo || enMPV) { ytToken++; cerrarExoPlayer(); return; }
         ytToken++;
         if (myWebView == null) { finish(); return; }
         myWebView.evaluateJavascript(
@@ -2275,6 +2329,8 @@ public class MainActivity extends AppCompatActivity {
         try { File f = new File(getCacheDir(), "update.apk"); if (f.exists()) f.delete(); } catch (Exception ignored) {}
         if (exoPlayer != null) { try { exoPlayer.release(); } catch (Exception ignored) {} exoPlayer = null; }
         if (gsyPlayer != null) { try { gsyPlayer.release(); } catch (Exception ignored) {} gsyPlayer = null; }
+        if (mpvPlayer != null) { try { mpvPlayer.destroy(); } catch (Exception ignored) {} mpvPlayer = null; }
+        if (mpvView != null) { try { if (mpvView.getParent() != null) ((ViewGroup)mpvView.getParent()).removeView(mpvView); } catch (Exception ignored) {} mpvView = null; }
         if (youtubePlayerView != null) { try { youtubePlayerView.release(); } catch (Exception ignored) {} }
         if (myWebView != null) {
             try {
