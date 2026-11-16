@@ -25,6 +25,7 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
@@ -76,7 +77,6 @@ import com.shuyu.gsyvideoplayer.utils.GSYVideoType;
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer;
 
 import is.xyz.mpv.MPV;
-import is.xyz.mpv.BaseMPVView;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -123,8 +123,8 @@ public class MainActivity extends AppCompatActivity {
     private YouTubePlayerView youtubePlayerView;
     private StandardGSYVideoPlayer gsyPlayer;
 
-   private MiMPVView mpvView;
     private MPV mpvPlayer;
+    private SurfaceView mpvSurfaceView;
 
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
     private boolean bgGuardado = false;
@@ -241,17 +241,6 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private class MiMPVView extends BaseMPVView {
-    public MiMPVView(Context context) {
-        super(context, null);
-    }
-    @Override protected void initOptions() {
-        mpv.setOptionString("hwdec", "auto");
-        mpv.setOptionString("vo", "gpu");
-        mpv.setOptionString("config", "yes");
-    }
-    @Override protected void postInitOptions() {}
-}
     static class Canal {
         final String url, nombre, logo, referer;
         final float gain;
@@ -483,7 +472,7 @@ public class MainActivity extends AppCompatActivity {
         enYouTubeNativo = false;
         try { if (exoPlayer != null) { exoPlayer.setPlayWhenReady(false); exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
         try { if (gsyPlayer != null) { gsyPlayer.release(); } } catch (Exception ignored) {}
-        try { if (mpvPlayer != null) { mpvPlayer.destroy(); } } catch (Exception ignored) {}
+        try { if (mpvPlayer != null) { mpvPlayer.destroy(); } catch (Exception ignored) {} mpvPlayer = null; }
         try { if (ytPlayer != null) { ytPlayer.pause(); } } catch (Exception ignored) {}
         ytVideoPendiente = null;
     }
@@ -586,55 +575,69 @@ public class MainActivity extends AppCompatActivity {
         overlayControls.requestFocus();
     }
 
-   private void reproducirConMPV(Canal c) {
-    detenerTodo();
-    enMPV = true;
-    canalActual = c;
-    myWebView.setVisibility(View.GONE);
-    youtubePlayerView.setVisibility(View.GONE);
-    gsyPlayer.setVisibility(View.GONE);
-    playerView.setVisibility(View.GONE);
-    playerContainer.setVisibility(View.VISIBLE);
-    playerContainer.bringToFront();
-    nombreCanal.setText(c.nombre);
-    numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
-    if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
+    private void reproducirConMPV(Canal c) {
+        detenerTodo();
+        enMPV = true;
+        canalActual = c;
+        myWebView.setVisibility(View.GONE);
+        youtubePlayerView.setVisibility(View.GONE);
+        gsyPlayer.setVisibility(View.GONE);
+        playerView.setVisibility(View.GONE);
+        playerContainer.setVisibility(View.VISIBLE);
+        playerContainer.bringToFront();
+        nombreCanal.setText(c.nombre);
+        numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+        if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
 
-    if (mpvView != null && mpvView.getParent() != null) {
-        ((ViewGroup) mpvView.getParent()).removeView(mpvView);
-    }
-    
-    mpvView = new MiMPVView(this);
-    rotWrapper.addView(mpvView);
-    
-    // Inicializa MPV con los directorios de la app
-    try {
-        mpvView.initialize(getFilesDir().getPath(), getCacheDir().getPath());
-    } catch (Exception e) {
-        Log.e(TAG, "Error inicializando MPV: " + e.getMessage());
-    }
-    
-    // Carga el stream
-    mpvView.playFile(c.url);
-    
-    mostrarLoaderSintonizando();
-    handler.postDelayed(new Runnable() {
-        @Override public void run() {
-            if (!enMPV) return;
-            detenerLoaderAnim(); 
-            ocultarLoaders();
-            avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
+        if (mpvSurfaceView != null && mpvSurfaceView.getParent() != null) {
+            ((ViewGroup) mpvSurfaceView.getParent()).removeView(mpvSurfaceView);
         }
-    }, 2000);
-    
-    mostrarControles();
-    playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
-    overlayControls.setVisibility(View.VISIBLE);
-    overlayControls.bringToFront();
-    overlayControls.setFocusable(true);
-    overlayControls.setFocusableInTouchMode(true);
-    overlayControls.requestFocus();
-}
+        
+        mpvSurfaceView = new SurfaceView(this);
+        mpvSurfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+                if (mpvPlayer != null) {
+                    mpvPlayer.attachSurface(holder.getSurface());
+                    mpvPlayer.command(new String[]{"loadfile", c.url});
+                }
+            }
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                if (mpvPlayer != null) {
+                    mpvPlayer.detachSurface();
+                }
+            }
+        });
+        
+        rotWrapper.addView(mpvSurfaceView, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        
+        mpvPlayer = new MPV();
+        mpvPlayer.create(this);
+        mpvPlayer.setOptionString("hwdec", "auto");
+        mpvPlayer.setOptionString("vo", "gpu");
+        mpvPlayer.init();
+        
+        mostrarLoaderSintonizando();
+        handler.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (!enMPV) return;
+                detenerLoaderAnim(); 
+                ocultarLoaders();
+                avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
+            }
+        }, 2000);
+        
+        mostrarControles();
+        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+        overlayControls.setVisibility(View.VISIBLE);
+        overlayControls.bringToFront();
+        overlayControls.setFocusable(true);
+        overlayControls.setFocusableInTouchMode(true);
+        overlayControls.requestFocus();
+    }
 
     private void reproducirEnYouTube(Canal c) {
         ytToken++;
@@ -1193,8 +1196,8 @@ public class MainActivity extends AppCompatActivity {
         youtubePlayerView.setVisibility(View.GONE);
         gsyPlayer.setVisibility(View.GONE);
         playerView.setVisibility(View.GONE);
-        if (mpvView != null && mpvView.getParent() != null) {
-            ((ViewGroup) mpvView.getParent()).removeView(mpvView);
+        if (mpvSurfaceView != null && mpvSurfaceView.getParent() != null) {
+            ((ViewGroup) mpvSurfaceView.getParent()).removeView(mpvSurfaceView);
         }
         ocultarControlesNativos();
         detenerLoaderAnim(); ocultarLoaders();
@@ -2344,7 +2347,11 @@ public class MainActivity extends AppCompatActivity {
         try { File f = new File(getCacheDir(), "update.apk"); if (f.exists()) f.delete(); } catch (Exception ignored) {}
         if (exoPlayer != null) { try { exoPlayer.release(); } catch (Exception ignored) {} exoPlayer = null; }
         if (gsyPlayer != null) { try { gsyPlayer.release(); } catch (Exception ignored) {} gsyPlayer = null; }
-        if (mpvView != null) { try { mpvView.destroy(); } catch (Exception ignored) {} }
+        if (mpvPlayer != null) { try { mpvPlayer.destroy(); } catch (Exception ignored) {} mpvPlayer = null; }
+        if (mpvSurfaceView != null && mpvSurfaceView.getParent() != null) {
+            try { ((ViewGroup) mpvSurfaceView.getParent()).removeView(mpvSurfaceView); } catch (Exception ignored) {}
+        }
+        mpvSurfaceView = null;
         if (youtubePlayerView != null) { try { youtubePlayerView.release(); } catch (Exception ignored) {} }
         if (myWebView != null) {
             try {
