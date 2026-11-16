@@ -241,6 +241,17 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    private class MiMPVView extends BaseMPVView {
+    public MiMPVView(Context context) {
+        super(context, null);
+    }
+    @Override protected void initOptions() {
+        mpv.setOptionString("hwdec", "auto");
+        mpv.setOptionString("vo", "gpu");
+        mpv.setOptionString("config", "yes");
+    }
+    @Override protected void postInitOptions() {}
+}
     static class Canal {
         final String url, nombre, logo, referer;
         final float gain;
