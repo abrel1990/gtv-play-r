@@ -586,51 +586,55 @@ public class MainActivity extends AppCompatActivity {
         overlayControls.requestFocus();
     }
 
-    private void reproducirConMPV(Canal c) {
-        detenerTodo();
-        enMPV = true;
-        canalActual = c;
-        myWebView.setVisibility(View.GONE);
-        youtubePlayerView.setVisibility(View.GONE);
-        gsyPlayer.setVisibility(View.GONE);
-        playerView.setVisibility(View.GONE);
-        playerContainer.setVisibility(View.VISIBLE);
-        playerContainer.bringToFront();
-        nombreCanal.setText(c.nombre);
-        numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
-        if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
+   private void reproducirConMPV(Canal c) {
+    detenerTodo();
+    enMPV = true;
+    canalActual = c;
+    myWebView.setVisibility(View.GONE);
+    youtubePlayerView.setVisibility(View.GONE);
+    gsyPlayer.setVisibility(View.GONE);
+    playerView.setVisibility(View.GONE);
+    playerContainer.setVisibility(View.VISIBLE);
+    playerContainer.bringToFront();
+    nombreCanal.setText(c.nombre);
+    numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+    if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
 
-        if (mpvView != null && mpvView.getParent() != null) {
-            ((ViewGroup) mpvView.getParent()).removeView(mpvView);
-        }
-        
-        mpvView = new MPVView(this);
-        rotWrapper.addView(mpvView);
-        
-        mpvPlayer = mpvView.getPlayer();
-        mpvPlayer.setOptionString("hwdec", "auto");
-        mpvPlayer.setOptionString("vo", "gpu");
-        
-        mpvPlayer.command(new String[]{"loadfile", c.url});
-        
-        mostrarLoaderSintonizando();
-        handler.postDelayed(new Runnable() {
-            @Override public void run() {
-                if (!enMPV) return;
-                detenerLoaderAnim(); 
-                ocultarLoaders();
-                avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
-            }
-        }, 2000);
-        
-        mostrarControles();
-        playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
-        overlayControls.setVisibility(View.VISIBLE);
-        overlayControls.bringToFront();
-        overlayControls.setFocusable(true);
-        overlayControls.setFocusableInTouchMode(true);
-        overlayControls.requestFocus();
+    if (mpvView != null && mpvView.getParent() != null) {
+        ((ViewGroup) mpvView.getParent()).removeView(mpvView);
     }
+    
+    mpvView = new MiMPVView(this);
+    rotWrapper.addView(mpvView);
+    
+    // Inicializa MPV con los directorios de la app
+    try {
+        mpvView.initialize(getFilesDir().getPath(), getCacheDir().getPath());
+    } catch (Exception e) {
+        Log.e(TAG, "Error inicializando MPV: " + e.getMessage());
+    }
+    
+    // Carga el stream
+    mpvView.playFile(c.url);
+    
+    mostrarLoaderSintonizando();
+    handler.postDelayed(new Runnable() {
+        @Override public void run() {
+            if (!enMPV) return;
+            detenerLoaderAnim(); 
+            ocultarLoaders();
+            avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
+        }
+    }, 2000);
+    
+    mostrarControles();
+    playerContainer.post(() -> { aplicarRotacion(); reposicionarBotones(); });
+    overlayControls.setVisibility(View.VISIBLE);
+    overlayControls.bringToFront();
+    overlayControls.setFocusable(true);
+    overlayControls.setFocusableInTouchMode(true);
+    overlayControls.requestFocus();
+}
 
     private void reproducirEnYouTube(Canal c) {
         ytToken++;
