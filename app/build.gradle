@@ -55,9 +55,6 @@ dependencies {
     implementation 'androidx.tvprovider:tvprovider:1.1.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
-    // ✅ GSYVideoPlayer SOLO Java (sin ex_so, sin la versión completa)
+    // ✅ GSYVideoPlayer SOLO Java (usa las .so que subimos a jniLibs)
     implementation 'io.github.carguo:gsyvideoplayer-java:14.1.0'
-
-    // ✅ Tu .aar con el soporte MP2 (el que subiste a app/libs/)
-    implementation files('libs/ijkplayer-cmake-release.aar')
 }
