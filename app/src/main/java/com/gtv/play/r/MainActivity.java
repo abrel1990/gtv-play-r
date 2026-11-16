@@ -123,7 +123,7 @@ public class MainActivity extends AppCompatActivity {
     private YouTubePlayerView youtubePlayerView;
     private StandardGSYVideoPlayer gsyPlayer;
 
-    private MPVView mpvView;
+   private MiMPVView mpvView;
     private MPV mpvPlayer;
 
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
