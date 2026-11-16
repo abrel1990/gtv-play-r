@@ -624,8 +624,10 @@ public class MainActivity extends AppCompatActivity {
         
         mpvPlayer = new MPV();
         mpvPlayer.create(this);
-        mpvPlayer.setOptionString("hwdec", "auto");
-        mpvPlayer.setOptionString("vo", "gpu");
+        mpvPlayer.setOptionString("hwdec", "no");
+mpvPlayer.setOptionString("vo", "gpu");
+mpvPlayer.setOptionString("video-sync", "audio");
+mpvPlayer.setOptionString("framedrop", "vo");
         mpvPlayer.init();
         
         mostrarLoaderSintonizando();
