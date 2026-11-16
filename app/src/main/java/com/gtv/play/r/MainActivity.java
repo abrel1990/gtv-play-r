@@ -465,19 +465,24 @@ public class MainActivity extends AppCompatActivity {
         }, 5000);
     }
 
-       private void detenerTodo() {
+           private void detenerTodo() {
         enExoPlayer = false;
         enGSY = false;
         enMPV = false;
         enYouTubeNativo = false;
         try { if (exoPlayer != null) { exoPlayer.setPlayWhenReady(false); exoPlayer.stop(); exoPlayer.clearMediaItems(); } } catch (Exception ignored) {}
         try { if (gsyPlayer != null) { gsyPlayer.release(); } } catch (Exception ignored) {}
-        try { if (mpvPlayer != null) { mpvPlayer.destroy(); } } catch (Exception ignored) {}
-        mpvPlayer = null;
+        
+        if (mpvPlayer != null) {
+            try {
+                mpvPlayer.destroy();
+            } catch (Exception ignored) {}
+            mpvPlayer = null;
+        }
+        
         try { if (ytPlayer != null) { ytPlayer.pause(); } } catch (Exception ignored) {}
         ytVideoPendiente = null;
     }
-
     private String generarDeviceId() {
         if (deviceIdCache != null) return deviceIdCache;
 
