@@ -54,7 +54,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.tvprovider:tvprovider:1.1.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-
+    implementation 'io.github.abdallahmehiz:mpv-android-lib:0.1.12'
     // ✅ GSYVideoPlayer SOLO Java (usa las .so que subimos a jniLibs)
     implementation 'io.github.carguo:gsyvideoplayer-java:14.1.0'
 }
