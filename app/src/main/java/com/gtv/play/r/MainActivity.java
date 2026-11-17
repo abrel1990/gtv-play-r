@@ -27,7 +27,6 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
-import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
@@ -98,16 +97,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * GTV Play R - MainActivity (reescrita)
- *
- * Reglas de oro:
- *  1) Hay UN solo motor activo a la vez: NINGUNO / EXO / MPV / YT / WEB.
- *  2) Todo cambio de canal pasa por reproducirCanal() -> apagarTodo() -> iniciarXxx().
- *     apagarTodo() frena TODO lo demás antes de arrancar el nuevo (cero audio/imagen pisados).
- *  3) 'sesion' es un token que se incrementa en cada apagarTodo(); cualquier callback tardío
- *     (hilos, postDelayed, eventos de MPV) comprueba que sigue siendo su sesión antes de actuar.
- *  4) Motores directos: EXO (por defecto) y MPV (enlaces complicados o elegido en el menú).
- *     Si uno falla, prueba el otro una vez. YouTube nativo y WebView (Kick, Twitch...) van aparte.
+ * GTV Play R - MainActivity
+ * 
+ * Fixes aplicados:
+ * 1. Selector de motor simplificado: "e_plus" (Exo con fallback a MPV) y "eme_plus" (Solo MPV).
+ * 2. YouTube y Kick/Twitch se manejan por separado (WEB/YT), ignorando la config de motor directo.
+ * 3. Ticker optimizado para no superponerse ni reiniciarse constantemente.
  */
 public class MainActivity extends AppCompatActivity {
 
@@ -121,7 +116,8 @@ public class MainActivity extends AppCompatActivity {
     private static final String UA = "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 
     private static final String PREFS = "gtv_r_prefs";
-    private static final String PREF_MOTOR = "motor"; // "auto" | "mpv" | "exo"
+    // FIX 1: Preferencia simplificada para el HTML
+    private static final String PREF_MOTOR = "motor"; // "e_plus" | "eme_plus"
 
     private enum Motor { NINGUNO, EXO, MPV, YT, WEB }
     private enum Tipo { YT, WEB, DIRECTO }
@@ -130,8 +126,8 @@ public class MainActivity extends AppCompatActivity {
     private WebView myWebView;
     private ExoPlayer exoPlayer;
     private PlayerView playerView;
-    private TextureView videoTexture;      // textura de Exo
-    private TextureView mpvTextureView;    // textura de MPV (una sola, vive en rotWrapper)
+    private TextureView videoTexture;
+    private TextureView mpvTextureView;
     private FrameLayout playerContainer, rotWrapper;
     private LinearLayout infoCanal;
     private ImageView logoCanal;
@@ -149,8 +145,8 @@ public class MainActivity extends AppCompatActivity {
     private volatile int sesion = 0;
     private Canal canalActual;
     private boolean fallbackProbado = false;
-    private int reintentos = 0;       // Exo
-    private int mpvReintentos = 0;    // MPV
+    private int reintentos = 0;
+    private int mpvReintentos = 0;
     private boolean mpvCargado = false;
 
     private final ArrayList<Canal> canales = new ArrayList<>();
@@ -209,7 +205,7 @@ public class MainActivity extends AppCompatActivity {
         final float gain;
         boolean oculto, esPeliculas;
         String urlPeliculasM3U;
-        String motor; // null | "mpv" | "exo"  (atributo tvg-player en la M3U)
+        String motor;
 
         Canal(String url, String nombre, String logo, String referer, float gain, boolean oculto) {
             this.url = url;
@@ -225,8 +221,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
-    //  MPV (envoltorio reflexivo: compila sin importar si la lib expone
-    //  MPVLib como object de Kotlin, con @JvmStatic o con INSTANCE)
+    //  MPV (envoltorio reflexivo)
     // =====================================================================
     private final class MpvEngine {
         private static final int EV_START_FILE = 6, EV_END_FILE = 7, EV_FILE_LOADED = 8;
@@ -237,7 +232,7 @@ public class MainActivity extends AppCompatActivity {
         private Surface surface;
         private boolean surfaceOk = false, attached = false;
         private Canal pendiente = null;
-        private volatile boolean armado = false; // true entre START_FILE del canal actual y su END_FILE
+        private volatile boolean armado = false;
 
         boolean iniciar() {
             if (listo) return true;
@@ -305,7 +300,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Superficie
         void onSurface(SurfaceTexture st) {
             if (surface != null) { try { surface.release(); } catch (Exception ignored) {} }
             surface = new Surface(st);
@@ -338,7 +332,6 @@ public class MainActivity extends AppCompatActivity {
             attached = false;
         }
 
-        // Reproducción
         void cargar(Canal c) {
             armado = false;
             if (listo && attached) lanzar(c); else pendiente = c;
@@ -384,7 +377,6 @@ public class MainActivity extends AppCompatActivity {
             listo = false;
         }
 
-        // Reflexión
         private void opt(String k, String v) { try { call("setOptionString", k, v); } catch (Throwable ignored) {} }
         private void prop(String k, String v) throws Exception { call("setPropertyString", k, v); }
 
@@ -417,7 +409,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Callbacks de MPV (siempre en el hilo principal)
     private void onMpvCargado() {
         if (motorActivo != Motor.MPV) return;
         mpvCargado = true;
@@ -456,7 +447,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
-    //  ELECCIÓN DE MOTOR
+    //  ELECCIÓN DE MOTOR (FIX 1 & 2)
     // =====================================================================
     private Tipo tipoDe(String url) {
         if (url == null) return Tipo.DIRECTO;
@@ -484,14 +475,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String motorPreferido() {
-        return getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_MOTOR, "auto");
+        return getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_MOTOR, "e_plus");
     }
 
     private Motor elegirMotor(Canal c) {
         String m = (c.motor != null) ? c.motor : motorPreferido();
-        if ("mpv".equals(m)) return Motor.MPV;
-        if ("exo".equals(m)) return Motor.EXO;
-        return esEnlaceComplicado(c.url) ? Motor.MPV : Motor.EXO;
+        // EME+ o mpv legacy -> Forzar MPV directo
+        if ("eme_plus".equals(m) || "mpv".equals(m)) return Motor.MPV;
+        // E+ o auto/exo legacy -> Exo (con fallback a MPV en fallaMotor)
+        return Motor.EXO;
     }
 
     private boolean nativoActivo() {
@@ -502,7 +494,6 @@ public class MainActivity extends AppCompatActivity {
     // =====================================================================
     //  NÚCLEO: apagar todo / arrancar uno
     // =====================================================================
-    /** Frena absolutamente todos los motores y invalida callbacks pendientes. */
     private void apagarTodo() {
         sesion++;
         handler.removeCallbacks(reintentoRunnable);
@@ -520,7 +511,6 @@ public class MainActivity extends AppCompatActivity {
         if (youtubePlayerView != null) youtubePlayerView.setVisibility(View.GONE);
     }
 
-    /** Punto único de entrada para reproducir cualquier canal. */
     private void reproducirCanal(Canal c) {
         if (c == null) return;
         fallbackProbado = false;
@@ -622,13 +612,13 @@ public class MainActivity extends AppCompatActivity {
         finalizarUI();
     }
 
-    /** Un motor falló: prueba el otro una sola vez; si también falla, muestra error. */
     private void fallaMotor(Motor fallo) {
         if (canalActual == null) return;
         if (!fallbackProbado) {
             fallbackProbado = true;
             Canal c = canalActual;
             Log.e(TAG, "Falló " + fallo + ", probando el otro motor: " + c.url);
+            // Fallback inteligente: si falla EXO, prueba MPV. Si falla MPV, prueba EXO.
             if (fallo == Motor.EXO) iniciarMpv(c); else iniciarExo(c);
             return;
         }
@@ -887,7 +877,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // ----- MPV (la textura se crea ya, queda INVISIBLE hasta que se use) -----
+        // ----- MPV -----
         mpv = new MpvEngine();
         mpvTextureView = new TextureView(this);
         mpvTextureView.setLayoutParams(new FrameLayout.LayoutParams(
@@ -899,7 +889,7 @@ public class MainActivity extends AppCompatActivity {
             @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) { mpv.onSurfaceDestruida(); return true; }
             @Override public void onSurfaceTextureUpdated(SurfaceTexture st) {}
         });
-        rotWrapper.addView(mpvTextureView, 0); // índice 0: queda DEBAJO del ticker y del modal
+        rotWrapper.addView(mpvTextureView, 0);
 
         // ----- YouTube nativo -----
         getLifecycle().addObserver(youtubePlayerView);
@@ -1185,7 +1175,6 @@ public class MainActivity extends AppCompatActivity {
         btnClose.setVisibility(View.GONE); btnRotate.setVisibility(View.GONE);
     }
 
-    // ---------- loaders ----------
     private void mostrarLoaderSintonizando() {
         if (exoLoader == null) return;
         if (exoLoaderError != null) exoLoaderError.setVisibility(View.GONE);
@@ -1314,7 +1303,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
-    //  PUBLICIDAD NATIVA (ticker + modal)
+    //  PUBLICIDAD NATIVA (FIX 3: Ticker optimizado)
     // =====================================================================
     private void inicializarPublicidadNativa() {
         if (rotWrapper == null) return;
@@ -1445,6 +1434,7 @@ public class MainActivity extends AppCompatActivity {
                                    final String colorBg, final String colorAc, final int tamPx, final String fuente) {
         runOnUiThread(() -> {
             if (pubTickerBox == null || pubTickerTxt == null) return;
+            // FIX 3: Detener cualquier ticker previo antes de iniciar uno nuevo para evitar superposiciones
             tickerDetener(false);
             final int gen = pubTickerGen;
             pubTickerTxt.setText((badge != null && !badge.isEmpty()) ? (badge + "  " + texto) : String.valueOf(texto));
@@ -1681,7 +1671,6 @@ public class MainActivity extends AppCompatActivity {
         irACanalPorUrl(url, 0);
     }
 
-    /** Espera a que la lista esté cargada (hasta ~12 s) y salta al canal. */
     private void irACanalPorUrl(final String url, final int intento) {
         int idx = -1;
         for (int i = 0; i < canales.size(); i++) if (canales.get(i).url.equals(url)) { idx = i; break; }
@@ -2097,22 +2086,28 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
-    //  PUENTE JS  (window.AndroidPlayer)
+    //  PUENTE JS (FIX 1: Interfaz limpia para HTML)
     // =====================================================================
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
         @JavascriptInterface public String getDeviceIdParaWorker() { return generarDeviceId(); }
 
-        // ---- MENÚ DE MOTOR ----
-        /** Devuelve "auto" | "mpv" | "exo". */
-        @JavascriptInterface public String getMotor() { return motorPreferido(); }
+        // FIX 1: Devuelve solo "e_plus" o "eme_plus"
+        @JavascriptInterface public String getMotor() { 
+            String m = motorPreferido();
+            if ("eme_plus".equals(m) || "mpv".equals(m)) return "eme_plus";
+            return "e_plus";
+        }
 
-        /** Guarda la preferencia. Se aplica desde el próximo canal que se abra. */
+        // FIX 1: Acepta los nuevos nombres y también los antiguos por compatibilidad
         @JavascriptInterface public void setMotor(String m) {
             if (m == null) return;
             m = m.toLowerCase().trim();
-            if (!m.equals("auto") && !m.equals("mpv") && !m.equals("exo")) return;
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_MOTOR, m).apply();
+            if ("e_plus".equals(m) || "auto".equals(m) || "exo".equals(m)) {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_MOTOR, "e_plus").apply();
+            } else if ("eme_plus".equals(m) || "mpv".equals(m)) {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_MOTOR, "eme_plus").apply();
+            }
         }
 
         @JavascriptInterface public String getConfigNativa() { return getJson(CONFIG_URL, 12000, true); }
@@ -2160,7 +2155,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface public void sincronizarIndice(final int i) { runOnUiThread(() -> indiceActual = i); }
-
         @JavascriptInterface public void detener() { runOnUiThread(MainActivity.this::apagarTodo); }
 
         @JavascriptInterface public void reproducir(String url, String nombre, String numero, String logo, String referer, float gainArg) {
@@ -2217,6 +2211,7 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface public void cerrarPlayer() { runOnUiThread(MainActivity.this::cerrarReproductor); }
         @JavascriptInterface public void salirApp() { runOnUiThread(() -> finishAndRemoveTask()); }
 
+        // FIX 3: Métodos de Ticker expuestos limpiamente al HTML
         @JavascriptInterface public void mostrarTicker(final String texto, final String badge, final int velocidad, final String colorBg, final String colorAc) {
             mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, 14, "arial");
         }
