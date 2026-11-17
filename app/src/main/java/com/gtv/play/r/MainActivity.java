@@ -124,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
     private StandardGSYVideoPlayer gsyPlayer;
 
     private MPV mpvPlayer;
-    private SurfaceView mpvSurfaceView;
+    private TextureView mpvTextureView; // CAMBIO: SurfaceView -> TextureView
 
     private android.graphics.drawable.Drawable bgContainerOrig, bgRotOrig;
     private boolean bgGuardado = false;
@@ -465,7 +465,7 @@ public class MainActivity extends AppCompatActivity {
         }, 5000);
     }
 
-               private void detenerTodo() {
+    private void detenerTodo() {
         enExoPlayer = false;
         enGSY = false;
         enMPV = false;
@@ -478,10 +478,10 @@ public class MainActivity extends AppCompatActivity {
             try { mpvPlayer.destroy(); } catch (Exception ignored) {}
             mpvPlayer = null;
         }
-        if (mpvSurfaceView != null && mpvSurfaceView.getParent() != null) {
-            try { ((ViewGroup) mpvSurfaceView.getParent()).removeView(mpvSurfaceView); } catch (Exception ignored) {}
+        if (mpvTextureView != null && mpvTextureView.getParent() != null) {
+            try { ((ViewGroup) mpvTextureView.getParent()).removeView(mpvTextureView); } catch (Exception ignored) {}
         }
-        mpvSurfaceView = null;
+        mpvTextureView = null;
         
         ytVideoPendiente = null;
     }
@@ -597,37 +597,41 @@ public class MainActivity extends AppCompatActivity {
         numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
         if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
 
-        if (mpvSurfaceView != null && mpvSurfaceView.getParent() != null) {
-            ((ViewGroup) mpvSurfaceView.getParent()).removeView(mpvSurfaceView);
+        if (mpvTextureView != null && mpvTextureView.getParent() != null) {
+            ((ViewGroup) mpvTextureView.getParent()).removeView(mpvTextureView);
         }
         
-        mpvSurfaceView = new SurfaceView(this);
-        mpvSurfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
+        mpvTextureView = new TextureView(this);
+        mpvTextureView.setLayoutParams(new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        
+        mpvTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
-            public void surfaceCreated(SurfaceHolder holder) {
+            public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
                 if (mpvPlayer != null) {
-                    mpvPlayer.attachSurface(holder.getSurface());
+                    mpvPlayer.attachSurface(new android.view.Surface(st));
                     mpvPlayer.command(new String[]{"loadfile", c.url});
                 }
             }
-            @Override
-            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
-            @Override
-            public void surfaceDestroyed(SurfaceHolder holder) {
-                if (mpvPlayer != null) {
-                    mpvPlayer.detachSurface();
-                }
+            @Override public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) {}
+            @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) {
+                if (mpvPlayer != null) mpvPlayer.detachSurface();
+                return true;
             }
+            @Override public void onSurfaceTextureUpdated(SurfaceTexture st) {}
         });
         
-        rotWrapper.addView(mpvSurfaceView, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        rotWrapper.addView(mpvTextureView);
         
         mpvPlayer = new MPV();
         mpvPlayer.create(this);
         mpvPlayer.setOptionString("hwdec", "no");
-mpvPlayer.setOptionString("vo", "gpu");
-mpvPlayer.setOptionString("video-sync", "audio");
-mpvPlayer.setOptionString("framedrop", "vo");
+        mpvPlayer.setOptionString("vo", "gpu");
+        mpvPlayer.setOptionString("video-sync", "audio");
+        mpvPlayer.setOptionString("framedrop", "vo");
+        // CLAVE: Mantener aspect ratio y no estirar
+        mpvPlayer.setOptionString("keepaspect", "yes");
+        mpvPlayer.setOptionString("video-unscaled", "no");
         mpvPlayer.init();
         
         mostrarLoaderSintonizando();
@@ -1206,8 +1210,8 @@ mpvPlayer.setOptionString("framedrop", "vo");
         youtubePlayerView.setVisibility(View.GONE);
         gsyPlayer.setVisibility(View.GONE);
         playerView.setVisibility(View.GONE);
-        if (mpvSurfaceView != null && mpvSurfaceView.getParent() != null) {
-            ((ViewGroup) mpvSurfaceView.getParent()).removeView(mpvSurfaceView);
+        if (mpvTextureView != null && mpvTextureView.getParent() != null) {
+            ((ViewGroup) mpvTextureView.getParent()).removeView(mpvTextureView);
         }
         ocultarControlesNativos();
         detenerLoaderAnim(); ocultarLoaders();
@@ -1617,27 +1621,33 @@ mpvPlayer.setOptionString("framedrop", "vo");
     private void refrescarListaRemota() {
         final int miToken = ++listaToken;
         new Thread(() -> {
+            SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
+            boolean ultimaFueMaestra = prefs.getString("ultima_lista_maestra", "false").equals("true");
+            
             String listaUrl = null;
-            try {
-                SharedPreferences prefs = getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE);
-                JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
-                if (listas.length() > 0) {
-                    String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
-                    JSONObject elegida = null;
-                    if (ultimaNombre != null) {
-                        for (int i = 0; i < listas.length(); i++) {
-                            if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
-                                elegida = listas.getJSONObject(i);
-                                break;
+            boolean validarConWorker = ultimaFueMaestra;
+
+            if (!validarConWorker) {
+                try {
+                    JSONArray listas = new JSONArray(prefs.getString(LISTAS_KEY, "[]"));
+                    if (listas.length() > 0) {
+                        String ultimaNombre = prefs.getString(ULTIMA_LISTA_KEY, null);
+                        JSONObject elegida = null;
+                        if (ultimaNombre != null) {
+                            for (int i = 0; i < listas.length(); i++) {
+                                if (listas.getJSONObject(i).optString("nombre").equals(ultimaNombre)) {
+                                    elegida = listas.getJSONObject(i);
+                                    break;
+                                }
                             }
                         }
+                        if (elegida == null) elegida = listas.getJSONObject(0);
+                        listaUrl = elegida.optString("url", "");
                     }
-                    if (elegida == null) elegida = listas.getJSONObject(0);
-                    listaUrl = elegida.optString("url", "");
-                }
-            } catch (Exception ignored) {}
+                } catch (Exception ignored) {}
+            }
 
-            if (listaUrl == null || listaUrl.isEmpty()) {
+            if (validarConWorker || listaUrl == null || listaUrl.isEmpty()) {
                 try {
                     URL uVal = new URL(VALIDAR_URL);
                     HttpURLConnection connVal = (HttpURLConnection) uVal.openConnection();
@@ -1664,12 +1674,20 @@ mpvPlayer.setOptionString("framedrop", "vo");
                     JSONObject json = new JSONObject(sb.toString());
                     String error = json.optString("error", "");
                     if (!error.isEmpty()) {
-                        if (miToken == listaToken)
-                            runOnUiThread(() -> mostrarErrorLista("Error: " + error));
+                        if (miToken == listaToken) {
+                            runOnUiThread(() -> {
+                                prefs.edit().clear().apply(); // Borra listas guardadas
+                                mostrarErrorLista("Acceso denegado. La clave ha cambiado. Ingresá una nueva lista.");
+                                if (myWebView != null) {
+                                    myWebView.evaluateJavascript("javascript:window.mostrarPantallaIngresoLista&&window.mostrarPantallaIngresoLista();", null);
+                                }
+                            });
+                        }
                         return;
                     }
                     listaUrl = json.optString("url", "");
                     if (listaUrl.startsWith("/")) listaUrl = "https://gtv-portero.abrel03.workers.dev" + listaUrl;
+                    prefs.edit().putString("ultima_lista_maestra", "true").apply();
                 } catch (Exception e) {
                     if (miToken == listaToken)
                         runOnUiThread(() -> mostrarErrorLista("Sin conexión. Verificá tu internet."));
@@ -2197,13 +2215,21 @@ mpvPlayer.setOptionString("framedrop", "vo");
                     indiceActual = 0;
                     listaLegada = contenido;
                     enviarListaAlHtmlConReintentos(contenido, 0);
-                    boolean esListaMaestra = listaUrl.contains("/api/m3u")
+                    
+                    boolean esListaMaestra = listaUrl.contains("/api/m3u") 
                         || listaUrl.contains("gtv-portero.abrel03.workers.dev");
-                    String nombre = esListaMaestra ? "Lista maestra" : derivarNombreDeUrl(listaUrl);
-                    guardarNuevaLista(nombre, contenido, listaUrl);
+                        
                     if (!esListaMaestra) {
+                        String nombre = derivarNombreDeUrl(listaUrl);
+                        guardarNuevaLista(nombre, contenido, listaUrl);
                         registrarListaEnWorker(listaUrl, nombre);
+                    } else {
+                        getSharedPreferences(LISTAS_PREFS, MODE_PRIVATE).edit()
+                            .putString("ultima_lista_maestra", "true")
+                            .putString(ULTIMA_LISTA_KEY, "Lista maestra")
+                            .apply();
                     }
+                    
                     Toast.makeText(this, "Lista cargada: " + lista.size() + " canales", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
@@ -2358,10 +2384,10 @@ mpvPlayer.setOptionString("framedrop", "vo");
         if (exoPlayer != null) { try { exoPlayer.release(); } catch (Exception ignored) {} exoPlayer = null; }
         if (gsyPlayer != null) { try { gsyPlayer.release(); } catch (Exception ignored) {} gsyPlayer = null; }
         if (mpvPlayer != null) { try { mpvPlayer.destroy(); } catch (Exception ignored) {} mpvPlayer = null; }
-        if (mpvSurfaceView != null && mpvSurfaceView.getParent() != null) {
-            try { ((ViewGroup) mpvSurfaceView.getParent()).removeView(mpvSurfaceView); } catch (Exception ignored) {}
+        if (mpvTextureView != null && mpvTextureView.getParent() != null) {
+            try { ((ViewGroup) mpvTextureView.getParent()).removeView(mpvTextureView); } catch (Exception ignored) {}
         }
-        mpvSurfaceView = null;
+        mpvTextureView = null;
         if (youtubePlayerView != null) { try { youtubePlayerView.release(); } catch (Exception ignored) {} }
         if (myWebView != null) {
             try {
