@@ -32,6 +32,7 @@
             android:layout_height="match_parent"
             android:layout_gravity="center">
 
+            <!-- Exo. La textura de MPV se agrega por código en el índice 0 de este contenedor. -->
             <androidx.media3.ui.PlayerView
                 android:id="@+id/player_view"
                 android:layout_width="match_parent"
@@ -40,13 +41,6 @@
                 app:surface_type="none"
                 app:resize_mode="fit"
                 android:keepScreenOn="true" />
-
-            <!-- ✅ FIX: Reemplazamos SurfaceView de VLC por GSYVideoPlayer -->
-            <com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
-                android:id="@+id/gsy_player"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:visibility="gone" />
 
             <com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
                 android:id="@+id/youtube_player_view"
