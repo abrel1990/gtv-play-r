@@ -101,9 +101,10 @@ import java.util.regex.Pattern;
  * GTV Play R - MainActivity
  * 
  * Fixes aplicados:
- * 1. Selector de motor simplificado: "e_plus" (Exo con fallback a MPV) y "eme_plus" (Solo MPV).
+ * 1. Selector de motor: "e_plus" (Exo con fallback a MPV) y "eme_plus" (Solo MPV).
  * 2. YouTube y Kick/Twitch se manejan por separado (WEB/YT), ignorando la config de motor directo.
  * 3. Ticker optimizado para no superponerse ni reiniciarse constantemente.
+ * 4. FIX PELÍCULAS: Detección infalible por nombre/URL para forzar la apertura de la grilla de cine.
  */
 public class MainActivity extends AppCompatActivity {
 
@@ -117,7 +118,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String UA = "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 
     private static final String PREFS = "gtv_r_prefs";
-    // FIX 1: Preferencia simplificada para el HTML
     private static final String PREF_MOTOR = "motor"; // "e_plus" | "eme_plus"
 
     private enum Motor { NINGUNO, EXO, MPV, YT, WEB }
@@ -448,7 +448,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
-    //  ELECCIÓN DE MOTOR (FIX 1 & 2)
+    //  ELECCIÓN DE MOTOR
     // =====================================================================
     private Tipo tipoDe(String url) {
         if (url == null) return Tipo.DIRECTO;
@@ -481,9 +481,7 @@ public class MainActivity extends AppCompatActivity {
 
     private Motor elegirMotor(Canal c) {
         String m = (c.motor != null) ? c.motor : motorPreferido();
-        // EME+ o mpv legacy -> Forzar MPV directo
         if ("eme_plus".equals(m) || "mpv".equals(m)) return Motor.MPV;
-        // E+ o auto/exo legacy -> Exo (con fallback a MPV en fallaMotor)
         return Motor.EXO;
     }
 
@@ -619,7 +617,6 @@ public class MainActivity extends AppCompatActivity {
             fallbackProbado = true;
             Canal c = canalActual;
             Log.e(TAG, "Falló " + fallo + ", probando el otro motor: " + c.url);
-            // Fallback inteligente: si falla EXO, prueba MPV. Si falla MPV, prueba EXO.
             if (fallo == Motor.EXO) iniciarMpv(c); else iniciarExo(c);
             return;
         }
@@ -1304,7 +1301,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
-    //  PUBLICIDAD NATIVA (FIX 3: Ticker optimizado)
+    //  PUBLICIDAD NATIVA (Ticker optimizado)
     // =====================================================================
     private void inicializarPublicidadNativa() {
         if (rotWrapper == null) return;
@@ -1435,7 +1432,6 @@ public class MainActivity extends AppCompatActivity {
                                    final String colorBg, final String colorAc, final int tamPx, final String fuente) {
         runOnUiThread(() -> {
             if (pubTickerBox == null || pubTickerTxt == null) return;
-            // FIX 3: Detener cualquier ticker previo antes de iniciar uno nuevo para evitar superposiciones
             tickerDetener(false);
             final int gen = pubTickerGen;
             pubTickerTxt.setText((badge != null && !badge.isEmpty()) ? (badge + "  " + texto) : String.valueOf(texto));
@@ -2087,20 +2083,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
-    //  PUENTE JS (FIX 1: Interfaz limpia para HTML)
+    //  PUENTE JS (FIX PELÍCULAS INFALIBLE)
     // =====================================================================
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
         @JavascriptInterface public String getDeviceIdParaWorker() { return generarDeviceId(); }
 
-        // FIX 1: Devuelve solo "e_plus" o "eme_plus"
         @JavascriptInterface public String getMotor() { 
             String m = motorPreferido();
             if ("eme_plus".equals(m) || "mpv".equals(m)) return "eme_plus";
             return "e_plus";
         }
 
-        // FIX 1: Acepta los nuevos nombres y también los antiguos por compatibilidad
         @JavascriptInterface public void setMotor(String m) {
             if (m == null) return;
             m = m.toLowerCase().trim();
@@ -2161,10 +2155,33 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface public void reproducir(String url, String nombre, String numero, String logo, String referer, float gainArg) {
             final float gain = (gainArg > 0f && gainArg <= 2f) ? gainArg : 1.0f;
             final String ref = (referer != null) ? referer : "";
+            
             runOnUiThread(() -> {
                 int idx = -1;
-                for (int i = 0; i < canales.size(); i++) if (canales.get(i).url.equals(url)) { idx = i; break; }
+                for (int i = 0; i < canales.size(); i++) {
+                    if (canales.get(i).url.equals(url)) { 
+                        idx = i; 
+                        break; 
+                    }
+                }
+
                 if (idx >= 0) {
+                    Canal c = canales.get(idx);
+                    
+                    // DETECCIÓN INFALIBLE: Si el nombre o la URL gritan "PELÍCULAS", mandamos al HTML
+                    boolean esPeli = c.esPeliculas || 
+                                     c.nombre.toUpperCase().contains("PELICULA") || 
+                                     c.nombre.toUpperCase().contains("VIDEOTECA") || 
+                                     c.nombre.toUpperCase().contains("PELIS") ||
+                                     c.url.toLowerCase().contains("m3u-peliculas");
+                    
+                    if (esPeli && c.urlPeliculasM3U != null && !c.urlPeliculasM3U.isEmpty()) {
+                        String safeUrl = c.urlPeliculasM3U.replace("'", "\\'");
+                        avisarAlWebView("window.abrirPeliculas&&window.abrirPeliculas('" + safeUrl + "');");
+                        return; // Salimos aquí, NO abrimos el reproductor nativo
+                    }
+                    
+                    // Si no es peli, procedemos con el zapping normal
                     indiceActual = idx;
                     zapPend = idx;
                     handler.post(zapRun);
@@ -2212,7 +2229,6 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface public void cerrarPlayer() { runOnUiThread(MainActivity.this::cerrarReproductor); }
         @JavascriptInterface public void salirApp() { runOnUiThread(() -> finishAndRemoveTask()); }
 
-        // FIX 3: Métodos de Ticker expuestos limpiamente al HTML
         @JavascriptInterface public void mostrarTicker(final String texto, final String badge, final int velocidad, final String colorBg, final String colorAc) {
             mostrarTickerImpl(texto, badge, velocidad, colorBg, colorAc, 14, "arial");
         }
