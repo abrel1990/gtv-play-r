@@ -1198,11 +1198,22 @@ function abrirPeliculas(url){
   if(M.items.length&&M.url===url){renderPelis();focoPelis();if(fresco)return}
   else D.mc.innerHTML='<div class="msg">⏳ Cargando títulos…</div>';
   M.url=url;
-  fetchW(url+'?t='+Date.now(),15000).then(function(r){return r.text()}).then(function(t){
+  bajarTexto(url).then(function(t){
     parsePelis(t);M.at=Date.now();
     if(S.view==='movies'&&!S.grid){renderPelis();focoPelis()}
     else S.pelisDirty=true;
-  }).catch(function(){if(!M.items.length)D.mc.innerHTML='<div class="msg err">❌ Error al cargar</div>'});
+  }).catch(function(e){
+    if(!M.items.length)D.mc.innerHTML='<div class="msg err">❌ Error al cargar<br><small style="color:#888;font-size:12px">'+esc(e&&e.message?e.message:String(e))+'</small></div>';
+  });
+}
+// Baja el M3U por el Java (sin CORS); si no está disponible o falla, usa fetch.
+function bajarTexto(url){
+  var u=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now();
+  var viaFetch=function(){return fetchW(u,15000).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text()})};
+  if(!hasNat('getTextoNativo'))return viaFetch();
+  return new Promise(function(res){
+    setTimeout(function(){var t='';try{t=nat('getTextoNativo',u)||''}catch(e){}res(t)},50);
+  }).then(function(t){return (t&&t.length)?t:viaFetch()});
 }
 // ✅ FIX: el Java llama window.abrirPeliculas(...), antes no existía fuera del IIFE
 window.abrirPeliculas=abrirPeliculas;
