@@ -2108,6 +2108,32 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface public String getConfigNativa() { return getJson(CONFIG_URL, 12000, true); }
         @JavascriptInterface public String getEstadoCanalesNativo() { return getJson(ESTADO_URL, 8000, false); }
 
+        // Baja un texto (ej. la lista M3U de películas) desde el lado nativo, sin pasar por CORS del WebView.
+        @JavascriptInterface public String getTextoNativo(String urlStr) {
+            if (urlStr == null || !(urlStr.startsWith("http://") || urlStr.startsWith("https://"))) return "";
+            HttpURLConnection conn = null;
+            try {
+                conn = (HttpURLConnection) new URL(urlStr).openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(20000);
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("User-Agent", UA);
+                conn.setRequestProperty("Accept", "*/*");
+                if (urlStr.startsWith(WORKER_URL)) conn.setRequestProperty("X-GTV-Origin", SELLO);
+                if (conn.getResponseCode() != 200) {
+                    Log.e(TAG, "getTextoNativo HTTP " + conn.getResponseCode() + " " + urlStr);
+                    return "";
+                }
+                return leer(conn.getInputStream(), true);
+            } catch (Exception e) {
+                Log.e(TAG, "getTextoNativo error: " + e.getMessage());
+                return "";
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+        }
+
         private String getJson(String base, int timeout, boolean noCache) {
             HttpURLConnection conn = null;
             try {
