@@ -360,7 +360,7 @@ function hoyStr(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()
 
 function fetchW(url,ms,opts){
   opts=opts||{};
-  opts.headers=Object.assign({'X-GTV-Origin':SELLO, 'Cache-Control':'no-cache'},opts.headers||{});
+  opts.headers=Object.assign({'X-GTV-Origin':SELLO},opts.headers||{});
   var tid=null;
   if(ms&&window.AbortController){
     var c=new AbortController();
@@ -1081,6 +1081,9 @@ function detectarSerie(title){
   return {es:true,nombre:s,temp:temp,cap:cap};
 }
 
+// ✅ FIX PELÍCULAS: esta función faltaba en la R y rompía agrupar() y cardHtml()
+function serieDe(it){return it._s||(it._s=detectarSerie(it.title))}
+
 function slim(it){return {title:it.title,logo:it.logo,url:it.url,genre:it.genre,year:it.year}}
 
 function agrupar(items,prefix){
@@ -1201,6 +1204,8 @@ function abrirPeliculas(url){
     else S.pelisDirty=true;
   }).catch(function(){if(!M.items.length)D.mc.innerHTML='<div class="msg err">❌ Error al cargar</div>'});
 }
+// ✅ FIX: el Java llama window.abrirPeliculas(...), antes no existía fuera del IIFE
+window.abrirPeliculas=abrirPeliculas;
 
 function salirPeliculas(){S.fromMovies=false;if(S.grid)cerrarGrid(true);setView('list');restaurarFoco()}
 function toggleFav(u){
