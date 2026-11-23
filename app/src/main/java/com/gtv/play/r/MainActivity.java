@@ -153,6 +153,10 @@ public class MainActivity extends AppCompatActivity {
     private final ArrayList<Canal> canales = new ArrayList<>();
     private int indiceActual = -1;
     private int zapPend = -1;
+    // Modo películas: las flechas NO hacen zapping de canales. En series pasan de capítulo (lo resuelve el HTML).
+    private boolean modoPeliculas = false;
+    private boolean peliZapActivo = false;
+    private String peliNumero = "";
 
     private boolean rotado = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -527,7 +531,7 @@ public class MainActivity extends AppCompatActivity {
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
         nombreCanal.setText(c.nombre);
-        numeroCanal.setText((indiceActual + 1) + "/" + canales.size());
+        numeroCanal.setText(modoPeliculas ? peliNumero : (indiceActual + 1) + "/" + canales.size());
         if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
     }
 
@@ -744,6 +748,7 @@ public class MainActivity extends AppCompatActivity {
         canalActual = null;
         handler.removeCallbacks(zapRun);
         zapPend = -1;
+        modoPeliculas = false; peliZapActivo = false;
         playerContainer.setVisibility(View.GONE);
         ocultarControlesNativos();
         detenerLoaderAnim();
@@ -765,6 +770,7 @@ public class MainActivity extends AppCompatActivity {
     // =====================================================================
     private final Runnable zapRun = new Runnable() {
         @Override public void run() {
+            modoPeliculas = false; peliZapActivo = false;
             if (zapPend < 0 || zapPend >= canales.size()) { zapPend = -1; return; }
             indiceActual = zapPend;
             zapPend = -1;
@@ -773,6 +779,10 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private void navegar(int delta) {
+        if (modoPeliculas) {
+            if (peliZapActivo) avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(" + delta + ");");
+            return;
+        }
         if (canales.isEmpty()) return;
         int n = canales.size();
         int i = (zapPend >= 0 ? zapPend : indiceActual);
@@ -787,6 +797,10 @@ public class MainActivity extends AppCompatActivity {
         numeroCanal.setText((i + 1) + "/" + n);
         handler.removeCallbacks(zapRun);
         handler.postDelayed(zapRun, 300);
+    }
+
+    private void peliTerminada() {
+        if (modoPeliculas && peliZapActivo) avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(1,true);");
     }
 
     // =====================================================================
@@ -860,6 +874,7 @@ public class MainActivity extends AppCompatActivity {
                 } else if (state == Player.STATE_IDLE || state == Player.STATE_ENDED) {
                     detenerLoaderAnim();
                     ocultarLoaders();
+                    if (state == Player.STATE_ENDED) peliTerminada();
                 }
             }
 
@@ -903,6 +918,9 @@ public class MainActivity extends AppCompatActivity {
                     ocultarLoaders();
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 }
+            }
+            @Override public void onStateChange(YouTubePlayer youTubePlayer, com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState state) {
+                if (motorActivo == Motor.YT && state == com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.ENDED) peliTerminada();
             }
         });
 
@@ -1152,7 +1170,8 @@ public class MainActivity extends AppCompatActivity {
         if (!nativoActivo()) return;
         if (playerContainer.getVisibility() != View.VISIBLE) playerContainer.setVisibility(View.VISIBLE);
         infoCanal.setVisibility(View.VISIBLE);
-        btnPrev.setVisibility(View.VISIBLE); btnNext.setVisibility(View.VISIBLE);
+        int vz = (modoPeliculas && !peliZapActivo) ? View.GONE : View.VISIBLE;
+        btnPrev.setVisibility(vz); btnNext.setVisibility(vz);
         btnClose.setVisibility(View.VISIBLE); btnRotate.setVisibility(View.VISIBLE);
         overlayControls.setVisibility(View.VISIBLE);
         overlayControls.bringToFront();
@@ -2177,6 +2196,14 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface public void sincronizarIndice(final int i) { runOnUiThread(() -> indiceActual = i); }
         @JavascriptInterface public void detener() { runOnUiThread(MainActivity.this::apagarTodo); }
+
+        @JavascriptInterface public void setModoPeliculas(final boolean activo, final boolean zapActivo, final String numero) {
+            runOnUiThread(() -> {
+                modoPeliculas = activo;
+                peliZapActivo = activo && zapActivo;
+                peliNumero = (numero == null) ? "" : numero;
+            });
+        }
 
         @JavascriptInterface public void reproducir(String url, String nombre, String numero, String logo, String referer, float gainArg) {
             final float gain = (gainArg > 0f && gainArg <= 2f) ? gainArg : 1.0f;
