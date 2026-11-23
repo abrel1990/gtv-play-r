@@ -86,6 +86,7 @@ button{font-family:inherit}
 .modal{position:absolute;top:24px;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);background:rgba(0,0,0,.85);padding:10px 20px;border-radius:30px;border:1px solid rgba(255,215,0,0.5);display:flex;align-items:center;gap:12px;pointer-events:none;white-space:nowrap;max-width:90%;backdrop-filter:blur(4px)}
 .modal img{height:32px;width:auto;border-radius:6px}
 .modal-name{font-size:14px;font-weight:700;color:#FFD700;overflow:hidden;text-overflow:ellipsis}
+.modal-count:empty{display:none}
 .modal-count{font-size:11px;color:#ccc;background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:10px}
 .loader{position:absolute;top:50%;left:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);background:rgba(0,0,0,.9);padding:12px 24px;border-radius:30px;border:2px solid #FFD700;color:#FFD700;font-weight:700;display:none;z-index:30;white-space:nowrap;font-size:15px;box-shadow:0 8px 24px rgba(0,0,0,0.5)}
 .loader.active{display:block}
@@ -362,7 +363,7 @@ var BAN_URL = 'https://gtv-portero.abrel03.workers.dev';
 var SELLO = 'gtv_app_2026_secreto_xyz789';
 var BLOQUEO_MS = 250;
 var NUEVO_DIAS = 7;
-var EMBED_RE = /kick\.com|twitch\.tv|ok\.ru|odnoklassniki\.ru|dailymotion\.com|tokyvideo\.com/i;
+var EMBED_RE = /kick\.com|twitch\.tv|ok\.ru|odnoklassniki\.ru|dailymotion\.com|tokyvideo\.com|archive\.org\/(?:details|embed)\//i;
 var ESC_MAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ESC_MAP[c]})}
 function $(id){return document.getElementById(id)}
@@ -1027,11 +1028,12 @@ function embedUrl(u){
   var m;
   if((m=u.match(/kick\.com\/([\w-]+)/i)))return 'https://player.kick.com/'+m[1];
   if((m=u.match(/twitch\.tv\/([\w-]+)/i)))return 'https://player.twitch.tv/?channel='+m[1]+'&parent=localhost&muted=false';
-  if((m=u.match(/dailymotion\.com\/(?:embed\/video\/|video\/)?([\w]+)/i)))return 'https://www.dailymotion.com/embed/video/'+m[1];
-  if((m=u.match(/ok\.ru\/(?:videoembed|video|live)\/(\d+)/i)))return 'https://ok.ru/videoembed/'+m[1];
+  if((m=u.match(/dailymotion\.com\/(?:embed\/video\/|video\/)?([\w]+)/i)))return 'https://www.dailymotion.com/embed/video/'+m[1]+'?autoplay=1';
+  if((m=u.match(/(?:ok\.ru|odnoklassniki\.ru)\/(?:videoembed|video|live)\/([\w-]+)/i)))return 'https://ok.ru/videoembed/'+m[1]+'?autoplay=1';
+  if((m=u.match(/tokyvideo\.com\/(?:[a-z]{2}\/)?(?:embed|video)\/([\w-]+)/i)))return 'https://www.tokyvideo.com/embed/'+m[1]+'?autoplay=1';
+  if((m=u.match(/archive\.org\/(?:details|embed)\/([\w.\-]+)/i)))return 'https://archive.org/embed/'+m[1]+'?autoplay=1';
   return u;
 }
-
 function ifrDe(u){
   if(/kick\.com/i.test(u))return D.kickIfr;
   if(/ok\.ru|odnoklassniki/i.test(u))return D.okIfr;
@@ -1062,7 +1064,7 @@ function limpiarMedia(){
   D.ld.classList.remove('active');
 }
 
-function lanzar(ch,pos,total){
+function lanzar(ch,pos,total,etiqueta){
   limpiarModales();
   var url=ch.url;
   var esEmbed=EMBED_RE.test(url);
@@ -1077,12 +1079,15 @@ function lanzar(ch,pos,total){
   $('mImg').src=ch.logo||'';
   $('mName').textContent=ch.nombre||ch.name;
   var posV=posVisibleDe(pos);
-  $('mCount').textContent=(posV>0?posV:1)+'/'+total;
+  var et=(etiqueta!==undefined)?etiqueta:((posV>0?posV:1)+'/'+total);
+  $('mCount').textContent=et;
+  // Avisa al Java si es una película (sin zapping de canales) o un canal normal
+  if(hasNat('setModoPeliculas'))nat('setModoPeliculas',!!S.fromMovies,!!(S.fromMovies&&total>1),String(et));
   
   if(usaNat){
     S.native=true;
     S.nativeAt=Date.now();
-    nat('reproducir',url,ch.nombre||ch.name,(posV>0?posV:1)+'/'+total,ch.logo||'',ch.referer||'',ch.gain||1.0);
+    nat('reproducir',url,ch.nombre||ch.name,et,ch.logo||'',ch.referer||'',ch.gain||1.0);
     
     // ✅ FIX DEL TICKER: Solo se dispara al entrar al canal, no en un intervalo constante que lo pisa.
     // El Worker controla la config, pero el HTML solo le avisa al Nativo UNA VEZ al iniciar.
@@ -1115,7 +1120,7 @@ function play(i,origin){
   
   var ch=S.list[i];
   if(S.caidos[ch.url]){mostrarSinSenal(ch);return}
-  if(S.ocultos[ch.url]){zap(1);return}
+  if(S.ocultos[ch.url]){zapCanales(1);return}
   
   limpiarModales();
   S.lastI=i;S.lastAt=now;S.index=i;
@@ -1127,7 +1132,13 @@ function play(i,origin){
   lanzar(ch,i,totalVisible());
 }
 
+// Zapping: en la lista de canales se comporta igual que siempre; en películas solo pasa capítulos de series
 function zap(d){
+  if(S.fromMovies&&S.view==='player'){zapPelis(d);return}
+  zapCanales(d);
+}
+
+function zapCanales(d){
   if(S.list.length<2)return;
   var visibles=canalesVisibles();
   if(!visibles.length)return;
@@ -1399,15 +1410,41 @@ function longPress(card){
   if(card.closest('[data-sec="hist"]'))quitarHist(u);else toggleFav(u);
 }
 
-function reproPeli(it){
+// Todos los capítulos de la misma serie (todas las temporadas), ordenados. Si no es serie, solo ella.
+function listaSerie(it){
+  var s=serieDe(it);
+  if(!s.es)return [it];
+  var out=[];
+  M.items.forEach(function(x){var sx=serieDe(x);if(sx.es&&sx.nombre===s.nombre)out.push(x)});
+  out.sort(function(a,b){var A=serieDe(a),B=serieDe(b);return A.temp!==B.temp?A.temp-B.temp:A.cap-B.cap});
+  return out.length?out:[it];
+}
+
+function reproPeli(it,viaZap){
   var now=Date.now();
-  if(S.native||S.dlg||now-S.exitAt<BLOQUEO_MS)return;
-  if(S.lastU===it.url&&now-S.lastAt<1200)return;
+  if(S.dlg)return;
+  if(!viaZap&&(S.native||now-S.exitAt<BLOQUEO_MS))return;
+  if(!viaZap&&S.lastU===it.url&&now-S.lastAt<1200)return;
+  if(viaZap&&now-S.lastAt<400)return;
   S.lastU=it.url;S.lastAt=now;S.lastMovieUrl=it.url;
   addHist(it);
   S.fromMovies=true;
-  lanzar({nombre:it.title,logo:it.logo,url:it.url},0,1);
+  var list=(viaZap&&S.movieCtx)?S.movieCtx.list:listaSerie(it),i=-1;
+  for(var k=0;k<list.length;k++)if(list[k].url===it.url){i=k;break}
+  if(i<0){list=[it];i=0}
+  S.movieCtx={list:list,i:i};
+  lanzar({nombre:it.title,logo:it.logo,url:it.url},0,list.length,list.length>1?((i+1)+'/'+list.length):'');
 }
+
+// Siguiente/anterior capítulo. auto=true cuando lo pide el Java porque terminó el capítulo
+function zapPelis(d,auto){
+  var c=S.movieCtx;
+  if(!c||c.list.length<2)return;
+  var n=c.i+d;
+  if(n<0||n>=c.list.length){if(!auto)aviso(d>0?'Último capítulo':'Primer capítulo');return}
+  reproPeli(c.list[n],true);
+}
+window.zapPeliculas=function(d,auto){zapPelis(d,auto)};
 
 function activarCard(card){
   if(!card)return;
