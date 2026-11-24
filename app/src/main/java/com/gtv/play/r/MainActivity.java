@@ -821,9 +821,11 @@ public class MainActivity extends AppCompatActivity {
     // =====================================================================
     private VozBuscador voz;
 
-    private boolean esTeclaBuscador(int k) {
-        return k == KeyEvent.KEYCODE_MENU || k == KeyEvent.KEYCODE_TV_CONTEXT_MENU;
-    }
+    
+private boolean esTeclaBuscador(int k) {
+    return k == KeyEvent.KEYCODE_MENU
+        || k == KeyEvent.KEYCODE_TV_MEDIA_CONTEXT_MENU;
+}
 
     /** MENU llega acá antes que a cualquier vista (el WebView no se lo come). */
     @Override public boolean dispatchKeyEvent(KeyEvent e) {
