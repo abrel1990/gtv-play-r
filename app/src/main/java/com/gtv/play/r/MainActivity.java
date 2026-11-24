@@ -27,7 +27,6 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
-import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
@@ -36,6 +35,8 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest; // === FIX VOZ: Import agregado ===
+import android.webkit.WebChromeClient;   // === FIX VOZ: Import agregado ===
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -50,6 +51,8 @@ import android.widget.Toast;
 import android.widget.VideoView;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;          // === FIX VOZ: Import agregado ===
+import androidx.core.content.ContextCompat;       // === FIX VOZ: Import agregado ===
 import androidx.core.content.FileProvider;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.media3.common.MediaItem;
@@ -97,15 +100,6 @@ import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * GTV Play R - MainActivity
- * 
- * Fixes aplicados:
- * 1. Selector de motor: "e_plus" (Exo con fallback a MPV) y "eme_plus" (Solo MPV).
- * 2. YouTube y Kick/Twitch se manejan por separado (WEB/YT), ignorando la config de motor directo.
- * 3. Ticker optimizado para no superponerse ni reiniciarse constantemente.
- * 4. FIX PELÍCULAS: Detección infalible por nombre/URL para forzar la apertura de la grilla de cine.
- */
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GTV_R_DEBUG";
@@ -119,6 +113,9 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String PREFS = "gtv_r_prefs";
     private static final String PREF_MOTOR = "motor"; // "e_plus" | "eme_plus"
+
+    // === FIX VOZ: Constante para el código de solicitud de permiso ===
+    private static final int REQUEST_AUDIO_PERMISSION = 101;
 
     private enum Motor { NINGUNO, EXO, MPV, YT, WEB }
     private enum Tipo { YT, WEB, DIRECTO }
@@ -153,7 +150,6 @@ public class MainActivity extends AppCompatActivity {
     private final ArrayList<Canal> canales = new ArrayList<>();
     private int indiceActual = -1;
     private int zapPend = -1;
-    // Modo películas: las flechas NO hacen zapping de canales. En series pasan de capítulo (lo resuelve el HTML).
     private boolean modoPeliculas = false;
     private boolean peliZapActivo = false;
     private String peliNumero = "";
@@ -924,6 +920,9 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // === FIX VOZ: Solicitar permiso de micrófono al iniciar ===
+        checkAudioPermission();
+        
         configurarWebView();
         configurarBotones();
 
@@ -1308,6 +1307,24 @@ public class MainActivity extends AppCompatActivity {
                 return false;
             }
         });
+
+        // === FIX VOZ: WebChromeClient para autorizar el micrófono al WebView ===
+        myWebView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                runOnUiThread(() -> {
+                    for (String resource : request.getResources()) {
+                        if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                            request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                            return;
+                        }
+                    }
+                    request.deny();
+                });
+            }
+        });
+        // =====================================================================
+
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
     }
@@ -1510,6 +1527,14 @@ public class MainActivity extends AppCompatActivity {
         try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; }
         catch (Exception e) { return 0; }
     }
+
+    // === FIX VOZ: Método para solicitar permiso de micrófono ===
+    private void checkAudioPermission() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.RECORD_AUDIO}, REQUEST_AUDIO_PERMISSION);
+        }
+    }
+    // =====================================================================
 
     private void mostrarDialogoUpdate(int remoteVersionCode, String apkUrl) {
         SharedPreferences up = getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE);
@@ -2127,7 +2152,6 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface public String getConfigNativa() { return getJson(CONFIG_URL, 12000, true); }
         @JavascriptInterface public String getEstadoCanalesNativo() { return getJson(ESTADO_URL, 8000, false); }
 
-        // Baja un texto (ej. la lista M3U de películas) desde el lado nativo, sin pasar por CORS del WebView.
         @JavascriptInterface public String getTextoNativo(String urlStr) {
             if (urlStr == null || !(urlStr.startsWith("http://") || urlStr.startsWith("https://"))) return "";
             HttpURLConnection conn = null;
@@ -2221,7 +2245,6 @@ public class MainActivity extends AppCompatActivity {
                 if (idx >= 0) {
                     Canal c = canales.get(idx);
                     
-                    // DETECCIÓN INFALIBLE: Si el nombre o la URL gritan "PELÍCULAS", mandamos al HTML
                     boolean esPeli = c.esPeliculas || 
                                      c.nombre.toUpperCase().contains("PELICULA") || 
                                      c.nombre.toUpperCase().contains("VIDEOTECA") || 
@@ -2231,10 +2254,9 @@ public class MainActivity extends AppCompatActivity {
                     if (esPeli && c.urlPeliculasM3U != null && !c.urlPeliculasM3U.isEmpty()) {
                         String safeUrl = c.urlPeliculasM3U.replace("'", "\\'");
                         avisarAlWebView("window.abrirPeliculas&&window.abrirPeliculas('" + safeUrl + "');");
-                        return; // Salimos aquí, NO abrimos el reproductor nativo
+                        return;
                     }
                     
-                    // Si no es peli, procedemos con el zapping normal
                     indiceActual = idx;
                     zapPend = idx;
                     handler.post(zapRun);
