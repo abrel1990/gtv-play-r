@@ -4,17 +4,24 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- === FIX VOZ: Permiso necesario para la búsqueda por voz === -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- ========================================================== -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    
+    <!-- Búsqueda por voz (se pide en tiempo de ejecución, solo si el usuario toca el micrófono) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Necesario para publicar "Continuar viendo" (Watch Next) en Android TV -->
     <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
 
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <!-- Sin esto, Play/instaladores descartan los TV Box sin micrófono -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Android 11+: permite detectar si hay un servicio de reconocimiento de voz instalado -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="true"
