@@ -49,8 +49,7 @@ final class VozBuscador {
     /** true si el equipo tiene micrófono y un servicio de reconocimiento de voz instalado. */
     boolean soportada() {
         try {
-            return act.getPackageManager().hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
-                && SpeechRecognizer.isRecognitionAvailable(act);
+            return SpeechRecognizer.isRecognitionAvailable(act);
         } catch (Throwable t) { return false; }
     }
 
