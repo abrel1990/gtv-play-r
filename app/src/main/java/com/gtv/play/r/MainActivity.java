@@ -36,8 +36,6 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
-import android.webkit.PermissionRequest; // === FIX VOZ: Import agregado ===
-import android.webkit.WebChromeClient;   // === FIX VOZ: Import agregado ===
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -52,8 +50,6 @@ import android.widget.Toast;
 import android.widget.VideoView;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;          // === FIX VOZ: Import agregado ===
-import androidx.core.content.ContextCompat;       // === FIX VOZ: Import agregado ===
 import androidx.core.content.FileProvider;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.media3.common.MediaItem;
@@ -101,6 +97,18 @@ import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * GTV Play R - MainActivity (reescrita)
+ *
+ * Reglas de oro:
+ *  1) Hay UN solo motor activo a la vez: NINGUNO / EXO / MPV / YT / WEB.
+ *  2) Todo cambio de canal pasa por reproducirCanal() -> apagarTodo() -> iniciarXxx().
+ *     apagarTodo() frena TODO lo demás antes de arrancar el nuevo (cero audio/imagen pisados).
+ *  3) 'sesion' es un token que se incrementa en cada apagarTodo(); cualquier callback tardío
+ *     (hilos, postDelayed, eventos de MPV) comprueba que sigue siendo su sesión antes de actuar.
+ *  4) Motores directos: EXO (por defecto) y MPV (enlaces complicados o elegido en el menú).
+ *     Si uno falla, prueba el otro una vez. YouTube nativo y WebView (Kick, Twitch...) van aparte.
+ */
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GTV_R_DEBUG";
@@ -113,10 +121,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String UA = "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 
     private static final String PREFS = "gtv_r_prefs";
-    private static final String PREF_MOTOR = "motor"; // "e_plus" | "eme_plus"
-
-    // === FIX VOZ: Constante para el código de solicitud de permiso ===
-    private static final int REQUEST_AUDIO_PERMISSION = 101;
+    private static final String PREF_MOTOR = "motor"; // "e_plus" (Exo + MPV en complicados) | "eme_plus" (todo MPV)
 
     private enum Motor { NINGUNO, EXO, MPV, YT, WEB }
     private enum Tipo { YT, WEB, DIRECTO }
@@ -125,8 +130,8 @@ public class MainActivity extends AppCompatActivity {
     private WebView myWebView;
     private ExoPlayer exoPlayer;
     private PlayerView playerView;
-    private TextureView videoTexture;
-    private TextureView mpvTextureView;
+    private TextureView videoTexture;      // textura de Exo
+    private TextureView mpvTextureView;    // textura de MPV (una sola, vive en rotWrapper)
     private FrameLayout playerContainer, rotWrapper;
     private LinearLayout infoCanal;
     private ImageView logoCanal;
@@ -144,16 +149,15 @@ public class MainActivity extends AppCompatActivity {
     private volatile int sesion = 0;
     private Canal canalActual;
     private boolean fallbackProbado = false;
-    private int reintentos = 0;
-    private int mpvReintentos = 0;
+    private boolean modoPelis = false, pelisConCaps = false;
+    private String pelisEtiqueta = "";
+    private int reintentos = 0;       // Exo
+    private int mpvReintentos = 0;    // MPV
     private boolean mpvCargado = false;
 
     private final ArrayList<Canal> canales = new ArrayList<>();
     private int indiceActual = -1;
     private int zapPend = -1;
-    private boolean modoPeliculas = false;
-    private boolean peliZapActivo = false;
-    private String peliNumero = "";
 
     private boolean rotado = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -207,7 +211,7 @@ public class MainActivity extends AppCompatActivity {
         final float gain;
         boolean oculto, esPeliculas;
         String urlPeliculasM3U;
-        String motor;
+        String motor; // null | "mpv" | "exo"  (atributo tvg-player en la M3U)
 
         Canal(String url, String nombre, String logo, String referer, float gain, boolean oculto) {
             this.url = url;
@@ -223,7 +227,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
-    //  MPV (envoltorio reflexivo)
+    //  MPV (envoltorio reflexivo: compila sin importar si la lib expone
+    //  MPVLib como object de Kotlin, con @JvmStatic o con INSTANCE)
     // =====================================================================
     private final class MpvEngine {
         private static final int EV_START_FILE = 6, EV_END_FILE = 7, EV_FILE_LOADED = 8;
@@ -234,7 +239,7 @@ public class MainActivity extends AppCompatActivity {
         private Surface surface;
         private boolean surfaceOk = false, attached = false;
         private Canal pendiente = null;
-        private volatile boolean armado = false;
+        private volatile boolean armado = false; // true entre START_FILE del canal actual y su END_FILE
 
         boolean iniciar() {
             if (listo) return true;
@@ -302,6 +307,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        // Superficie
         void onSurface(SurfaceTexture st) {
             if (surface != null) { try { surface.release(); } catch (Exception ignored) {} }
             surface = new Surface(st);
@@ -334,6 +340,7 @@ public class MainActivity extends AppCompatActivity {
             attached = false;
         }
 
+        // Reproducción
         void cargar(Canal c) {
             armado = false;
             if (listo && attached) lanzar(c); else pendiente = c;
@@ -379,6 +386,7 @@ public class MainActivity extends AppCompatActivity {
             listo = false;
         }
 
+        // Reflexión
         private void opt(String k, String v) { try { call("setOptionString", k, v); } catch (Throwable ignored) {} }
         private void prop(String k, String v) throws Exception { call("setPropertyString", k, v); }
 
@@ -411,6 +419,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Callbacks de MPV (siempre en el hilo principal)
     private void onMpvCargado() {
         if (motorActivo != Motor.MPV) return;
         mpvCargado = true;
@@ -422,6 +431,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void onMpvFin() {
         if (motorActivo != Motor.MPV || canalActual == null) return;
+        if (modoPelis && mpvCargado) {   // terminó la película/capítulo: pasa al siguiente si es serie
+            if (pelisConCaps) avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(1,true);");
+            return;
+        }
         if (mpvReintentos < 2) {
             mpvReintentos++;
             mpvCargado = false;
@@ -476,14 +489,17 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
+    /** Devuelve "e_plus" o "eme_plus". Acepta valores viejos ("mpv"/"exo"/"auto") ya guardados. */
     private String motorPreferido() {
-        return getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_MOTOR, "e_plus");
+        String m = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_MOTOR, "e_plus");
+        return ("eme_plus".equals(m) || "mpv".equals(m)) ? "eme_plus" : "e_plus";
     }
 
     private Motor elegirMotor(Canal c) {
-        String m = (c.motor != null) ? c.motor : motorPreferido();
-        if ("eme_plus".equals(m) || "mpv".equals(m)) return Motor.MPV;
-        return Motor.EXO;
+        if ("mpv".equals(c.motor)) return Motor.MPV;   // tvg-player="mpv" en la M3U
+        if ("exo".equals(c.motor)) return Motor.EXO;   // tvg-player="exo"
+        if ("eme_plus".equals(motorPreferido())) return Motor.MPV;
+        return esEnlaceComplicado(c.url) ? Motor.MPV : Motor.EXO;
     }
 
     private boolean nativoActivo() {
@@ -494,6 +510,7 @@ public class MainActivity extends AppCompatActivity {
     // =====================================================================
     //  NÚCLEO: apagar todo / arrancar uno
     // =====================================================================
+    /** Frena absolutamente todos los motores y invalida callbacks pendientes. */
     private void apagarTodo() {
         sesion++;
         handler.removeCallbacks(reintentoRunnable);
@@ -511,6 +528,7 @@ public class MainActivity extends AppCompatActivity {
         if (youtubePlayerView != null) youtubePlayerView.setVisibility(View.GONE);
     }
 
+    /** Punto único de entrada para reproducir cualquier canal. */
     private void reproducirCanal(Canal c) {
         if (c == null) return;
         fallbackProbado = false;
@@ -528,7 +546,7 @@ public class MainActivity extends AppCompatActivity {
         playerContainer.setVisibility(View.VISIBLE);
         playerContainer.bringToFront();
         nombreCanal.setText(c.nombre);
-        numeroCanal.setText(modoPeliculas ? peliNumero : (indiceActual + 1) + "/" + canales.size());
+        numeroCanal.setText(modoPelis ? pelisEtiqueta : ((indiceActual + 1) + "/" + canales.size()));
         if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
     }
 
@@ -612,6 +630,7 @@ public class MainActivity extends AppCompatActivity {
         finalizarUI();
     }
 
+    /** Un motor falló: prueba el otro una sola vez; si también falla, muestra error. */
     private void fallaMotor(Motor fallo) {
         if (canalActual == null) return;
         if (!fallbackProbado) {
@@ -742,10 +761,10 @@ public class MainActivity extends AppCompatActivity {
     private void cerrarReproductor() {
         tickerDetener(true);
         apagarTodo();
+        modoPelis = false; pelisConCaps = false;
         canalActual = null;
         handler.removeCallbacks(zapRun);
         zapPend = -1;
-        modoPeliculas = false; peliZapActivo = false;
         playerContainer.setVisibility(View.GONE);
         ocultarControlesNativos();
         detenerLoaderAnim();
@@ -767,7 +786,6 @@ public class MainActivity extends AppCompatActivity {
     // =====================================================================
     private final Runnable zapRun = new Runnable() {
         @Override public void run() {
-            modoPeliculas = false; peliZapActivo = false;
             if (zapPend < 0 || zapPend >= canales.size()) { zapPend = -1; return; }
             indiceActual = zapPend;
             zapPend = -1;
@@ -776,8 +794,8 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private void navegar(int delta) {
-        if (modoPeliculas) {
-            if (peliZapActivo) avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(" + delta + ");");
+        if (modoPelis) {   // películas: no se hace zapping de canales; en series pasa de capítulo
+            if (pelisConCaps) avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(" + delta + ",false);");
             return;
         }
         if (canales.isEmpty()) return;
@@ -796,8 +814,31 @@ public class MainActivity extends AppCompatActivity {
         handler.postDelayed(zapRun, 300);
     }
 
-    private void peliTerminada() {
-        if (modoPeliculas && peliZapActivo) avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(1,true);");
+    // =====================================================================
+    //  BUSCADOR: botón MENU (3 rayitas) + voz (ver VozBuscador.java)
+    //  HTML -> nativo : AndroidPlayer.vozDisponible() / iniciarVoz() / detenerVoz()
+    //  nativo -> HTML : window.gtvBuscadorToggle()  y  window.gtvVoz(estado, texto)
+    // =====================================================================
+    private VozBuscador voz;
+
+    private boolean esTeclaBuscador(int k) {
+        return k == KeyEvent.KEYCODE_MENU || k == KeyEvent.KEYCODE_TV_CONTEXT_MENU;
+    }
+
+    /** MENU llega acá antes que a cualquier vista (el WebView no se lo come). */
+    @Override public boolean dispatchKeyEvent(KeyEvent e) {
+        if (esTeclaBuscador(e.getKeyCode()) && !nativoActivo()) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+                avisarAlWebView("window.gtvBuscadorToggle&&window.gtvBuscadorToggle();");
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(e);
+    }
+
+    @Override public void onRequestPermissionsResult(int req, String[] perms, int[] res) {
+        super.onRequestPermissionsResult(req, perms, res);
+        if (voz != null) voz.onPermiso(req, res);
     }
 
     // =====================================================================
@@ -869,9 +910,10 @@ public class MainActivity extends AppCompatActivity {
                 } else if (state == Player.STATE_BUFFERING) {
                     mostrarLoaderSintonizando();
                 } else if (state == Player.STATE_IDLE || state == Player.STATE_ENDED) {
+                    if (state == Player.STATE_ENDED && modoPelis && pelisConCaps)
+                        avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(1,true);");
                     detenerLoaderAnim();
                     ocultarLoaders();
-                    if (state == Player.STATE_ENDED) peliTerminada();
                 }
             }
 
@@ -887,7 +929,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // ----- MPV -----
+        // ----- MPV (la textura se crea ya, queda INVISIBLE hasta que se use) -----
         mpv = new MpvEngine();
         mpvTextureView = new TextureView(this);
         mpvTextureView.setLayoutParams(new FrameLayout.LayoutParams(
@@ -899,7 +941,7 @@ public class MainActivity extends AppCompatActivity {
             @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture st) { mpv.onSurfaceDestruida(); return true; }
             @Override public void onSurfaceTextureUpdated(SurfaceTexture st) {}
         });
-        rotWrapper.addView(mpvTextureView, 0);
+        rotWrapper.addView(mpvTextureView, 0); // índice 0: queda DEBAJO del ticker y del modal
 
         // ----- YouTube nativo -----
         getLifecycle().addObserver(youtubePlayerView);
@@ -916,14 +958,9 @@ public class MainActivity extends AppCompatActivity {
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
                 }
             }
-            @Override public void onStateChange(YouTubePlayer youTubePlayer, com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState state) {
-                if (motorActivo == Motor.YT && state == com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.ENDED) peliTerminada();
-            }
         });
 
-        // === FIX VOZ: Solicitar permiso de micrófono al iniciar ===
-        checkAudioPermission();
-        
+        voz = new VozBuscador(this, js -> avisarAlWebView(js));
         configurarWebView();
         configurarBotones();
 
@@ -975,10 +1012,12 @@ public class MainActivity extends AppCompatActivity {
         super.onStop();
         if (exoPlayer != null) { try { exoPlayer.pause(); } catch (Exception ignored) {} }
         if (mpv != null) mpv.pausa(true);
+        if (voz != null) voz.liberar();
     }
 
     @Override protected void onDestroy() {
         super.onDestroy();
+        if (voz != null) voz.liberar();
         tickerDetener(true);
         detenerLoaderAnim();
         if (pubModalClose != null) { try { pubHandler.removeCallbacks(pubModalClose); } catch (Exception ignored) {} pubModalClose = null; }
@@ -1170,8 +1209,7 @@ public class MainActivity extends AppCompatActivity {
         if (!nativoActivo()) return;
         if (playerContainer.getVisibility() != View.VISIBLE) playerContainer.setVisibility(View.VISIBLE);
         infoCanal.setVisibility(View.VISIBLE);
-        int vz = (modoPeliculas && !peliZapActivo) ? View.GONE : View.VISIBLE;
-        btnPrev.setVisibility(vz); btnNext.setVisibility(vz);
+        btnPrev.setVisibility(View.VISIBLE); btnNext.setVisibility(View.VISIBLE);
         btnClose.setVisibility(View.VISIBLE); btnRotate.setVisibility(View.VISIBLE);
         overlayControls.setVisibility(View.VISIBLE);
         overlayControls.bringToFront();
@@ -1192,6 +1230,7 @@ public class MainActivity extends AppCompatActivity {
         btnClose.setVisibility(View.GONE); btnRotate.setVisibility(View.GONE);
     }
 
+    // ---------- loaders ----------
     private void mostrarLoaderSintonizando() {
         if (exoLoader == null) return;
         if (exoLoaderError != null) exoLoaderError.setVisibility(View.GONE);
@@ -1308,24 +1347,6 @@ public class MainActivity extends AppCompatActivity {
                 return false;
             }
         });
-
-        // === FIX VOZ: WebChromeClient para autorizar el micrófono al WebView ===
-        myWebView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(final PermissionRequest request) {
-                runOnUiThread(() -> {
-                    for (String resource : request.getResources()) {
-                        if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
-                            request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
-                            return;
-                        }
-                    }
-                    request.deny();
-                });
-            }
-        });
-        // =====================================================================
-
         myWebView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         myWebView.addJavascriptInterface(new WebAppInterface(), "AndroidPlayer");
     }
@@ -1338,7 +1359,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
-    //  PUBLICIDAD NATIVA (Ticker optimizado)
+    //  PUBLICIDAD NATIVA (ticker + modal)
     // =====================================================================
     private void inicializarPublicidadNativa() {
         if (rotWrapper == null) return;
@@ -1529,14 +1550,6 @@ public class MainActivity extends AppCompatActivity {
         catch (Exception e) { return 0; }
     }
 
-    // === FIX VOZ: Método para solicitar permiso de micrófono ===
-    private void checkAudioPermission() {
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.RECORD_AUDIO}, REQUEST_AUDIO_PERMISSION);
-        }
-    }
-    // =====================================================================
-
     private void mostrarDialogoUpdate(int remoteVersionCode, String apkUrl) {
         SharedPreferences up = getSharedPreferences(UPDATE_PREFS, MODE_PRIVATE);
         final String key = UPDATE_TRIES_PREFIX + remoteVersionCode;
@@ -1713,6 +1726,7 @@ public class MainActivity extends AppCompatActivity {
         irACanalPorUrl(url, 0);
     }
 
+    /** Espera a que la lista esté cargada (hasta ~12 s) y salta al canal. */
     private void irACanalPorUrl(final String url, final int intento) {
         int idx = -1;
         for (int i = 0; i < canales.size(); i++) if (canales.get(i).url.equals(url)) { idx = i; break; }
@@ -2128,31 +2142,36 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
-    //  PUENTE JS (FIX PELÍCULAS INFALIBLE)
+    //  PUENTE JS  (window.AndroidPlayer)
     // =====================================================================
     public class WebAppInterface {
         @JavascriptInterface public String getDeviceId() { return generarDeviceId(); }
         @JavascriptInterface public String getDeviceIdParaWorker() { return generarDeviceId(); }
 
-        @JavascriptInterface public String getMotor() { 
-            String m = motorPreferido();
-            if ("eme_plus".equals(m) || "mpv".equals(m)) return "eme_plus";
-            return "e_plus";
-        }
+        // ---- MENÚ DE MOTOR ----
+        /** Devuelve "e_plus" | "eme_plus" (lo que espera el menú del index). */
+        @JavascriptInterface public String getMotor() { return motorPreferido(); }
 
+        /** Guarda la preferencia. Se aplica desde el próximo canal que se abra. */
         @JavascriptInterface public void setMotor(String m) {
             if (m == null) return;
             m = m.toLowerCase().trim();
-            if ("e_plus".equals(m) || "auto".equals(m) || "exo".equals(m)) {
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_MOTOR, "e_plus").apply();
-            } else if ("eme_plus".equals(m) || "mpv".equals(m)) {
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_MOTOR, "eme_plus").apply();
-            }
+            if (m.equals("mpv")) m = "eme_plus";
+            else if (m.equals("exo") || m.equals("auto")) m = "e_plus";
+            if (!m.equals("e_plus") && !m.equals("eme_plus")) return;
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_MOTOR, m).apply();
         }
 
-        @JavascriptInterface public String getConfigNativa() { return getJson(CONFIG_URL, 12000, true); }
-        @JavascriptInterface public String getEstadoCanalesNativo() { return getJson(ESTADO_URL, 8000, false); }
+        /** El index avisa si lo que se va a reproducir es una película/serie (sin zapping de canales). */
+        @JavascriptInterface public void setModoPeliculas(final boolean modo, final boolean hayCaps, final String etiqueta) {
+            runOnUiThread(() -> {
+                modoPelis = modo;
+                pelisConCaps = modo && hayCaps;
+                pelisEtiqueta = etiqueta == null ? "" : etiqueta;
+            });
+        }
 
+        /** Baja un texto (M3U de películas) sin CORS. Solo manda el sello al Worker propio. */
         @JavascriptInterface public String getTextoNativo(String urlStr) {
             if (urlStr == null || !(urlStr.startsWith("http://") || urlStr.startsWith("https://"))) return "";
             HttpURLConnection conn = null;
@@ -2161,22 +2180,24 @@ public class MainActivity extends AppCompatActivity {
                 conn.setRequestMethod("GET");
                 conn.setConnectTimeout(15000);
                 conn.setReadTimeout(20000);
-                conn.setInstanceFollowRedirects(true);
                 conn.setRequestProperty("User-Agent", UA);
-                conn.setRequestProperty("Accept", "*/*");
-                if (urlStr.startsWith(WORKER_URL)) conn.setRequestProperty("X-GTV-Origin", SELLO);
-                if (conn.getResponseCode() != 200) {
-                    Log.e(TAG, "getTextoNativo HTTP " + conn.getResponseCode() + " " + urlStr);
-                    return "";
-                }
+                if (urlStr.startsWith("https://gtv-portero.abrel03.workers.dev")) conn.setRequestProperty("X-GTV-Origin", SELLO);
+                if (conn.getResponseCode() != 200) return "";
                 return leer(conn.getInputStream(), true);
             } catch (Exception e) {
-                Log.e(TAG, "getTextoNativo error: " + e.getMessage());
                 return "";
             } finally {
                 if (conn != null) conn.disconnect();
             }
         }
+
+        // ---- BUSCADOR POR VOZ ----
+        @JavascriptInterface public boolean vozDisponible() { return voz != null && voz.soportada(); }
+        @JavascriptInterface public void iniciarVoz() { runOnUiThread(() -> { if (voz != null) voz.iniciar(); }); }
+        @JavascriptInterface public void detenerVoz() { runOnUiThread(() -> { if (voz != null) voz.detener(); }); }
+
+        @JavascriptInterface public String getConfigNativa() { return getJson(CONFIG_URL, 12000, true); }
+        @JavascriptInterface public String getEstadoCanalesNativo() { return getJson(ESTADO_URL, 8000, false); }
 
         private String getJson(String base, int timeout, boolean noCache) {
             HttpURLConnection conn = null;
@@ -2220,44 +2241,16 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface public void sincronizarIndice(final int i) { runOnUiThread(() -> indiceActual = i); }
-        @JavascriptInterface public void detener() { runOnUiThread(MainActivity.this::apagarTodo); }
 
-        @JavascriptInterface public void setModoPeliculas(final boolean activo, final boolean zapActivo, final String numero) {
-            runOnUiThread(() -> {
-                modoPeliculas = activo;
-                peliZapActivo = activo && zapActivo;
-                peliNumero = (numero == null) ? "" : numero;
-            });
-        }
+        @JavascriptInterface public void detener() { runOnUiThread(MainActivity.this::apagarTodo); }
 
         @JavascriptInterface public void reproducir(String url, String nombre, String numero, String logo, String referer, float gainArg) {
             final float gain = (gainArg > 0f && gainArg <= 2f) ? gainArg : 1.0f;
             final String ref = (referer != null) ? referer : "";
-            
             runOnUiThread(() -> {
                 int idx = -1;
-                for (int i = 0; i < canales.size(); i++) {
-                    if (canales.get(i).url.equals(url)) { 
-                        idx = i; 
-                        break; 
-                    }
-                }
-
+                for (int i = 0; i < canales.size(); i++) if (canales.get(i).url.equals(url)) { idx = i; break; }
                 if (idx >= 0) {
-                    Canal c = canales.get(idx);
-                    
-                    boolean esPeli = c.esPeliculas || 
-                                     c.nombre.toUpperCase().contains("PELICULA") || 
-                                     c.nombre.toUpperCase().contains("VIDEOTECA") || 
-                                     c.nombre.toUpperCase().contains("PELIS") ||
-                                     c.url.toLowerCase().contains("m3u-peliculas");
-                    
-                    if (esPeli && c.urlPeliculasM3U != null && !c.urlPeliculasM3U.isEmpty()) {
-                        String safeUrl = c.urlPeliculasM3U.replace("'", "\\'");
-                        avisarAlWebView("window.abrirPeliculas&&window.abrirPeliculas('" + safeUrl + "');");
-                        return;
-                    }
-                    
                     indiceActual = idx;
                     zapPend = idx;
                     handler.post(zapRun);
