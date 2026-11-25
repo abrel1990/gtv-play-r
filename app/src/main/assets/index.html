@@ -590,7 +590,7 @@ function infoDialog(ret){
     tip='<div class="info-tip">🔓 Activá tu licencia FULL para ver <strong>los '+total+' canales</strong>.</div>';
   }
   var wa=IS_TV?'<div class="whatsapp-number-tv"><div class="label">WHATSAPP PARA ACTIVAR</div><div class="number">+'+esc(remote.whatsapp)+'</div><div style="color:#aaa;font-size:10px;margin-top:6px">Anotá este número y mandanos tu ID</div></div>':'<button id="dWa" class="whatsapp-btn">💬 WhatsApp</button>';
-  var d=abrirDialogo('<div class="info-container"><h2>📱 GTV Play R</h2><div class="info-id">'+esc(deviceId)+'</div><div style="color:'+col+';font-size:15px;line-height:1.6">'+msg+'</div><div style="margin-top:16px;display:flex;justify-content:center;flex-wrap:wrap">'+pills+'</div>'+tip+wa+'<div class="button-group"><button id="dCopy">📋 Copiar ID</button><button id="dClose" class="close-info">✕ Cerrar</button></div><hr style="margin:20px 0 12px;border-color:#333"><p style="color:#666;font-size:10px;line-height:1.6">© 2026 GTV Play R - Idea y desarrollo: Gabriel.</p></div>','info-overlay',function(){if(typeof ret==='number'&&ret>=0)abrirMenu(ret);else if(S.view==='list')D.bar.focus()});
+  var d=abrirDialogo('<div class="info-container"><h2>📱 GTV Play R</h2><div class="info-id">'+esc(deviceId)+'</div><div style="color:'+col+';font-size:15px;line-height:1.6">'+msg+'</div><div style="margin-top:16px;display:flex;justify-content:center;flex-wrap:wrap">'+pills+'</div>'+tip+wa+'<div class="button-group"><button id="dCopy">📋 Copiar ID</button><button id="dClose" class="close-info">✕ Cerrar</button></div><hr style="margin:20px 0 12px;border-color:#333"><p style="color:#666;font-size:10px;line-height:1.6">© 2026 GTV Play  - Idea y desarrollo: GabitoSila.</p></div>','info-overlay',function(){if(typeof ret==='number'&&ret>=0)abrirMenu(ret);else if(S.view==='list')D.bar.focus()});
   var el=d.el,cp=el.querySelector('#dCopy'),wb=el.querySelector('#dWa');
   cp.onclick=function(){copiar(deviceId);cp.textContent='✅ ¡Copiado!';setTimeout(function(){cp.textContent='📋 Copiar ID'},2000)};
   if(wb)wb.onclick=abrirWhatsApp;
@@ -846,7 +846,7 @@ function bloquear(modo){
   var wu='https://wa.me/'+remote.whatsapp+'?text='+encodeURIComponent(txt+(deviceId||'DESCONOCIDO'));
   document.body.innerHTML='';
   var el=document.createElement('div');el.className='block-screen';
-  el.innerHTML='<div class="box"><div style="font-size:60px;margin-bottom:10px">'+(ban?'🚫':'⛔')+'</div><h1 style="color:#f00;font-size:21px;margin-bottom:12px">'+(ban?'DISPOSITIVO BLOQUEADO':'APP NO AUTORIZADA')+'</h1><p style="color:#ffcc00;font-size:14px;margin-bottom:12px;line-height:1.5">'+(ban?'Este dispositivo ha sido bloqueado por el administrador.':(modo==='net'?'No se pudo cargar la configuración.':'La configuración de la aplicación ha sido alterada.'))+'</p><p style="color:#888;font-size:12px;margin-bottom:16px;line-height:1.4">'+(ban?'Si crees que se trata de un error, contactanos.':'Verificá tu conexión a Internet y reintentá.')+'</p>'+(ban?'':'<button class="alt" id="bRetry">🔄 Reintentar</button><br>')+'<button id="bWa">💬 Contactar al administrador</button><hr style="width:70%;margin:14px auto;border-color:#333"><p style="color:#666;font-size:9px;line-height:1.3">© 2026 GTV Play R<br>Idea y desarrollo: Gabriel.</p></div>';
+  el.innerHTML='<div class="box"><div style="font-size:60px;margin-bottom:10px">'+(ban?'🚫':'⛔')+'</div><h1 style="color:#f00;font-size:21px;margin-bottom:12px">'+(ban?'DISPOSITIVO BLOQUEADO':'APP NO AUTORIZADA')+'</h1><p style="color:#ffcc00;font-size:14px;margin-bottom:12px;line-height:1.5">'+(ban?'Este dispositivo ha sido bloqueado por el administrador.':(modo==='net'?'No se pudo cargar la configuración.':'La configuración de la aplicación ha sido alterada.'))+'</p><p style="color:#888;font-size:12px;margin-bottom:16px;line-height:1.4">'+(ban?'Si crees que se trata de un error, contactanos.':'Verificá tu conexión a Internet y reintentá.')+'</p>'+(ban?'':'<button class="alt" id="bRetry">🔄 Reintentar</button><br>')+'<button id="bWa">💬 Contactar al administrador</button><hr style="width:70%;margin:14px auto;border-color:#333"><p style="color:#666;font-size:9px;line-height:1.3">© 2026 GTV Play <br>Idea y desarrollo: GabitoSila.</p></div>';
   document.body.appendChild(el);
   var r=el.querySelector('#bRetry');
   if(r)r.onclick=function(){location.reload()};
@@ -912,7 +912,7 @@ function posVisibleDe(i){var v=canalesVisibles();for(var k=0;k<v.length;k++)if(v
 function renderLista(){
   if(!S.list.length){
     S.byUrl={};
-    D.list.innerHTML='<div class="empty"><div class="icon">📺</div><div class="title">GTV Play R</div><div class="subtitle">No tenés ninguna lista cargada todavía.<br>Agregá tu lista M3U para empezar a ver canales.</div><button id="btnAddList" tabindex="0">➕ AGREGAR LISTA</button><small>GTV Play R · Creado por Gabriel</small></div>';
+    D.list.innerHTML='<div class="empty"><div class="icon">📺</div><div class="title">GTV Play </div><div class="subtitle">No tenés ninguna lista cargada todavía.<br>Agregá tu lista M3U para empezar a ver canales.</div><button id="btnAddList" tabindex="0">➕ AGREGAR LISTA</button><small>GTV Play *Creado por GabitoSila*</small></div>';
     var btn = $('btnAddList');
     if(btn) {
       btn.onclick = function(){panelListas(-1)};
