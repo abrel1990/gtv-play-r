@@ -2025,66 +2025,76 @@ function navLista(k,e){
 /* ================================================================
    NAVEGACIÓN EN EL REPRODUCTOR (OK, OK+UP)
    ================================================================ */
+
 function navPlayer(k,e){
   e.preventDefault();
   showUI();
 
-  // Si el overlay de voz está abierto: navegar dentro de él
+  // ====== Overlay de voz abierto ======
   if(S.playerVoiceOpen){
     var items = $('pvoRes').querySelectorAll('.pvo-res-item');
     var a = document.activeElement;
-    if(k==='back'){cerrarPlayerVoice();return}
-    if(k==='ok'&&!e.repeat){if(a&&a.dataset&&a.dataset.pvoR!==undefined)a.click();else $('pvoMic').click();return}
-    if(k==='up'||k==='left'){
-      var idx=Array.prototype.indexOf.call(items,a);
-      if(idx>0)items[idx-1].focus();else $('pvoMic').focus();
+    if(k==='back'){ cerrarPlayerVoice(); return; }
+    if(k==='ok' && !e.repeat){
+      if(a && a.dataset && a.dataset.pvoR !== undefined) a.click();
+      else $('pvoMic').click();
       return;
     }
-    if(k==='down'||k==='right'){
-      var idx=Array.prototype.indexOf.call(items,a);
-      if(idx<items.length-1)items[idx+1].focus();else if(items.length)items[0].focus();
+    if(k==='up' || k==='left'){
+      var idx = Array.prototype.indexOf.call(items, a);
+      if(idx > 0) items[idx-1].focus();
+      else $('pvoMic').focus();
+      return;
+    }
+    if(k==='down' || k==='right'){
+      var idx2 = Array.prototype.indexOf.call(items, a);
+      if(idx2 < items.length-1) items[idx2+1].focus();
+      else if(items.length) items[0].focus();
       return;
     }
     return;
   }
 
-  // Si el panel de info está abierto
+  // ====== Panel de info abierto ======
   if(S.playerInfoOpen){
-    if(k==='back'||k==='ok'){cerrarPlayerInfo();return}
-    if(k==='up'){
-      // OK + UP desde panel de info → voz
-      cerrarPlayerInfo();
+    if(k==='back'){ cerrarPlayerInfo(); return; }
+    if(k==='ok' && !e.repeat){
+      // OK dentro del panel de info → abre el micrófono
       abrirPlayerVoice();
       return;
     }
-    if(k==='right'||k==='chup'){zap(1);cerrarPlayerInfo();return}
-    if(k==='left'||k==='chdn'){zap(-1);cerrarPlayerInfo();return}
+    if(k==='up'){
+      // OK + ↑ desde panel de info → también abre el micrófono
+      abrirPlayerVoice();
+      return;
+    }
+    if(k==='right'||k==='chup'){ zap(1); cerrarPlayerInfo(); return; }
+    if(k==='left'||k==='chdn'){ zap(-1); cerrarPlayerInfo(); return; }
     return;
   }
 
-  // Comportamiento normal del reproductor
+  // ====== Reproductor normal ======
   if(k==='ok'){
     if(!e.repeat){
       S.playerOkAt = Date.now();
-      abrirPlayerInfo();
+      abrirPlayerInfo();   // OK → abre panel de info (como ahora)
     }
     return;
   }
   if(k==='up'){
-    // ↑ presionado justo después de OK (dentro de 800ms) → voz
-    if(Date.now()-S.playerOkAt<800){
-      S.playerOkAt=0;
+    // ↑ presionado justo después de OK (dentro de 800ms) → micrófono
+    if(Date.now() - S.playerOkAt < 800){
+      S.playerOkAt = 0;
       abrirPlayerVoice();
     } else {
       zap(-1);
     }
     return;
   }
-  if(k==='down'){zap(1);return}
-  if(k==='right'||k==='chup'){zap(1);return}
-  if(k==='left'||k==='chdn'){zap(-1);return}
+  if(k==='down'){ zap(1); return; }
+  if(k==='right'||k==='chup'){ zap(1); return; }
+  if(k==='left'||k==='chdn'){ zap(-1); return; }
 }
-
 var navBusy=false;
 function frenar(e){if(e.repeat&&navBusy){e.preventDefault();return true}navBusy=true;(window.requestAnimationFrame||setTimeout)(function(){navBusy=false});return false}
 
