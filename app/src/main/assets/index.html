@@ -2399,6 +2399,36 @@ setTimeout(function(){
 },200);
 
 setTimeout(popupNovedades,2500);
+
+// DIAGNÓSTICO TEMPORAL — sacar después
+setTimeout(function(){
+  var b = document.getElementById('btnPlayerMic');
+  var msg = b ? 'BOTÓN SÍ EXISTE' : 'BOTÓN NO EXISTE EN HTML';
+  if(b){
+    var r = b.getBoundingClientRect();
+    msg += '\nRect: top='+Math.round(r.top)+' left='+Math.round(r.left)+' w='+Math.round(r.width)+' h='+Math.round(r.height);
+    msg += '\nDisplay: '+getComputedStyle(b).display;
+    msg += '\nVisibility: '+getComputedStyle(b).visibility;
+    msg += '\nOpacity: '+getComputedStyle(b).opacity;
+  }
+  alert(msg);
+}, 1500);
+
+  
+
+ // DIAGNÓSTICO TEMPORAL — sacar después
+setTimeout(function(){
+  var b = document.getElementById('btnPlayerMic');
+  var msg = b ? 'BOTÓN SÍ EXISTE' : 'BOTÓN NO EXISTE EN HTML';
+  if(b){
+    var r = b.getBoundingClientRect();
+    msg += '\nRect: top='+Math.round(r.top)+' left='+Math.round(r.left)+' w='+Math.round(r.width)+' h='+Math.round(r.height);
+    msg += '\nDisplay: '+getComputedStyle(b).display;
+    msg += '\nVisibility: '+getComputedStyle(b).visibility;
+    msg += '\nOpacity: '+getComputedStyle(b).opacity;
+  }
+  alert(msg);
+}, 1500); 
 })();
 </script>
 </body>
