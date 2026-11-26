@@ -232,6 +232,104 @@ body.tv *{animation:none!important;transition:none!important}
 body.tv .card:focus, body.tv .set-option-card:focus, body.tv button:focus { transition: none !important; }
 body.lite .pelicula-card,body.lite .ver-todos-card,body.lite .card,body.lite .set-option-card,body.lite .rueda-it,body.lite .btn-menu{transition:none!important}
 body.lite .status-bar,body.lite .peliculas-header,body.lite .grid-header,body.lite .info-overlay,body.lite .menu-overlay{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+
+/* ================================================================
+   PLAYER INFO MODAL — aparece al presionar OK en el reproductor
+   ================================================================ */
+.player-info-modal{
+  position:absolute;
+  bottom:0;left:0;right:0;
+  z-index:50;
+  pointer-events:auto;
+  background:linear-gradient(0deg,rgba(0,0,0,.98) 0%,rgba(0,0,0,.85) 70%,transparent 100%);
+  padding:28px 24px 24px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  transform:translateY(100%);
+  transition:transform .28s cubic-bezier(.4,0,.2,1);
+}
+.player-info-modal.show{transform:translateY(0)}
+.pim-top{display:flex;align-items:center;gap:14px}
+.pim-logo{width:56px;height:56px;object-fit:contain;background:rgba(255,255,255,.06);border-radius:10px;flex-shrink:0}
+.pim-info{flex:1;min-width:0}
+.pim-name{font-size:20px;font-weight:800;color:#FFD700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.3px}
+.pim-pos{font-size:12px;color:#aaa;margin-top:3px}
+.pim-close{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;pointer-events:auto}
+.pim-close:focus{background:#FFD700;color:#000;border-color:#FFD700}
+.pim-pills{display:flex;gap:8px;flex-wrap:wrap}
+.pim-pill{background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.25);border-radius:20px;padding:5px 13px;font-size:12px;color:#FFD700;white-space:nowrap}
+.pim-hint{font-size:11px;color:#666;text-align:center}
+
+/* ================================================================
+   PLAYER VOICE OVERLAY — aparece al presionar OK + ↑  o tocar mic
+   ================================================================ */
+.player-voice-overlay{
+  position:absolute;
+  top:0;left:0;right:0;bottom:0;
+  z-index:60;
+  pointer-events:auto;
+  background:rgba(0,0,0,.88);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:18px;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .22s;
+}
+.player-voice-overlay.show{opacity:1;pointer-events:auto}
+.pvo-mic{
+  width:88px;height:88px;border-radius:50%;
+  background:rgba(229,9,20,.15);
+  border:3px solid #E50914;
+  display:flex;align-items:center;justify-content:center;
+  font-size:40px;
+  cursor:pointer;
+  transition:all .2s;
+  position:relative;
+}
+.pvo-mic.escuchando{
+  background:rgba(229,9,20,.35);
+  box-shadow:0 0 0 0 rgba(229,9,20,.5);
+  animation:pvoRipple 1.1s infinite;
+}
+@keyframes pvoRipple{
+  0%{box-shadow:0 0 0 0 rgba(229,9,20,.55)}
+  70%{box-shadow:0 0 0 24px rgba(229,9,20,0)}
+  100%{box-shadow:0 0 0 0 rgba(229,9,20,0)}
+}
+.pvo-mic:focus{outline:3px solid #FFD700}
+.pvo-estado{font-size:15px;color:#FFD700;font-weight:700;text-align:center;min-height:22px}
+.pvo-hint{font-size:12px;color:#777;text-align:center}
+.pvo-res{max-height:40vh;overflow-y:auto;width:100%;max-width:400px;padding:0 16px}
+.pvo-res-item{
+  display:flex;align-items:center;gap:12px;
+  background:#111;border:2px solid #222;border-radius:12px;
+  padding:10px 14px;margin-bottom:8px;
+  font-weight:600;font-size:14px;cursor:pointer;
+  width:100%;text-align:left;
+}
+.pvo-res-item:focus,.pvo-res-item:hover{background:#1a1500;border-color:#FFD700;outline:none}
+.pvo-res-item img{width:36px;height:36px;object-fit:contain;border-radius:6px;background:#000;flex-shrink:0}
+.pvo-res-item .bt{flex:1;min-width:0}
+.pvo-res-item .bt b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pvo-res-item .bt small{display:block;font-size:11px;color:#888;margin-top:2px}
+.pvo-cerrar{
+  background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.2);
+  color:#fff;border-radius:30px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;
+}
+.pvo-cerrar:focus{background:#333;border-color:#FFD700;outline:none}
+
+/* botón flotante de micrófono en el reproductor (toque táctil) */
+.btn-player-mic{
+  bottom:140px;
+  background:rgba(229,9,20,.15);
+  border-color:#E50914;
+  color:#E50914;
+}
+.btn-player-mic:focus,.btn-player-mic:hover{background:#E50914;color:#fff;border-color:#E50914}
 </style>
 </head>
 <body>
@@ -270,10 +368,37 @@ body.lite .status-bar,body.lite .peliculas-header,body.lite .grid-header,body.li
       <button class="nav-btn r" id="goNext" tabindex="0">❯</button>
       <button class="float-btn btn-back" id="goBack" tabindex="0">✕</button>
       <button class="float-btn btn-rot" id="goRot" tabindex="0">⟳</button>
+
+      <!-- ★ BOTÓN MICRÓFONO TÁCTIL (siempre en la UI del reproductor, solo visible cuando la UI está show) -->
+      <button class="float-btn btn-player-mic" id="btnPlayerMic" tabindex="0" aria-label="Buscar canal por voz">🎤</button>
+
       <div class="modal">
         <img id="mImg" src="" alt="">
         <span class="modal-name" id="mName"></span>
         <span class="modal-count" id="mCount"></span>
+      </div>
+
+      <!-- ★ PANEL DE INFO DEL CANAL (aparece al presionar OK) -->
+      <div class="player-info-modal" id="playerInfoModal">
+        <div class="pim-top">
+          <img class="pim-logo" id="pimLogo" src="" alt="">
+          <div class="pim-info">
+            <div class="pim-name" id="pimName">—</div>
+            <div class="pim-pos" id="pimPos"></div>
+          </div>
+          <button class="pim-close" id="pimClose" tabindex="0">✕</button>
+        </div>
+        <div class="pim-pills" id="pimPills"></div>
+        <div class="pim-hint" id="pimHint"></div>
+      </div>
+
+      <!-- ★ OVERLAY DE VOZ EN EL REPRODUCTOR -->
+      <div class="player-voice-overlay" id="playerVoiceOverlay">
+        <button class="pvo-mic" id="pvoMic" tabindex="0" aria-label="Micrófono">🎤</button>
+        <div class="pvo-estado" id="pvoEstado">Tocá el micrófono para hablar</div>
+        <div id="pvoRes" class="pvo-res"></div>
+        <div class="pvo-hint" id="pvoHint">Decí el nombre del canal adonde querés ir</div>
+        <button class="pvo-cerrar" id="pvoCerrar" tabindex="0">✕ Cerrar</button>
       </div>
     </div>
   </div>
@@ -382,7 +507,11 @@ var S = {
   okDown: null, okFired: false, okTimer: null, suppressClick: 0,
   pelisDirty: false, lastMovieUrl: '',
   caidos: {}, ocultos: {}, hideCargado: false, byUrl: {},
-  cols: 0, focoIdx: 0
+  cols: 0, focoIdx: 0,
+  // estado del panel de info del reproductor
+  playerInfoOpen: false,
+  playerVoiceOpen: false,
+  playerOkAt: 0        // timestamp del último OK en player (para detectar OK+UP)
 };
 
 var D = {
@@ -941,6 +1070,9 @@ function setView(v){
   if(v!=='player'){
     D.player.style.visibility='hidden';
     D.wrap.style.visibility='hidden';
+    // cerrar paneles del reproductor al salir
+    cerrarPlayerInfo();
+    cerrarPlayerVoice();
   } else {
     D.player.style.visibility='';
     D.wrap.style.visibility='';
@@ -961,7 +1093,7 @@ function restaurarFoco(){
   },60);
 }
 
-function showUI(){D.ui.classList.add('show');clearTimeout(S.uiTimer);S.uiTimer=setTimeout(function(){D.ui.classList.remove('show')},4000)}
+function showUI(){D.ui.classList.add('show');clearTimeout(S.uiTimer);S.uiTimer=setTimeout(function(){if(!S.playerInfoOpen&&!S.playerVoiceOpen)D.ui.classList.remove('show')},4000)}
 function aplicarRot(){D.wrap.classList.toggle('rotated',S.rotated)}
 
 function ifrVisibles(){return [D.ifr,D.kickIfr,D.okIfr,D.dailymotionIfr,D.tokyvideoIfr]}
@@ -1021,6 +1153,236 @@ function limpiarMedia(){
   D.ld.classList.remove('active');
 }
 
+/* ================================================================
+   PLAYER INFO MODAL — lógica
+   ================================================================ */
+var _playerInfoCh = null;
+
+function abrirPlayerInfo(){
+  if(S.view!=='player') return;
+  var ch = S.list[S.index];
+  _playerInfoCh = ch;
+  var pim = $('playerInfoModal');
+  if(!pim) return;
+
+  // Rellenar datos
+  var logo = $('pimLogo');
+  if(ch && ch.logo){ logo.src=ch.logo; logo.style.display='block'; }
+  else { logo.src=''; logo.style.display='none'; }
+
+  $('pimName').textContent = ch ? (ch.nombre||ch.name||'Canal') : '—';
+
+  var posV = posVisibleDe(S.index);
+  var total = totalVisible();
+  $('pimPos').textContent = posV>0 ? (posV+' de '+total) : '';
+
+  // Pills con parámetros
+  var pills = '';
+  if(ch){
+    pills += '<span class="pim-pill">📡 '+esc(ch.url ? ch.url.replace(/^https?:\/\//,'').split('/')[0] : '—')+'</span>';
+    if(ch.referer) pills += '<span class="pim-pill">🔗 Referer</span>';
+    if(ch.gain && ch.gain!==1) pills += '<span class="pim-pill">🔊 Gain '+ch.gain+'</span>';
+    if(S.caidos[ch.url]) pills += '<span class="pim-pill" style="color:#ff5d5d;border-color:rgba(255,93,93,.4)">⚠️ Sin señal</span>';
+  }
+  $('pimPills').innerHTML = pills;
+
+  var hint = IS_TV ? '↑ para buscar canal por voz · ✕ para cerrar' : 'Tocá 🎤 para buscar por voz';
+  $('pimHint').textContent = hint;
+
+  pim.classList.add('show');
+  S.playerInfoOpen = true;
+
+  // Mantener UI visible mientras esté abierto
+  clearTimeout(S.uiTimer);
+  D.ui.classList.add('show');
+
+  // Foco al botón cerrar (para TV)
+  setTimeout(function(){ var c=$('pimClose'); if(c)c.focus(); }, 60);
+}
+
+function cerrarPlayerInfo(){
+  var pim = $('playerInfoModal');
+  if(pim) pim.classList.remove('show');
+  S.playerInfoOpen = false;
+  _playerInfoCh = null;
+  // reiniciar timer de UI normal
+  clearTimeout(S.uiTimer);
+  if(!S.playerVoiceOpen){
+    S.uiTimer = setTimeout(function(){ D.ui.classList.remove('show'); }, 3000);
+  }
+}
+
+$('pimClose').addEventListener('click', function(e){
+  e.stopPropagation();
+  cerrarPlayerInfo();
+});
+
+/* ================================================================
+   PLAYER VOICE OVERLAY — lógica (reutiliza el motor de búsqueda
+   existente en la app, candidatosCanales() + buscarEn())
+   ================================================================ */
+var pvoVozActiva = false;
+
+function abrirPlayerVoice(){
+  if(S.view!=='player') return;
+  cerrarPlayerInfo();
+  var ov = $('playerVoiceOverlay');
+  if(!ov) return;
+  $('pvoRes').innerHTML='';
+  $('pvoEstado').textContent='Tocá el micrófono para hablar';
+  $('pvoMic').classList.remove('escuchando');
+  pvoVozActiva = false;
+  ov.classList.add('show');
+  S.playerVoiceOpen = true;
+  clearTimeout(S.uiTimer);
+  D.ui.classList.add('show');
+  setTimeout(function(){ $('pvoMic').focus(); }, 60);
+
+  // Intentar arrancar voz automáticamente en TV
+  if(IS_TV && hasNat('vozDisponible') && nat('vozDisponible')){
+    setTimeout(function(){
+      if(S.playerVoiceOpen) pvoIniciarVoz();
+    }, 300);
+  }
+}
+
+function cerrarPlayerVoice(){
+  var ov = $('playerVoiceOverlay');
+  if(ov) ov.classList.remove('show');
+  S.playerVoiceOpen = false;
+  pvoVozActiva = false;
+  $('pvoMic').classList.remove('escuchando');
+  if(hasNat('detenerVoz')) nat('detenerVoz');
+  clearTimeout(S.uiTimer);
+  if(!S.playerInfoOpen){
+    S.uiTimer = setTimeout(function(){ D.ui.classList.remove('show'); }, 3000);
+  }
+}
+
+function pvoIniciarVoz(){
+  if(!hasNat('iniciarVoz')){ pvoEstado('Escribí el nombre del canal',''); return; }
+  pvoVozActiva = true;
+  $('pvoMic').classList.add('escuchando');
+  pvoEstado('🎙️ Escuchando…','');
+  nat('iniciarVoz');
+}
+
+function pvoEstado(txt, cls){
+  var el = $('pvoEstado');
+  if(!el) return;
+  el.textContent = txt;
+}
+
+// Callback desde Android cuando llega resultado de voz (en el reproductor)
+window.gtvVozPlayer = function(estado, texto){
+  if(!S.playerVoiceOpen) return;
+  var mic = $('pvoMic');
+  switch(estado){
+    case 'escuchando':
+      mic.classList.add('escuchando');
+      pvoEstado('🎙️ Escuchando…');
+      break;
+    case 'parcial':
+      pvoEstado('🎙️ ' + texto);
+      break;
+    case 'final':
+      mic.classList.remove('escuchando');
+      pvoVozActiva = false;
+      pvoEstado('🔎 ' + texto);
+      pvoBuscar(texto);
+      break;
+    case 'sin-voz':
+      mic.classList.remove('escuchando');
+      pvoEstado('No te escuché. Intentá de nuevo.');
+      break;
+    default:
+      mic.classList.remove('escuchando');
+      pvoEstado('No se pudo usar la voz.');
+  }
+};
+
+// Redirigir gtvVoz al handler del player si el overlay está abierto
+var _gtvVozOriginal = window.gtvVoz;
+window.gtvVoz = function(estado, texto){
+  if(S.playerVoiceOpen){
+    window.gtvVozPlayer(estado, texto);
+  } else if(_gtvVozOriginal){
+    _gtvVozOriginal(estado, texto);
+  }
+};
+
+function pvoBuscar(texto){
+  var cands = candidatosCanales();
+  var p = interpretar(texto);
+  var res = buscarEn(cands, p.q, p.q2);
+  var box = $('pvoRes');
+  if(!box) return;
+  if(!res.length){
+    box.innerHTML = '<div style="color:#888;text-align:center;padding:16px;font-size:14px">No encontré "'+esc(p.q||texto)+'"</div>';
+    return;
+  }
+
+  // Directo si hay un resultado muy claro
+  var top=res[0], sec=res[1];
+  var claro = !sec || top.sc>=1000 || (top.sc-sec.sc)>=120 || (sec.nt===top.nt);
+  if(p.directo && claro && !top.caido){
+    pvoEstado('▶ Yendo a '+top.nombre+'…');
+    setTimeout(function(){ pvoIrACanal(top); }, 600);
+    return;
+  }
+
+  // Mostrar lista
+  var h='', lim=Math.min(res.length,12);
+  for(var i=0;i<lim;i++){
+    var r=res[i];
+    h+='<button class="pvo-res-item'+(r.caido?' caido':'')+'" data-pvo-r="'+i+'"><img src="'+esc(r.logo||FB_LOGO)+'" alt="" onerror="this.style.opacity=.3"><span class="bt"><b>'+esc(r.nombre)+'</b><small>'+esc(r.caido?'Sin señal por ahora':r.sub||'')+'</small></span></button>';
+  }
+  box.innerHTML = h;
+  // guardar refs
+  box._pvoRes = res;
+  Array.prototype.forEach.call(box.querySelectorAll('.pvo-res-item'), function(btn){
+    btn.addEventListener('click', function(){
+      var idx = parseInt(btn.dataset.pvoR, 10);
+      pvoIrACanal(box._pvoRes[idx]);
+    });
+  });
+  // foco al primero en TV
+  var primero = box.querySelector('.pvo-res-item');
+  if(primero && IS_TV) primero.focus();
+}
+
+function pvoIrACanal(r){
+  cerrarPlayerVoice();
+  if(r.caido){ mostrarSinSenal(S.list[r.i]); return; }
+  S.index = r.i;
+  play(r.i, 'zap');
+}
+
+// Botones del overlay de voz
+$('pvoMic').addEventListener('click', function(){
+  if(pvoVozActiva){
+    if(hasNat('detenerVoz')) nat('detenerVoz');
+    pvoVozActiva=false;
+    $('pvoMic').classList.remove('escuchando');
+    pvoEstado('Tocá el micrófono para hablar');
+  } else {
+    pvoIniciarVoz();
+  }
+});
+
+$('pvoCerrar').addEventListener('click', function(){ cerrarPlayerVoice(); });
+$('btnPlayerMic').addEventListener('click', function(e){
+  e.stopPropagation();
+  if(S.view==='player'){
+    if(S.playerVoiceOpen) cerrarPlayerVoice();
+    else abrirPlayerVoice();
+  }
+});
+
+/* ================================================================
+   FIN: lógica de player info + voice
+   ================================================================ */
+
 function lanzar(ch,pos,total,etiqueta){
   limpiarModales();
   var url=ch.url;
@@ -1029,6 +1391,8 @@ function lanzar(ch,pos,total,etiqueta){
   
   if(S.grid)cerrarGrid(true);
   limpiarMedia();
+  cerrarPlayerInfo();
+  cerrarPlayerVoice();
   setView('player');
   aplicarRot();
   D.ui.classList.toggle('single',total<2);
@@ -1107,6 +1471,8 @@ function detener(){
   S.exitAt=Date.now();
   var eraNativo=S.native;
   S.native=false;
+  cerrarPlayerInfo();
+  cerrarPlayerVoice();
   
   if(hasNat('ocultarTicker')) nat('ocultarTicker');
   pubSched.nativeTickerShown = false;
@@ -1125,7 +1491,7 @@ window.zapNativo=function(delta){zap(delta)};
 window.stop=detener;
 window.estoyEnPlayer=function(){return S.view==='player'};
 window._zappingEnCurso=false;
-window.volverDelExo=function(){if(S.exitAt&&Date.now()-S.exitAt<150)return;S.exitAt=Date.now();S.native=false;limpiarMedia();if(S.view==='player'){setView(S.fromMovies?'movies':'list');setTimeout(restaurarFoco,30)}else restaurarFoco()};
+window.volverDelExo=function(){if(S.exitAt&&Date.now()-S.exitAt<150)return;S.exitAt=Date.now();S.native=false;cerrarPlayerInfo();cerrarPlayerVoice();limpiarMedia();if(S.view==='player'){setView(S.fromMovies?'movies':'list');setTimeout(restaurarFoco,30)}else restaurarFoco()};
 window.sincronizarIndiceJS=function(i){if(i>=0&&i<S.list.length){S.index=i;ls.set('gtv_last_index',String(i))}};
 window.irACanal=function(i){if(i<0||i>=S.list.length)return;S.index=i;ls.set('gtv_last_index',String(i));play(i,'native')};
 window.playDesdeAndroid=function(i){if(i<0||i>=S.list.length)return;play(i,'native')};
@@ -1143,7 +1509,6 @@ window.gtvSetCanales = function(json) {
     var nl = [];
     var co = window.CANAL_OFICIAL || { activo: false };
 
-    // PASO 1: Si el canal oficial está ACTIVO y tiene URL, lo ponemos PRIMERO (índice 0)
     if (co.activo && co.url) {
       nl.push({
         nombre: co.nombre || 'GTV OFICIAL',
@@ -1158,15 +1523,9 @@ window.gtvSetCanales = function(json) {
       });
     }
 
-    // PASO 2: Agregamos el resto de los canales de la lista del usuario
     for (var i = 0; i < arr.length; i++) {
       var c = arr[i];
-      
-      // PASO 3: Evitar duplicados
-      if (co.activo && c.url === co.url) {
-        continue; 
-      }
-
+      if (co.activo && c.url === co.url) continue;
       nl.push({
         nombre: c.nombre || c.name || 'Canal ' + (i + 1),
         name: c.nombre || c.name || 'Canal ' + (i + 1),
@@ -1180,7 +1539,6 @@ window.gtvSetCanales = function(json) {
       });
     }
 
-    // PASO 4: Preservar la selección del usuario si es posible
     var igual = false;
     if (nl.length > 0) {
       if (co.activo && S.list.length > 0 && S.list[0].esOficial) {
@@ -1233,8 +1591,8 @@ var GEN={'romántica':'Romance','romantica':'Romance','accion':'Acción'};
 function normGenero(g){var k=g.toLowerCase();return GEN[k]||(g.charAt(0).toUpperCase()+g.slice(1).toLowerCase())}
 
 function detectarSerie(title){
-  var reT=/(^|[^a-z'’])(?:temporada|season|serie|temp|t|s)\s*0?(\d{1,2})(?!\d)/i;
-  var reC=/(^|[^a-z'’])(?:cap[ií]tulo|episodio|episode|cap|ep|c|e)\s*0?(\d{1,3})(?!\d)/i;
+  var reT=/(^|[^a-z''])(?:temporada|season|serie|temp|t|s)\s*0?(\d{1,2})(?!\d)/i;
+  var reC=/(^|[^a-z''])(?:cap[ií]tulo|episodio|episode|cap|ep|c|e)\s*0?(\d{1,3})(?!\d)/i;
   var s=title,temp=1,cap=0,es=false,m;
   if((m=s.match(reT))){temp=parseInt(m[2],10);es=true;s=s.replace(m[0],m[1])}
   if((m=s.match(reC))){cap=parseInt(m[2],10);es=true;s=s.replace(m[0],m[1])}
@@ -1535,6 +1893,9 @@ function atras(){
   var now=Date.now();
   if(now-S.backAt<250)return;
   S.backAt=now;
+  // Prioridad: voz > info > dialogo > grid > player > movies
+  if(S.playerVoiceOpen){cerrarPlayerVoice();return}
+  if(S.playerInfoOpen){cerrarPlayerInfo();return}
   if(S.dlg){cerrarDialogo();return}
   if(S.grid){cerrarGrid();return}
   if(S.view==='player'){detener();return}
@@ -1660,6 +2021,69 @@ function navLista(k,e){
   if(n>=0&&n<len&&n!==posVis){S.index=vis[n];focusCard(vis[n])}
 }
 
+/* ================================================================
+   NAVEGACIÓN EN EL REPRODUCTOR (OK, OK+UP)
+   ================================================================ */
+function navPlayer(k,e){
+  e.preventDefault();
+  showUI();
+
+  // Si el overlay de voz está abierto: navegar dentro de él
+  if(S.playerVoiceOpen){
+    var items = $('pvoRes').querySelectorAll('.pvo-res-item');
+    var a = document.activeElement;
+    if(k==='back'){cerrarPlayerVoice();return}
+    if(k==='ok'&&!e.repeat){if(a&&a.dataset&&a.dataset.pvoR!==undefined)a.click();else $('pvoMic').click();return}
+    if(k==='up'||k==='left'){
+      var idx=Array.prototype.indexOf.call(items,a);
+      if(idx>0)items[idx-1].focus();else $('pvoMic').focus();
+      return;
+    }
+    if(k==='down'||k==='right'){
+      var idx=Array.prototype.indexOf.call(items,a);
+      if(idx<items.length-1)items[idx+1].focus();else if(items.length)items[0].focus();
+      return;
+    }
+    return;
+  }
+
+  // Si el panel de info está abierto
+  if(S.playerInfoOpen){
+    if(k==='back'||k==='ok'){cerrarPlayerInfo();return}
+    if(k==='up'){
+      // OK + UP desde panel de info → voz
+      cerrarPlayerInfo();
+      abrirPlayerVoice();
+      return;
+    }
+    if(k==='right'||k==='chup'){zap(1);cerrarPlayerInfo();return}
+    if(k==='left'||k==='chdn'){zap(-1);cerrarPlayerInfo();return}
+    return;
+  }
+
+  // Comportamiento normal del reproductor
+  if(k==='ok'){
+    if(!e.repeat){
+      S.playerOkAt = Date.now();
+      abrirPlayerInfo();
+    }
+    return;
+  }
+  if(k==='up'){
+    // ↑ presionado justo después de OK (dentro de 800ms) → voz
+    if(Date.now()-S.playerOkAt<800){
+      S.playerOkAt=0;
+      abrirPlayerVoice();
+    } else {
+      zap(-1);
+    }
+    return;
+  }
+  if(k==='down'){zap(1);return}
+  if(k==='right'||k==='chup'){zap(1);return}
+  if(k==='left'||k==='chdn'){zap(-1);return}
+}
+
 var navBusy=false;
 function frenar(e){if(e.repeat&&navBusy){e.preventDefault();return true}navBusy=true;(window.requestAnimationFrame||setTimeout)(function(){navBusy=false});return false}
 
@@ -1675,7 +2099,7 @@ document.addEventListener('keydown',function(e){
   if(S.dlg){navDialog(k,e);return}
   if(k!=='ok'&&(S.grid||S.view==='movies'||S.view==='list')&&frenar(e))return;
   if(S.grid){navGrid(k,e);return}
-  if(S.view==='player'){e.preventDefault();showUI();if(k==='right'||k==='chup')zap(1);else if(k==='left'||k==='chdn')zap(-1);return}
+  if(S.view==='player'){navPlayer(k,e);return}
   if(S.view==='movies'){navPelis(k,e);return}
   navLista(k,e);
 });
@@ -1856,7 +2280,7 @@ function busAbrirLista(r){
 function busPintar(){
   var box=$('busRes');if(!box)return;
   if(!B.q){box.innerHTML='';return}
-  if(!B.res.length){box.innerHTML='<div class="set-empty">Sin resultados para “'+esc(B.q)+'”.</div>';return}
+  if(!B.res.length){box.innerHTML='<div class="set-empty">Sin resultados para "'+esc(B.q)+'".</div>';return}
   var h='',lim=Math.min(B.res.length,40);
   for(var i=0;i<lim;i++){
     var r=B.res[i];
@@ -1885,7 +2309,7 @@ function busEjecutar(texto,modo){
     busEstado('Para buscar películas entrá a GPLIS CINEMA y apretá 🔍 ahí.','err');
   }
   busPintar();
-  if(!B.res.length){if(!/Para buscar/.test(($('busEstado')||{}).textContent||''))busEstado('No encontré “'+p.q+'”','err');return}
+  if(!B.res.length){if(!/Para buscar/.test(($('busEstado')||{}).textContent||''))busEstado('No encontré "'+p.q+'"','err');return}
   var top=B.res[0],sec=B.res[1];
   var claro=!sec||top.sc>=1000||(top.sc-sec.sc)>=120||(sec.nt===top.nt);
   if(p.directo&&claro){
@@ -1901,6 +2325,8 @@ function busEjecutar(texto,modo){
 }
 
 window.gtvVoz=function(estado,texto){
+  // Si el overlay de voz del player está abierto, derivar allá
+  if(S.playerVoiceOpen){ window.gtvVozPlayer(estado,texto); return; }
   if(!S.dlg||!S.dlg.esBuscador)return;
   var mic=$('busMic');
   if(mic)mic.classList.toggle('on',estado==='escuchando'||estado==='parcial');
@@ -1925,7 +2351,7 @@ function abrirBuscador(){
   B.q='';B.res=[];
   B.voz=!!(hasNat('vozDisponible')&&nat('vozDisponible'));
   var h='<div class="info-container set-box bus-box"><h2>'+(pel?'Buscar en GPLIS CINEMA':'Buscar canal')+'</h2>'+
-    '<p class="set-help">'+(B.voz?'Decí por ejemplo: “abrí '+(pel?'Romeo y Julieta':'Gente B')+'”':'Escribí el nombre')+'</p>'+
+    '<p class="set-help">'+(B.voz?'Decí por ejemplo: "abrí '+(pel?'Romeo y Julieta':'Gente B')+'"':'Escribí el nombre')+'</p>'+
     '<div class="set-row"><input id="busInput" class="set-input" type="text" placeholder="'+(pel?'Película o serie…':'Nombre del canal…')+'" autocomplete="off" spellcheck="false">'+
     (B.voz?'<button id="busMic" class="bus-mic" aria-label="Hablar">'+ICO_MIC+'</button>':'')+'</div>'+
     '<div class="bus-estado" id="busEstado"></div><div id="busRes"></div>'+
@@ -1967,12 +2393,6 @@ function iniciarApp(){
   aplicarCacheEstado();
   sincronizarEstadoCanales();
   setInterval(actualizarBarra,30000);
-  
-  setInterval(function(){
-    if(!document.hidden || enExoNat()) {
-    }
-  }, 5000);
-  
   setInterval(function(){if(!S.native&&!document.hidden)sincronizarEstadoCanales()},3*60*1000);
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&!S.native)sincronizarEstadoCanales()});
 }
@@ -2000,7 +2420,12 @@ $('goPrev').onclick=function(){zap(-1)};
 $('goNext').onclick=function(){zap(1)};
 $('goBack').onclick=detener;
 $('goRot').onclick=function(){S.rotated=!S.rotated;ls.set('gtv_rot',String(S.rotated));aplicarRot();nat('rotarDesdeAndroid',S.rotated);showUI()};
-$('shield').onclick=showUI;
+
+// Tocar el shield muestra la UI; segundo toque en el shield (si info ya visible) no hace nada más
+$('shield').addEventListener('click',function(e){
+  showUI();
+});
+
 window.addEventListener('resize',function(){S.cols=0});
 
 cargarLicLocal();
