@@ -12,18 +12,7 @@ input{-webkit-user-select:text;user-select:text}
 :focus{outline:none}
 .hidden{display:none!important}
 button{font-family:inherit}
-
-/* --- MENÚ SUPERIOR MEJORADO --- */
-.status-bar{
-  position:fixed;top:0;left:0;right:0;height:52px;padding:0 16px;
-  display:flex;justify-content:space-between;align-items:center;
-  z-index:100;font-size:13px;
-  background: linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.75) 100%);
-  backdrop-filter: blur(8px);
-  border-bottom: 2px solid rgba(255,215,0,0.3);
-  cursor:pointer;
-  animation: slideDown 0.4s ease-out;
-}
+.status-bar{position:fixed;top:0;left:0;right:0;height:52px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;z-index:100;font-size:13px;background: linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.75) 100%);backdrop-filter: blur(8px);border-bottom: 2px solid rgba(255,215,0,0.3);cursor:pointer;animation: slideDown 0.4s ease-out;}
 @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
 .status-bar:focus{background:rgba(255,215,0,0.15);border-bottom-color:#FFD700}
 .status-bar.ocultar{display:none}
@@ -32,15 +21,9 @@ button{font-family:inherit}
 .status-text{font-weight:700;letter-spacing:0.5px}
 .status-demo{color:#FFD700}.status-full{color:#00ff66}.status-expiring{color:#ff6600}
 .status-time{font-family:'Roboto Mono',monospace;font-size:11px;background:rgba(255,255,255,.08);padding:5px 10px;border-radius:20px;border:1px solid rgba(255,255,255,0.1)}
-.btn-menu{
-  background:rgba(255,215,0,0.1);color:#FFD700;border:2px solid rgba(255,215,0,0.3);
-  padding:6px 16px;border-radius:24px;font-size:13px;font-weight:700;cursor:pointer;
-  display:flex;align-items:center;gap:6px;transition:all 0.2s ease;
-}
+.btn-menu{background:rgba(255,215,0,0.1);color:#FFD700;border:2px solid rgba(255,215,0,0.3);padding:6px 16px;border-radius:24px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s ease;}
 .btn-menu:focus{border-color:#FFD700;background:rgba(255,215,0,0.25);transform:scale(1.05);box-shadow:0 0 12px rgba(255,215,0,0.3)}
 .btn-menu:active{transform:scale(0.95)}
-
-/* --- LISTA Y TARJETAS --- */
 .view-list{width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:60px 12px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));grid-auto-rows:95px;gap:8px;background:#000}
 .view-list.bar-hidden{padding-top:12px}
 .card{background:#111;border:2px solid transparent;border-radius:10px;padding:6px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;contain:layout style paint;transition:all 0.2s ease}
@@ -51,8 +34,6 @@ button{font-family:inherit}
 .card.off{display:none}
 .card.caido{opacity:.35;cursor:default}
 .card.caido:focus{border-color:#666;background:#1a1a1a;transform:none;box-shadow:none}
-
-/* --- EMPTY STATE --- */
 .empty{grid-column:1/-1;align-self:start;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 20px;color:#FFD700;height:auto;min-height:calc(100vh - 90px)}
 .empty .icon{font-size:64px;margin-bottom:20px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5))}
 .empty .title{font-size:22px;font-weight:800;margin-bottom:12px;letter-spacing:1px}
@@ -61,8 +42,6 @@ button{font-family:inherit}
 .empty button:focus{outline:3px solid #fff;background:#e6c200;transform:scale(1.05)}
 .empty button:active{transform:scale(0.98)}
 .empty small{color:#666;margin-top:24px;font-size:11px}
-
-/* --- REPRODUCTOR Y UI --- */
 .view-play{position:fixed;top:0;left:0;right:0;bottom:0;background:#000;display:none;z-index:1000}
 .view-play.active{display:block}
 .wrapper{position:absolute;top:0;left:0;width:100%;height:100%;background:#000}
@@ -81,8 +60,6 @@ button{font-family:inherit}
 .btn-back{bottom:16px;background:#a00;border-color:#fff;color:#fff}
 .btn-back:focus{background:#fff;color:#a00;border-color:#a00}
 .btn-rot{bottom:76px}
-
-/* --- MODALES Y OVERLAYS --- */
 .modal{position:absolute;top:24px;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);background:rgba(0,0,0,.85);padding:10px 20px;border-radius:30px;border:1px solid rgba(255,215,0,0.5);display:flex;align-items:center;gap:12px;pointer-events:none;white-space:nowrap;max-width:90%;backdrop-filter:blur(4px)}
 .modal img{height:32px;width:auto;border-radius:6px}
 .modal-name{font-size:14px;font-weight:700;color:#FFD700;overflow:hidden;text-overflow:ellipsis}
@@ -90,16 +67,12 @@ button{font-family:inherit}
 .modal-count{font-size:11px;color:#ccc;background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:10px}
 .loader{position:absolute;top:50%;left:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);background:rgba(0,0,0,.9);padding:12px 24px;border-radius:30px;border:2px solid #FFD700;color:#FFD700;font-weight:700;display:none;z-index:30;white-space:nowrap;font-size:15px;box-shadow:0 8px 24px rgba(0,0,0,0.5)}
 .loader.active{display:block}
-
-/* --- SIN SEÑAL --- */
 .sin-senal{position:absolute;top:0;left:0;right:0;bottom:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:35;text-align:center;padding:24px;pointer-events:none}
 .sin-senal.hidden{display:none!important}
 .sin-senal img{max-height:80px;max-width:220px;margin-bottom:22px;object-fit:contain;opacity:.95}
 .sin-senal .ss-nombre{font-size:24px;font-weight:800;color:#FFD700;margin-bottom:14px;letter-spacing:.5px;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sin-senal .ss-msg{font-size:16px;color:#fff;margin-bottom:8px;line-height:1.5;max-width:80%}
 .sin-senal .ss-hint{font-size:12px;color:#888;margin-top:6px}
-
-/* --- INFO Y CONFIGURACIÓN (REDISEÑADO) --- */
 .info-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.96);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;backdrop-filter:blur(5px)}
 .info-container{background:#141414;border:2px solid #FFD700;border-radius:24px;padding:28px;max-width:92%;width:480px;text-align:center;margin:auto;font-size:15px;box-shadow:0 20px 60px rgba(0,0,0,0.8)}
 .info-container h2{color:#FFD700;margin-bottom:16px;font-size:22px;font-weight:800}
@@ -120,16 +93,12 @@ button{font-family:inherit}
 .close-info,.close-toast{background:#333!important;color:#fff!important}
 .close-info:focus,.close-toast:focus{background:#555!important;outline-color:#aaa!important}
 .whatsapp-btn{background:#25D366!important;color:#fff!important}
-
-/* --- TOAST Y POPUP --- */
 .toast-blocked{position:fixed;bottom:90px;left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%);background:#000;border:2px solid #FFD700;border-radius:30px;padding:14px 24px;z-index:10001;display:flex;gap:16px;align-items:center;font-size:14px;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,0.6)}
 .toast-blocked span{color:#FFD700;font-weight:700}
 .popup-box{background:#141414;border:3px solid #FFD700;border-radius:24px;padding:30px;max-width:550px;width:90%;max-height:85vh;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.8)}
 .popup-box .ptitle{font-size:15px;color:#FFD700;font-weight:800;letter-spacing:2px;margin-bottom:16px}
 .popup-box .ptext{color:#e0e0e0;font-size:16px;line-height:1.7;max-height:55vh;overflow-y:auto}
 .popup-box button{margin-top:24px;padding:14px 48px}
-
-/* --- SETTINGS BOX (NUEVO DISEÑO) --- */
 .set-box{text-align:left;max-height:90vh;overflow-y:auto;width:100%;max-width:520px;font-size:15px}
 .set-box h2{text-align:center;margin-bottom:24px;font-size:24px}
 .set-sec{font-size:13px;color:#FFD700;font-weight:800;letter-spacing:1.5px;margin:24px 0 12px;text-transform:uppercase;display:flex;align-items:center;gap:8px}
@@ -138,54 +107,16 @@ button{font-family:inherit}
 .set-input{flex:1;min-width:0;background:#0a0a0a;color:#fff;border:2px solid #333;border-radius:12px;padding:14px 16px;font-size:15px;transition:border-color 0.2s}
 .set-input:focus{border-color:#FFD700;outline:none}
 .set-empty{color:#888;font-size:14px;text-align:center;padding:16px 0;background:rgba(255,255,255,0.02);border-radius:12px;border:1px dashed #333}
-
-/* TARJETAS DE SELECCIÓN DE REPRODUCTOR */
-.set-option-card {
-  background: #111;
-  border: 2px solid #333;
-  border-radius: 14px;
-  padding: 16px 52px 16px 16px;
-  cursor: pointer;
-  transition: all 0.25s ease;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-  position: relative;
-  overflow: hidden;
-}
-.set-option-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; width: 4px; height: 100%;
-  background: transparent;
-  transition: background 0.25s ease;
-}
-.set-option-card:focus, .set-option-card.selected {
-  border-color: #FFD700;
-  background: #1a1500;
-  transform: translateX(4px);
-  box-shadow: 0 4px 16px rgba(255,215,0,0.15);
-}
-.set-option-card:focus::before, .set-option-card.selected::before {
-  background: #FFD700;
-}
+.set-option-card {background: #111;border: 2px solid #333;border-radius: 14px;padding: 16px 52px 16px 16px;cursor: pointer;transition: all 0.25s ease;display: flex;align-items: center;gap: 16px;margin-bottom: 12px;position: relative;overflow: hidden;}
+.set-option-card::before {content: '';position: absolute;top: 0; left: 0; width: 4px; height: 100%;background: transparent;transition: background 0.25s ease;}
+.set-option-card:focus, .set-option-card.selected {border-color: #FFD700;background: #1a1500;transform: translateX(4px);box-shadow: 0 4px 16px rgba(255,215,0,0.15);}
+.set-option-card:focus::before, .set-option-card.selected::before {background: #FFD700;}
 .set-option-card .icon { font-size: 28px; flex-shrink: 0; }
 .set-option-card .title { font-weight: 800; font-size: 17px; color: #fff; margin-bottom: 4px; }
 .set-option-card .desc { font-size: 13px; color: #aaa; line-height: 1.4; }
-.set-option-card .check {
-  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
-  width: 24px; height: 24px; border-radius: 50%; border: 2px solid #555;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.25s ease;
-}
-.set-option-card.selected .check {
-  background: #FFD700; border-color: #FFD700; color: #000;
-}
-.set-option-card.selected .check::after {
-  content: '✓'; font-weight: 900; font-size: 14px;
-}
-
+.set-option-card .check {position: absolute; right: 16px; top: 50%; transform: translateY(-50%);width: 24px; height: 24px; border-radius: 50%; border: 2px solid #555;display: flex; align-items: center; justify-content: center;transition: all 0.25s ease;}
+.set-option-card.selected .check {background: #FFD700; border-color: #FFD700; color: #000;}
+.set-option-card.selected .check::after {content: '✓'; font-weight: 900; font-size: 14px;}
 .s-item{display:flex;align-items:center;gap:12px;background:#111;border:1px solid #222;border-radius:14px;padding:12px 14px;margin-bottom:10px;transition:all 0.2s}
 .s-item:focus-within{border-color:#FFD700}
 .s-info{flex:1;min-width:0}
@@ -196,8 +127,6 @@ button{font-family:inherit}
 .info-container .s-del:focus{background:#c0392b;color:#fff;border-color:#c0392b}
 .s-use{background:rgba(255,215,0,0.1);color:#FFD700;border:1px solid rgba(255,215,0,0.3)}
 .s-use:focus{background:#FFD700;color:#000}
-
-/* --- MENÚ CIRCULAR --- */
 .menu-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.94);z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .rueda{position:relative;flex-shrink:0}
 .rueda-aro{position:absolute;border:2px dashed rgba(255,215,0,.22);border-radius:50%;pointer-events:none}
@@ -217,15 +146,11 @@ button{font-family:inherit}
 .aviso-mini.on{opacity:1}
 .status-col{display:flex;flex-direction:column;min-width:0;overflow:hidden}
 .status-sub{font-size:11px;color:#bdbdbd;letter-spacing:.4px;line-height:1.1;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* --- BLOQUEO --- */
 .block-screen{position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:99999;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;overflow-y:auto}
 .block-screen .box{max-width:340px;width:100%}
 .block-screen button{background:#25D366;color:#fff;border:none;padding:14px 24px;border-radius:50px;font-size:15px;font-weight:700;cursor:pointer;margin:8px 0;width:100%;max-width:260px;transition:transform 0.2s}
 .block-screen button:focus{outline:3px solid #fff;transform:scale(1.05)}
 .block-screen button.alt{background:#FFD700;color:#000}
-
-/* --- PELÍCULAS --- */
 #movies{display:none;width:100%;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#0a0a0a}
 #movies.active{display:block}
 .peliculas-header{position:sticky;top:0;background:rgba(5,5,5,0.95);backdrop-filter:blur(8px);padding:0 20px;z-index:99;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(229,9,20,.3);height:60px}
@@ -262,8 +187,6 @@ button{font-family:inherit}
 .ver-todos-card .ico{font-size:36px;margin-bottom:8px}
 .ver-todos-card .txt{font-size:13px;font-weight:800;color:#E50914}
 .ver-todos-card .cnt{font-size:10px;color:#777;margin-top:6px}
-
-/* --- GRID PELÍCULAS --- */
 #grid{position:fixed;top:0;left:0;right:0;bottom:0;background:#0a0a0a;z-index:2000;overflow-y:auto;display:none;padding:70px 16px 30px;-webkit-overflow-scrolling:touch}
 #grid.active{display:block}
 .grid-header{position:fixed;top:0;left:0;right:0;background:rgba(5,5,5,0.95);backdrop-filter:blur(8px);padding:0 20px;height:60px;display:flex;justify-content:space-between;align-items:center;z-index:2001;border-bottom:1px solid rgba(229,9,20,.3)}
@@ -272,9 +195,6 @@ button{font-family:inherit}
 .grid-close:focus{border-color:#FFD700;transform:scale(1.1)}
 #gcontent{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:16px;padding:10px 0}
 #gcontent .pelicula-card{width:auto}
-
-
-/* --- BUSCADOR (voz + teclado) --- */
 .btn-lupa{background:rgba(255,215,0,0.1);color:#FFD700;border:2px solid rgba(255,215,0,0.3);width:38px;height:34px;border-radius:20px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;margin-left:6px}
 .btn-lupa:focus{border-color:#FFD700;background:rgba(255,215,0,0.25);box-shadow:0 0 12px rgba(255,215,0,0.3)}
 .btn-lupa:active{transform:scale(0.92)}
@@ -296,8 +216,6 @@ button{font-family:inherit}
 .bus-it .bt b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bus-it .bt small{display:block;font-size:11px;color:#888;margin-top:2px}
 .bus-it.caido{opacity:.45}
-
-/* --- RESPONSIVE --- */
 @media (max-width:480px){
   #gcontent{grid-template-columns:repeat(2,1fr);gap:12px}
   .pelicula-card,.ver-todos-card{width:110px}
@@ -391,6 +309,11 @@ var BLOQUEO_MS = 250;
 var NUEVO_DIAS = 7;
 var EMBED_RE = /kick\.com|twitch\.tv|ok\.ru|odnoklassniki\.ru|dailymotion\.com|tokyvideo\.com|archive\.org\/(?:details|embed)\//i;
 var ESC_MAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+
+// === CANAL OFICIAL - VARIABLE GLOBAL ===
+window.CANAL_OFICIAL = { activo: false, nombre: 'GTV OFICIAL', url: '', logo: '', referer: '', gain: 1.0 };
+// ========================================
+
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ESC_MAP[c]})}
 function $(id){return document.getElementById(id)}
 function noop(){}
@@ -598,7 +521,6 @@ function infoDialog(ret){
   setTimeout(function(){cp.focus()},40);
 }
 
-// ================= MENÚ CIRCULAR (control remoto + táctil) =================
 function aviso(txt){
   var t=document.getElementById('avisoMini');
   if(!t){t=document.createElement('div');t.id='avisoMini';t.className='aviso-mini';document.body.appendChild(t)}
@@ -621,7 +543,6 @@ window.seleccionarMotor=function(motor){
   aviso('✓ Reproductor: '+motorNombre(motor));
 };
 
-// Modo de rendimiento: auto | 1 (liviano) | 0 (completo)
 function litePref(){var p=ls.get('gtv_lite','auto');return (p==='1'||p==='0')?p:'auto'}
 function litNombre(p){return p==='1'?'Liviano':(p==='0'?'Completo':'Automático')}
 function aplicarLite(){
@@ -652,7 +573,6 @@ function itemsMenu(){
   return it;
 }
 
-// Cierra el diálogo actual sin que vuelva al menú y abre otra cosa
 function irA(fn){if(S.dlg)S.dlg.onClose=null;cerrarDialogo();fn()}
 function focoBotonMenu(){if(S.view==='list'&&!S.dlg){try{D.btnMenu.focus()}catch(e){}}}
 function volverDe(ret){
@@ -677,7 +597,6 @@ function abrirMenu(sel){
   var d=abrirDialogo(h,'menu-overlay',focoBotonMenu);
   var el=d.el,rueda=el.querySelector('#rueda'),btns=el.querySelectorAll('.rueda-it');
 
-  // Tamaño y posición de cada botón sobre el círculo (en px, compatible con WebViews viejos)
   var W=Math.min(window.innerWidth,window.innerHeight*0.86);
   var size=Math.max(260,Math.min(440,Math.round(W*0.94)));
   var R=Math.round(size*0.38),b=Math.max(52,Math.min(72,Math.round(size*0.17))),c=size/2;
@@ -876,6 +795,18 @@ function aplicarConfig(d){
   remote.duracion=d.duracion||5;
   if(d.demoStart)remote.demoSrv=true;
   aplicarConfigPub(d);
+  
+  // === CANAL OFICIAL - LEER CONFIGURACIÓN ===
+  if (d && d.canalOficial) {
+    window.CANAL_OFICIAL = Object.assign(window.CANAL_OFICIAL || {}, d.canalOficial);
+    try { localStorage.setItem('gtv_canal_oficial', JSON.stringify(window.CANAL_OFICIAL)); } catch(e){}
+  } else {
+    try {
+      var cached = JSON.parse(localStorage.getItem('gtv_canal_oficial'));
+      if (cached) window.CANAL_OFICIAL = cached;
+    } catch(e){}
+  }
+  // ==========================================
 }
 
 function cargarConfig(){
@@ -1107,7 +1038,6 @@ function lanzar(ch,pos,total,etiqueta){
   var posV=posVisibleDe(pos);
   var et=(etiqueta!==undefined)?etiqueta:((posV>0?posV:1)+'/'+total);
   $('mCount').textContent=et;
-  // Avisa al Java si es una película (sin zapping de canales) o un canal normal
   if(hasNat('setModoPeliculas'))nat('setModoPeliculas',!!S.fromMovies,!!(S.fromMovies&&total>1),String(et));
   
   if(usaNat){
@@ -1115,8 +1045,6 @@ function lanzar(ch,pos,total,etiqueta){
     S.nativeAt=Date.now();
     nat('reproducir',url,ch.nombre||ch.name,et,ch.logo||'',ch.referer||'',ch.gain||1.0);
     
-    // ✅ FIX DEL TICKER: Solo se dispara al entrar al canal, no en un intervalo constante que lo pisa.
-    // El Worker controla la config, pero el HTML solo le avisa al Nativo UNA VEZ al iniciar.
     if(pubCfg.tickerActivo && pubCfg.tickerTexto && hasNat('mostrarTickerConFuente')) {
       nat('mostrarTickerConFuente', String(pubCfg.tickerTexto), '', pubCfg.tickerVelocidad, String(pubCfg.tickerBg), String(pubCfg.tickerAc), pubCfg.tickerTamano, String(pubCfg.tickerFuente));
       pubSched.nativeTickerShown = true;
@@ -1158,7 +1086,6 @@ function play(i,origin){
   lanzar(ch,i,totalVisible());
 }
 
-// Zapping: en la lista de canales se comporta igual que siempre; en películas solo pasa capítulos de series
 function zap(d){
   if(S.fromMovies&&S.view==='player'){zapPelis(d);return}
   zapCanales(d);
@@ -1181,7 +1108,6 @@ function detener(){
   var eraNativo=S.native;
   S.native=false;
   
-  // ✅ Limpiar ticker al salir
   if(hasNat('ocultarTicker')) nat('ocultarTicker');
   pubSched.nativeTickerShown = false;
   pubSched.tickerRunning = false;
@@ -1208,28 +1134,68 @@ window.prevFn=function(){zap(-1)};
 window.atrasNativo=function(){if(S.dlg||S.grid||S.view==='player'||S.view==='movies'){atras();return true}return false};
 window.rotarDesdeAndroid=function(n){S.rotated=!!n;ls.set('gtv_rot',String(S.rotated));aplicarRot()};
 
-window.gtvSetCanales=function(json){
-  try{
-    var arr=typeof json==='string'?JSON.parse(json):json;
-    if(!Array.isArray(arr))return;
-    var nl=[];
-    for(var i=0;i<arr.length;i++){
-      var c=arr[i];
+// === CANAL OFICIAL - INYECCIÓN EN POSICIÓN #1 ===
+window.gtvSetCanales = function(json) {
+  try {
+    var arr = typeof json === 'string' ? JSON.parse(json) : json;
+    if (!Array.isArray(arr)) return;
+    
+    var nl = [];
+    var co = window.CANAL_OFICIAL || { activo: false };
+
+    // PASO 1: Si el canal oficial está ACTIVO y tiene URL, lo ponemos PRIMERO (índice 0)
+    if (co.activo && co.url) {
       nl.push({
-        nombre:c.nombre||c.name||'Canal '+(i+1),
-        name:c.nombre||c.name||'Canal '+(i+1),
-        url:c.url,
-        logo:c.logo||'',
-        referer:c.referer||'',
-        gain:c.gain||1.0,
-        esPeliculas:!!c.esPeliculas,
-        urlPeliculasM3U:c.urlPeliculasM3U||null
+        nombre: co.nombre || 'GTV OFICIAL',
+        name: co.nombre || 'GTV OFICIAL',
+        url: co.url,
+        logo: co.logo || '',
+        referer: co.referer || '',
+        gain: co.gain || 1.0,
+        esOficial: true,
+        esPeliculas: false,
+        urlPeliculasM3U: null
       });
     }
-    var igual=S.list.length===nl.length&&nl.length>0&&S.list[0].url===nl[0].url&&S.list[nl.length-1].url===nl[nl.length-1].url;
-    aplicarLista(nl,igual);
-  }catch(e){}
+
+    // PASO 2: Agregamos el resto de los canales de la lista del usuario
+    for (var i = 0; i < arr.length; i++) {
+      var c = arr[i];
+      
+      // PASO 3: Evitar duplicados
+      if (co.activo && c.url === co.url) {
+        continue; 
+      }
+
+      nl.push({
+        nombre: c.nombre || c.name || 'Canal ' + (i + 1),
+        name: c.nombre || c.name || 'Canal ' + (i + 1),
+        url: c.url,
+        logo: c.logo || '',
+        referer: c.referer || '',
+        gain: c.gain || 1.0,
+        esOficial: false,
+        esPeliculas: !!c.esPeliculas,
+        urlPeliculasM3U: c.urlPeliculasM3U || null
+      });
+    }
+
+    // PASO 4: Preservar la selección del usuario si es posible
+    var igual = false;
+    if (nl.length > 0) {
+      if (co.activo && S.list.length > 0 && S.list[0].esOficial) {
+        igual = (S.list[0].url === nl[0].url);
+      } else {
+        igual = S.list.length === nl.length && S.list[0].url === nl[0].url && S.list[nl.length - 1].url === nl[nl.length - 1].url;
+      }
+    }
+    
+    aplicarLista(nl, igual);
+  } catch (e) {
+    console.error('Error en gtvSetCanales:', e);
+  }
 };
+// ================================================
 
 var pubSched={nativeTickerShown:false,nativeModalShown:false,tickerRunning:false,modalRunning:false};
 var pubCfg={tickerActivo:false,tickerTexto:'',tickerFuente:'arial',tickerVelocidad:20,tickerBg:'#111827',tickerAc:'#ffd23f',tickerTamano:14,modalActivo:false,modalTipo:'imagen',modalUrl:'',modalDuracion:5};
@@ -1257,10 +1223,6 @@ window.gtv.onNativoListo=function(){};
 window.gtv.onNativoIniciado=function(){};
 window.gtv.onNativoError=function(){};
 
-// ✅ FIX DEL TICKER: Eliminamos el setInterval agresivo. 
-// El ticker se maneja ahora al entrar al canal (en `lanzar`) y se limpia al salir (`detener`).
-// Esto evita que se pise o se reinicie constantemente.
-
 function enExoNat(){if(hasNat('estaEnExo')){try{return !!nat('estaEnExo')}catch(e){}}return !!S.native}
 
 var M={url:'',at:0,items:[],byUrl:new Map(),tiles:[],series:new Map(),genres:[],favs:ls.getJ('peliculasFavoritos',[]),hist:ls.getJ('peliculasHistory',[]),nuevo:{},reco:null};
@@ -1281,7 +1243,6 @@ function detectarSerie(title){
   return {es:true,nombre:s,temp:temp,cap:cap};
 }
 
-// ✅ FIX PELÍCULAS: esta función faltaba en la R y rompía agrupar() y cardHtml()
 function serieDe(it){return it._s||(it._s=detectarSerie(it.title))}
 
 function slim(it){return {title:it.title,logo:it.logo,url:it.url,genre:it.genre,year:it.year}}
@@ -1406,7 +1367,6 @@ function abrirPeliculas(url){
     if(!M.items.length)D.mc.innerHTML='<div class="msg err">❌ Error al cargar<br><small style="color:#888;font-size:12px">'+esc(e&&e.message?e.message:String(e))+'</small></div>';
   });
 }
-// Baja el M3U por el Java (sin CORS); si no está disponible o falla, usa fetch.
 function bajarTexto(url){
   var u=url+(url.indexOf('?')>=0?'&':'?')+'t='+Date.now();
   var viaFetch=function(){return fetchW(u,15000).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text()})};
@@ -1415,7 +1375,6 @@ function bajarTexto(url){
     setTimeout(function(){var t='';try{t=nat('getTextoNativo',u)||''}catch(e){}res(t)},50);
   }).then(function(t){return (t&&t.length)?t:viaFetch()});
 }
-// ✅ FIX: el Java llama window.abrirPeliculas(...), antes no existía fuera del IIFE
 window.abrirPeliculas=abrirPeliculas;
 
 function salirPeliculas(){S.fromMovies=false;if(S.grid)cerrarGrid(true);setView('list');restaurarFoco()}
@@ -1436,7 +1395,6 @@ function longPress(card){
   if(card.closest('[data-sec="hist"]'))quitarHist(u);else toggleFav(u);
 }
 
-// Todos los capítulos de la misma serie (todas las temporadas), ordenados. Si no es serie, solo ella.
 function listaSerie(it){
   var s=serieDe(it);
   if(!s.es)return [it];
@@ -1462,7 +1420,6 @@ function reproPeli(it,viaZap){
   lanzar({nombre:it.title,logo:it.logo,url:it.url},0,list.length,list.length>1?((i+1)+'/'+list.length):'');
 }
 
-// Siguiente/anterior capítulo. auto=true cuando lo pide el Java porque terminó el capítulo
 function zapPelis(d,auto){
   var c=S.movieCtx;
   if(!c||c.list.length<2)return;
@@ -1708,7 +1665,6 @@ function frenar(e){if(e.repeat&&navBusy){e.preventDefault();return true}navBusy=
 
 document.addEventListener('keydown',function(e){
   if(S.locked)return;
-  // Respaldo del botón de 3 rayitas (en la app lo captura el Java y llama gtvBuscadorToggle)
   if(e.keyCode===82||e.key==='ContextMenu'||e.key==='Menu'){e.preventDefault();if(!e.repeat)abrirBuscador();return}
   var k=keyName(e);
   if(!k)return;
@@ -1734,17 +1690,11 @@ document.addEventListener('keyup',function(e){
   activarCard(c);
 });
 
-
-// ================= BUSCADOR: teclado + voz =================
-// Abre con el botón de 3 rayitas (MENU) del control o con la lupa. En canales busca canales;
-// en GPLIS CINEMA busca en todo el catálogo. Con "abrí / reproducí / poné / quiero ver X" abre
-// directo (con el reproductor elegido en el menú) si hay una coincidencia clara.
 var STOP={el:1,la:1,los:1,las:1,de:1,del:1,y:1,e:1,un:1,una:1,en:1,al:1,a:1,por:1,con:1,que:1};
 var NUMS={cero:'0',uno:'1',una:'1',dos:'2',tres:'3',cuatro:'4',cinco:'5',seis:'6',siete:'7',ocho:'8',nueve:'9',diez:'10',once:'11',doce:'12',trece:'13',catorce:'14',quince:'15',dieciseis:'16',diecisiete:'17',dieciocho:'18',diecinueve:'19',veinte:'20',treinta:'30',cuarenta:'40',cincuenta:'50'};
 var B={q:'',res:[],tid:null,voz:false,directo:false};
 var ICO_LUPA='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>';
 var ICO_MIC='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>';
-// En la barra: micrófono si el equipo tiene voz, lupa si no
 (function(){
   var v=false;
   try{v=!!(hasNat('vozDisponible')&&nat('vozDisponible'))}catch(e){}
@@ -1784,7 +1734,6 @@ function lev(a,b,max){
   }
   return prev[b.length];
 }
-// puntaje de un token contra las palabras del título: 0 = no coincide
 function ptsToken(t,ws){
   var best=0,tol=t.length>=7?2:(t.length>=4?1:0);
   for(var i=0;i<ws.length;i++){
@@ -1798,14 +1747,12 @@ function ptsToken(t,ws){
   }
   return best;
 }
-// puntaje de un título contra la consulta (0 = descartar)
 function puntaje(nt,nk,q,qk,qt){
   if(!nt)return 0;
   if(nt===q)return 1000;
   var sc=0,ws=nt.split(' ');
   if(nt.indexOf(q)===0)sc=800-Math.min(nt.length-q.length,100);
   else if((' '+nt+' ').indexOf(' '+q+' ')>=0)sc=650-Math.min(nt.length-q.length,100);
-  // mismo criterio ignorando "y", "de", "el"... ("Romeo + Julieta" == "Romeo y Julieta")
   if(qk&&nk){
     if(nk===qk)sc=Math.max(sc,950);
     else if(nk.indexOf(qk)===0)sc=Math.max(sc,780-Math.min(nk.length-qk.length,100));
@@ -1814,7 +1761,7 @@ function puntaje(nt,nk,q,qk,qt){
   var tot=0;
   for(var i=0;i<qt.length;i++){
     var p=ptsToken(qt[i],ws);
-    if(!p)return sc;           // falta una palabra: solo vale si ya coincidía la frase
+    if(!p)return sc;
     tot+=p;
   }
   var f=Math.round(tot/qt.length)*3-Math.min(nt.length,80)/4;
@@ -1863,7 +1810,6 @@ function candidatosPelis(){
 }
 function enPelis(){return S.view==='movies'}
 
-// "abrí Gente B" / "reproducí Romeo y Julieta" / "quiero ver ..." -> {directo, q}
 var RE_DIR=/^(?:(?:por favor|porfa|ok|oye|che)\s+)?(?:abri|abrir|abre|abrime|abrirme|reproduci|reproducir|reproduce|reproducime|pone|poner|ponme|ponele|poneme|pon|quiero ver|quiero mirar|quiero|queria ver|me gustaria ver|ver|mirar|mira|miro|veo|sintoniza|sintonizar|cambia a|cambiar a|anda a|ir a|pasa a|pasame|llevame a)\s+/;
 var RE_BUS=/^(?:(?:por favor|porfa)\s+)?(?:busca|buscar|buscame|busco|encontra|encontrar|encontrame)\s+/;
 var RE_ART=/^(?:(?:el|la|los|las|un|una)\s+)?(?:canal|canales|pelicula|peliculas|serie|series|film|programa|capitulo)\s+(?:de\s+|del\s+)?/;
@@ -1884,7 +1830,6 @@ function busEstado(txt,cls){
 }
 
 function busAbrirRes(r){
-  // cerramos el buscador sin que el foco vuelva a otro lado y abrimos lo elegido
   if(S.dlg)S.dlg.onClose=null;
   nat('detenerVoz');
   cerrarDialogo();
@@ -1899,7 +1844,6 @@ function busAbrirRes(r){
   }
 }
 function busAbrirLista(r){
-  // misma acción pero para una serie desde la lista: abre la grilla de capítulos
   if(r.tipo==='peli'&&r.t.serie){
     if(S.dlg)S.dlg.onClose=null;
     nat('detenerVoz');cerrarDialogo();
@@ -1929,7 +1873,7 @@ function busPintar(){
 function busEjecutar(texto,modo){
   var desdeVoz=(modo==='voz');
   var p=interpretar(texto);
-  if(modo==='tipeo')p.directo=false;   // mientras escribís, solo filtra: no abre nada solo
+  if(modo==='tipeo')p.directo=false;
   B.q=p.q;
   var inp=$('busInput');
   if(inp&&desdeVoz)inp.value=p.q;
@@ -1946,7 +1890,6 @@ function busEjecutar(texto,modo){
   var claro=!sec||top.sc>=1000||(top.sc-sec.sc)>=120||(sec.nt===top.nt);
   if(p.directo&&claro){
     busEstado('▶ Abriendo '+top.nombre+'…','on');
-    // con nombres repetidos se abre el primero que tenga señal
     var pick=top;
     for(var i=0;i<B.res.length&&B.res[i].nt===top.nt;i++){if(!B.res[i].caido){pick=B.res[i];break}}
     busAbrirRes(pick);
@@ -2025,10 +1968,8 @@ function iniciarApp(){
   sincronizarEstadoCanales();
   setInterval(actualizarBarra,30000);
   
-  // ✅ El intervalo de publicidad ahora solo verifica cambios de config, no dispara el ticker repetidamente.
   setInterval(function(){
     if(!document.hidden || enExoNat()) {
-      // Solo actualizamos config, el ticker se maneja en `lanzar()`
     }
   }, 5000);
   
