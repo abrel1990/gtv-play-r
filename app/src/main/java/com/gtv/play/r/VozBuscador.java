@@ -25,10 +25,16 @@ import java.util.ArrayList;
  * Avisa al HTML con:  window.gtvVoz(estado, texto)
  *   estados: escuchando | parcial | final | sin-voz | red | permiso-denegado |
  *            no-soportado | ocupado | error
+ *
+ * Con iniciarNativo(destino) los mismos estados llegan a un callback Java en vez de al HTML
+ * (se usa en el reproductor nativo, donde el WebView está pausado).
  */
 final class VozBuscador {
 
     interface Salida { void js(String codigo); }
+
+    /** Receptor nativo de los estados (mismos nombres que gtvVoz). Siempre en el hilo principal. */
+    interface Destino { void estado(String estado, String texto); }
 
     static final int REQ_AUDIO = 77;
     private static final String TAG = "GTV_R_VOZ";
@@ -40,6 +46,7 @@ final class VozBuscador {
     private SpeechRecognizer rec;
     private boolean pendientePermiso = false;
     private boolean escuchando = false;
+    private Destino destino = null;   // null = avisar al HTML
 
     VozBuscador(Activity act, Salida salida) {
         this.act = act;
@@ -49,17 +56,28 @@ final class VozBuscador {
     /** true si el equipo tiene micrófono y un servicio de reconocimiento de voz instalado. */
     boolean soportada() {
         try {
-            return SpeechRecognizer.isRecognitionAvailable(act);
+            return act.getPackageManager().hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
+                && SpeechRecognizer.isRecognitionAvailable(act);
         } catch (Throwable t) { return false; }
     }
 
     private void avisar(String estado, String texto) {
+        Destino d = destino;
+        if (d != null) { d.estado(estado, texto == null ? "" : texto); return; }
         salida.js("window.gtvVoz&&window.gtvVoz(" + JSONObject.quote(estado) + ","
             + JSONObject.quote(texto == null ? "" : texto) + ");");
     }
 
-    /** Hilo principal. */
-    void iniciar() {
+    /** Escucha y avisa al HTML (buscador del index). Hilo principal. */
+    void iniciar() { destino = null; arrancar(); }
+
+    /** Escucha y avisa a un receptor Java (reproductor nativo). Hilo principal. */
+    void iniciarNativo(Destino d) { destino = d; arrancar(); }
+
+    /** true mientras el micrófono está escuchando. */
+    boolean activa() { return escuchando; }
+
+    private void arrancar() {
         if (!soportada()) { avisar("no-soportado", ""); return; }
         if (act.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             pendientePermiso = true;
@@ -95,6 +113,7 @@ final class VozBuscador {
     /** Libera el reconocedor. Llamar en onStop y onDestroy. Hilo principal. */
     void liberar() {
         escuchando = false;
+        destino = null;
         if (rec != null) {
             try { rec.cancel(); rec.destroy(); } catch (Throwable ignored) {}
             rec = null;
