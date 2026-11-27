@@ -11,6 +11,7 @@ import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -136,7 +137,8 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout infoCanal;
     private ImageView logoCanal;
     private TextView nombreCanal, numeroCanal, exoLoader, exoLoaderError;
-    private Button btnPrev, btnNext, btnClose, btnRotate;
+    private Button btnPrev, btnNext, btnClose, btnRotate, btnMic;
+    private TextView vozEstado;
     private View btnShield, overlayControls;
     private YouTubePlayerView youtubePlayerView;
     private YouTubePlayer ytPlayer = null;
@@ -384,6 +386,12 @@ public class MainActivity extends AppCompatActivity {
             if (!listo) return;
             try { if (attached) detach(); call("destroy"); } catch (Throwable ignored) {}
             listo = false;
+        }
+
+        /** Volumen (1.0 = 100%). */
+        void volumen(float g) {
+            if (!listo) return;
+            try { prop("volume", String.valueOf(Math.round(g * 100f))); } catch (Throwable ignored) {}
         }
 
         // Reflexión
@@ -759,6 +767,7 @@ public class MainActivity extends AppCompatActivity {
 
     // ---------- CERRAR / VOLVER A LA LISTA ----------
     private void cerrarReproductor() {
+        vozCancelar();
         tickerDetener(true);
         apagarTodo();
         modoPelis = false; pelisConCaps = false;
@@ -794,6 +803,7 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private void navegar(int delta) {
+        vozCancelar();
         if (modoPelis) {   // películas: no se hace zapping de canales; en series pasa de capítulo
             if (pelisConCaps) avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(" + delta + ",false);");
             return;
@@ -821,11 +831,9 @@ public class MainActivity extends AppCompatActivity {
     // =====================================================================
     private VozBuscador voz;
 
-    
-private boolean esTeclaBuscador(int k) {
-    return k == KeyEvent.KEYCODE_MENU
-        || k == KeyEvent.KEYCODE_TV_MEDIA_CONTEXT_MENU;
-}
+    private boolean esTeclaBuscador(int k) {
+        return k == KeyEvent.KEYCODE_MENU || k == KeyEvent.KEYCODE_TV_CONTEXT_MENU;
+    }
 
     /** MENU llega acá antes que a cualquier vista (el WebView no se lo come). */
     @Override public boolean dispatchKeyEvent(KeyEvent e) {
@@ -841,6 +849,161 @@ private boolean esTeclaBuscador(int k) {
     @Override public void onRequestPermissionsResult(int req, String[] perms, int[] res) {
         super.onRequestPermissionsResult(req, perms, res);
         if (voz != null) voz.onPermiso(req, res);
+    }
+
+    // =====================================================================
+    //  VOZ EN EL REPRODUCTOR: buscar otro canal hablando
+    //  Control remoto: OK (aparecen los controles) y después flecha ARRIBA.
+    //  Táctil: botón del micrófono al lado del nombre del canal.
+    //  El WebView está pausado mientras se mira un canal, por eso la búsqueda
+    //  se hace acá en Java (BuscadorCanales, misma lógica que el index).
+    // =====================================================================
+    private boolean vozActiva = false;
+    private Runnable vozOcultarRunnable;
+    private Boolean vozSoportadaCache = null;
+
+    private boolean vozOk() {
+        if (vozSoportadaCache == null) vozSoportadaCache = (voz != null && voz.soportada());
+        return vozSoportadaCache;
+    }
+
+    /** Hay micrófono en pantalla solo en canales (no en películas/series). */
+    private boolean vozPosible() { return nativoActivo() && !modoPelis && vozOk(); }
+
+    /** ARRIBA: con los controles a la vista activa el micrófono; si no, solo los muestra. */
+    private void teclaArriba(KeyEvent e) {
+        if (e != null && e.getRepeatCount() > 0) return;
+        if (infoCanal.getVisibility() == View.VISIBLE && !modoPelis) vozAlternar();
+        else mostrarControles();
+    }
+
+    private void vozAlternar() {
+        if (vozActiva) { vozCancelar(); return; }
+        if (!nativoActivo() || modoPelis) return;
+        if (!vozOk()) { vozMensaje("🎤 Este equipo no tiene reconocimiento de voz", 3500); return; }
+        vozActiva = true;
+        bajarVolumen(true);
+        pintarMic();
+        vozMensaje("🎤 Escuchando… decí el canal", 0);
+        mostrarControles();
+        voz.iniciarNativo(this::vozEstadoNativo);
+    }
+
+    /** Corta la escucha sin buscar nada (BACK, ABAJO, cambio de canal, cierre). */
+    private void vozCancelar() {
+        if (!vozActiva) return;
+        if (voz != null) voz.detener();
+        vozActiva = false;
+        bajarVolumen(false);
+        pintarMic();
+        vozEstado.setVisibility(View.GONE);
+        mostrarControles();
+    }
+
+    private void vozTerminar() {
+        vozActiva = false;
+        bajarVolumen(false);
+        pintarMic();
+        mostrarControles();   // reinicia los 5 s de los controles
+    }
+
+    private void vozEstadoNativo(String estado, String texto) {
+        if (!vozActiva) return;
+        switch (estado) {
+            case "escuchando": vozMensaje("🎤 Escuchando… decí el canal", 0); break;
+            case "parcial": vozMensaje("🎤 " + texto, 0); break;
+            case "final": vozTerminar(); vozResolver(texto); break;
+            case "sin-voz": vozTerminar(); vozMensaje("No te escuché, probá de nuevo", 2500); break;
+            case "red": vozTerminar(); vozMensaje("La voz necesita internet", 3000); break;
+            case "permiso-denegado": vozTerminar(); vozMensaje("Falta el permiso del micrófono", 3500); break;
+            case "no-soportado": vozTerminar(); vozMensaje("Este equipo no tiene reconocimiento de voz", 3500); break;
+            case "ocupado": vozTerminar(); vozMensaje("El micrófono está ocupado, probá de nuevo", 3000); break;
+            default: vozTerminar(); vozMensaje("No se pudo usar la voz", 3000);
+        }
+    }
+
+    private void vozResolver(String texto) {
+        ArrayList<BuscadorCanales.Item> cands = new ArrayList<>();
+        for (int i = 0; i < canales.size(); i++) {
+            Canal c = canales.get(i);
+            if (c.oculto || c.esPeliculas) continue;
+            cands.add(new BuscadorCanales.Item(i, c.nombre));
+        }
+        final BuscadorCanales.Resultado r = BuscadorCanales.buscar(cands, texto);
+        if (r.items.isEmpty()) {
+            vozMensaje("No encontré “" + (r.consulta.isEmpty() ? texto : r.consulta) + "”", 3500);
+        } else if (r.claro) {
+            vozIrA(r.mejor());
+        } else {
+            vozElegir(texto, r);
+        }
+    }
+
+    private void vozIrA(BuscadorCanales.Item it) {
+        if (it == null || it.idx < 0 || it.idx >= canales.size()) return;
+        Canal c = canales.get(it.idx);
+        if (canalActual != null && c.url.equals(canalActual.url)) {
+            vozMensaje("Ya estás viendo " + c.nombre, 2500);
+            return;
+        }
+        vozMensaje("▶ " + c.nombre, 1800);
+        indiceActual = it.idx;
+        zapPend = it.idx;
+        handler.removeCallbacks(zapRun);
+        handler.post(zapRun);
+    }
+
+    /** Varias coincidencias parecidas: lista para elegir (hasta 8). */
+    private void vozElegir(String dicho, BuscadorCanales.Resultado r) {
+        final int n = Math.min(8, r.items.size());
+        final ArrayList<BuscadorCanales.Item> its = new ArrayList<>(r.items.subList(0, n));
+        String[] nombres = new String[n];
+        for (int i = 0; i < n; i++) nombres[i] = its.get(i).nombre;
+        try {
+            new AlertDialog.Builder(this)
+                .setTitle("¿Cuál canal? (“" + (r.consulta.isEmpty() ? dicho : r.consulta) + "”)")
+                .setItems(nombres, (d, which) -> vozIrA(its.get(which)))
+                .setOnDismissListener(d -> { if (nativoActivo()) { enfocarOverlay(); mostrarControles(); } })
+                .show();
+        } catch (Exception e) {
+            vozIrA(its.get(0));
+        }
+    }
+
+    /** Texto de estado debajo del nombre del canal. ms = 0: se queda hasta que cambie. */
+    private void vozMensaje(String txt, int ms) {
+        if (vozEstado == null) return;
+        vozEstado.setText(txt);
+        vozEstado.setVisibility(View.VISIBLE);
+        vozEstado.bringToFront();
+        if (vozOcultarRunnable != null) handler.removeCallbacks(vozOcultarRunnable);
+        if (ms > 0) {
+            vozOcultarRunnable = () -> { if (!vozActiva) vozEstado.setVisibility(View.GONE); };
+            handler.postDelayed(vozOcultarRunnable, ms);
+        }
+    }
+
+    private void pintarMic() {
+        if (btnMic == null) return;
+        if (vozActiva) {
+            GradientDrawable g = new GradientDrawable();
+            g.setShape(GradientDrawable.OVAL);
+            g.setColor(0xFFE53935);
+            btnMic.setBackground(g);
+        } else {
+            btnMic.setBackgroundResource(R.drawable.btn_rotate_bg);
+        }
+    }
+
+    /** Baja el audio del canal mientras se escucha (para que el micrófono no capte la tele). */
+    private void bajarVolumen(boolean bajar) {
+        float g = (canalActual != null) ? canalActual.gain : 1.0f;
+        float f = bajar ? 0.12f : 1.0f;
+        try {
+            if (motorActivo == Motor.EXO && exoPlayer != null) exoPlayer.setVolume(g * f);
+            else if (motorActivo == Motor.MPV && mpv != null) mpv.volumen(g * f);
+            else if (motorActivo == Motor.YT && ytPlayer != null) { if (bajar) ytPlayer.mute(); else ytPlayer.unMute(); }
+        } catch (Throwable ignored) {}
     }
 
     // =====================================================================
@@ -864,6 +1027,8 @@ private boolean esTeclaBuscador(int k) {
         btnNext = findViewById(R.id.btn_next);
         btnClose = findViewById(R.id.btn_close);
         btnRotate = findViewById(R.id.btn_rotate);
+        btnMic = findViewById(R.id.btn_mic);
+        vozEstado = findViewById(R.id.voz_estado);
         btnShield = findViewById(R.id.btn_shield);
         exoLoader = findViewById(R.id.exo_loader);
         exoLoaderError = findViewById(R.id.exo_loader_error);
@@ -1014,6 +1179,7 @@ private boolean esTeclaBuscador(int k) {
         super.onStop();
         if (exoPlayer != null) { try { exoPlayer.pause(); } catch (Exception ignored) {} }
         if (mpv != null) mpv.pausa(true);
+        if (vozActiva) { vozActiva = false; bajarVolumen(false); pintarMic(); }
         if (voz != null) voz.liberar();
     }
 
@@ -1040,8 +1206,9 @@ private boolean esTeclaBuscador(int k) {
             switch (keyCode) {
                 case KeyEvent.KEYCODE_DPAD_RIGHT: navegar(+1); mostrarControles(); return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT: navegar(-1); mostrarControles(); return true;
+                case KeyEvent.KEYCODE_DPAD_UP: teclaArriba(event); return true;
+                case KeyEvent.KEYCODE_DPAD_DOWN: if (vozActiva) vozCancelar(); mostrarControles(); return true;
                 case KeyEvent.KEYCODE_DPAD_CENTER: case KeyEvent.KEYCODE_ENTER:
-                case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_DPAD_DOWN:
                     mostrarControles(); return true;
             }
         }
@@ -1049,6 +1216,7 @@ private boolean esTeclaBuscador(int k) {
     }
 
     @Override public void onBackPressed() {
+        if (vozActiva) { vozCancelar(); return; }   // primero corta el micrófono
         if (motorActivo != Motor.NINGUNO) { cerrarReproductor(); return; }
         if (myWebView == null) { finish(); return; }
         myWebView.evaluateJavascript(
@@ -1173,13 +1341,15 @@ private boolean esTeclaBuscador(int k) {
         btnPrev.setOnClickListener(v -> { navegar(-1); mostrarControles(); });
         btnClose.setOnClickListener(v -> cerrarReproductor());
         btnRotate.setOnClickListener(v -> { rotar(); mostrarControles(); });
+        btnMic.setOnClickListener(v -> { vozAlternar(); mostrarControles(); });
         overlayControls.setOnClickListener(v -> mostrarControles());
         overlayControls.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { navegar(+1); mostrarControles(); return true; }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { navegar(-1); mostrarControles(); return true; }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
-                    || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) { mostrarControles(); return true; }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) { teclaArriba(event); return true; }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) { if (vozActiva) vozCancelar(); mostrarControles(); return true; }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) { mostrarControles(); return true; }
             }
             return false;
         });
@@ -1213,23 +1383,33 @@ private boolean esTeclaBuscador(int k) {
         infoCanal.setVisibility(View.VISIBLE);
         btnPrev.setVisibility(View.VISIBLE); btnNext.setVisibility(View.VISIBLE);
         btnClose.setVisibility(View.VISIBLE); btnRotate.setVisibility(View.VISIBLE);
+        btnMic.setVisibility(vozPosible() ? View.VISIBLE : View.GONE);   // en películas no hay micrófono
         overlayControls.setVisibility(View.VISIBLE);
         overlayControls.bringToFront();
         infoCanal.bringToFront();
+        if (vozEstado.getVisibility() == View.VISIBLE) vozEstado.bringToFront();
         btnPrev.bringToFront(); btnNext.bringToFront();
         btnClose.bringToFront(); btnRotate.bringToFront();
         overlayControls.setFocusable(true);
         overlayControls.setFocusableInTouchMode(true);
         overlayControls.requestFocus();
         if (ocultarControlesRunnable != null) handler.removeCallbacks(ocultarControlesRunnable);
-        ocultarControlesRunnable = this::ocultarControlesNativos;
+        ocultarControlesRunnable = this::autoOcultarControles;
         handler.postDelayed(ocultarControlesRunnable, 5000);
+    }
+
+    /** Los controles se ocultan solos a los 5 s, salvo que el micrófono esté escuchando. */
+    private void autoOcultarControles() {
+        if (vozActiva) { handler.postDelayed(ocultarControlesRunnable, 1500); return; }
+        ocultarControlesNativos();
     }
 
     private void ocultarControlesNativos() {
         infoCanal.setVisibility(View.GONE);
         btnPrev.setVisibility(View.GONE); btnNext.setVisibility(View.GONE);
         btnClose.setVisibility(View.GONE); btnRotate.setVisibility(View.GONE);
+        btnMic.setVisibility(View.GONE);
+        if (!vozActiva) vozEstado.setVisibility(View.GONE);
     }
 
     // ---------- loaders ----------
