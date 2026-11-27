@@ -832,7 +832,7 @@ public class MainActivity extends AppCompatActivity {
     private VozBuscador voz;
 
     private boolean esTeclaBuscador(int k) {
-        return k == KeyEvent.KEYCODE_MENU || k == KeyEvent.KEYCODE_TV_CONTEXT_MENU;
+        return k == KeyEvent.KEYCODE_MENU || k == 257;   // 257 = KEYCODE_TV_CONTEXT_MENU (no existe en todos los SDK, se usa el número)
     }
 
     /** MENU llega acá antes que a cualquier vista (el WebView no se lo come). */
