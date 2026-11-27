@@ -799,10 +799,7 @@ function aplicarConfig(d){
   aplicarConfigPub(d);
   
   // === CANAL OFICIAL - LEER CONFIGURACIÓN (panel Worker -> pestaña Canal Oficial) ===
-  if (d.canalOficial && typeof d.canalOficial === 'object') {
-    window.CANAL_OFICIAL = Object.assign({ activo:false, nombre:'GTV OFICIAL', url:'', logo:'', referer:'', gain:1.0 }, d.canalOficial);
-    try { localStorage.setItem('gtv_canal_oficial', JSON.stringify(window.CANAL_OFICIAL)); } catch(e){}
-  }
+  if (d.canalOficial && typeof d.canalOficial === 'object') aplicarOficialDe(d.canalOficial);
   // si la lista ya está cargada, se re-arma ahora (si el panel cambió algo)
   try { reaplicarOficial(); } catch(e){}
   // ==========================================
@@ -929,6 +926,9 @@ function aplicarCacheEstado(){
 }
 
 function setView(v){
+  var vPrev=S.view;
+  if(v==='player'&&vPrev!=='player')setTimeout(function(){refrescarOficial(false)},1500);
+  else if(v==='list'&&vPrev==='player')setTimeout(function(){refrescarOficial(false)},300);
   if(v!=='player'){
     if(pubSched.nativeTickerShown&&hasNat('ocultarPublicidad'))nat('ocultarPublicidad');
   }
@@ -1075,6 +1075,19 @@ function play(i,origin){
   if(S.caidos[ch.url]){mostrarSinSenal(ch);return}
   if(S.ocultos[ch.url]){zapCanales(1);return}
   
+  if(ch.esOficial&&origin!=='refrescado'){
+    // el link del oficial puede haber cambiado en el panel: se consulta (máx 1,8 s) y recién ahí se entra
+    if(S.coBusy)return;
+    S.coBusy=true;
+    refrescarOficial(true,1800).then(function(){
+      S.coBusy=false;
+      var k=-1;
+      for(var q=0;q<S.list.length;q++)if(S.list[q].esOficial){k=q;break}
+      if(k>=0)play(k,'refrescado');
+    });
+    return;
+  }
+  
   limpiarModales();
   S.lastI=i;S.lastAt=now;S.index=i;
   ls.set('gtv_last_index',String(i));
@@ -1139,6 +1152,24 @@ window.rotarDesdeAndroid=function(n){S.rotated=!!n;ls.set('gtv_rot',String(S.rot
 window.__baseLista = null;
 window.__coSig = null;
 
+function aplicarOficialDe(o){
+  window.CANAL_OFICIAL = Object.assign({ activo:false, nombre:'GTV OFICIAL', url:'', logo:'', referer:'', gain:1.0 }, o);
+  try { localStorage.setItem('gtv_canal_oficial', JSON.stringify(window.CANAL_OFICIAL)); } catch(e){}
+}
+/* Vuelve a pedir SOLO el canal oficial al Worker (liviano) y re-arma la lista si cambió algo.
+   Se llama al entrar a un canal y al volver a la lista, no solo al abrir la app. */
+var __coT = 0;
+function refrescarOficial(forzar, ms){
+  var ahora = Date.now();
+  if(!forzar && ahora - __coT < 4000) return Promise.resolve(false);
+  __coT = ahora;
+  return fetchW(CONFIG_URL + '?t=' + ahora, ms || 6000).then(function(r){
+    return r.ok ? r.json() : null;
+  }).then(function(d){
+    if(d && d.canalOficial && typeof d.canalOficial === 'object'){ aplicarOficialDe(d.canalOficial); reaplicarOficial(); return true; }
+    return false;
+  }).catch(function(){ return false; });
+}
 function oficialActivo(){
   var co = window.CANAL_OFICIAL;
   return !!(co && co.activo === true && co.url && String(co.url).trim());
