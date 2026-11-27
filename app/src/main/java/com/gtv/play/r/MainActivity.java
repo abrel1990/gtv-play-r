@@ -848,6 +848,13 @@ public class MainActivity extends AppCompatActivity {
 
     @Override public void onRequestPermissionsResult(int req, String[] perms, int[] res) {
         super.onRequestPermissionsResult(req, perms, res);
+        if (req == VozBuscador.REQ_AUDIO && vozPidiendoPermiso) {   // pedido desde el reproductor
+            vozPidiendoPermiso = false;
+            boolean ok = res != null && res.length > 0 && res[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            if (ok) handler.postDelayed(() -> { if (nativoActivo() && !vozActiva) vozAlternar(); }, 500);
+            else vozMensaje("Sin permiso de micrófono (se activa en Ajustes > Apps > GTV Play R > Permisos)", 5000);
+            return;
+        }
         if (voz != null) voz.onPermiso(req, res);
     }
 
@@ -859,6 +866,7 @@ public class MainActivity extends AppCompatActivity {
     //  se hace acá en Java (BuscadorCanales, misma lógica que el index).
     // =====================================================================
     private boolean vozActiva = false;
+    private boolean vozPidiendoPermiso = false;
     private Runnable vozOcultarRunnable;
     private Boolean vozSoportadaCache = null;
 
@@ -868,7 +876,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** Hay micrófono en pantalla solo en canales (no en películas/series). */
-    private boolean vozPosible() { return nativoActivo() && !modoPelis && vozOk(); }
+    private boolean vozPosible() { return nativoActivo() && !modoPelis; }
 
     /** ARRIBA: con los controles a la vista activa el micrófono; si no, solo los muestra. */
     private void teclaArriba(KeyEvent e) {
@@ -880,7 +888,14 @@ public class MainActivity extends AppCompatActivity {
     private void vozAlternar() {
         if (vozActiva) { vozCancelar(); return; }
         if (!nativoActivo() || modoPelis) return;
-        if (!vozOk()) { vozMensaje("🎤 Este equipo no tiene reconocimiento de voz", 3500); return; }
+        if (!vozOk()) { vozMensaje("🎤 " + (voz != null ? voz.motivoNoSoportada() : "Voz no disponible"), 5000); return; }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            // primera vez: se pide el permiso y, si lo aceptan, arranca solo (ver onRequestPermissionsResult)
+            vozPidiendoPermiso = true;
+            vozMensaje("🎤 Aceptá el permiso del micrófono", 0);
+            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, VozBuscador.REQ_AUDIO);
+            return;
+        }
         vozActiva = true;
         bajarVolumen(true);
         pintarMic();
@@ -916,9 +931,9 @@ public class MainActivity extends AppCompatActivity {
             case "sin-voz": vozTerminar(); vozMensaje("No te escuché, probá de nuevo", 2500); break;
             case "red": vozTerminar(); vozMensaje("La voz necesita internet", 3000); break;
             case "permiso-denegado": vozTerminar(); vozMensaje("Falta el permiso del micrófono", 3500); break;
-            case "no-soportado": vozTerminar(); vozMensaje("Este equipo no tiene reconocimiento de voz", 3500); break;
+            case "no-soportado": vozTerminar(); vozMensaje(voz != null ? voz.motivoNoSoportada() : "Voz no disponible", 5000); break;
             case "ocupado": vozTerminar(); vozMensaje("El micrófono está ocupado, probá de nuevo", 3000); break;
-            default: vozTerminar(); vozMensaje("No se pudo usar la voz", 3000);
+            default: vozTerminar(); vozMensaje("No se pudo usar la voz" + (texto != null && !texto.isEmpty() ? " (" + texto + ")" : ""), 4000);
         }
     }
 
