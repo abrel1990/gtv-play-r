@@ -133,7 +133,41 @@
                     android:text="0/0"
                     android:textColor="#FFFFFF"
                     android:textSize="11sp" />
+
+                <!-- Micrófono: busca otro canal por voz. Con control remoto: OK y después flecha ARRIBA. -->
+                <Button
+                    android:id="@+id/btn_mic"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/btn_rotate_bg"
+                    android:text="🎤"
+                    android:textSize="14sp"
+                    android:padding="0dp"
+                    android:visibility="gone"
+                    android:clickable="true"
+                    android:focusable="false"
+                    android:stateListAnimator="@null" />
             </LinearLayout>
+
+            <!-- Estado de la búsqueda por voz ("Escuchando…", lo que se va entendiendo, "No encontré…") -->
+            <TextView
+                android:id="@+id/voz_estado"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|center_horizontal"
+                android:layout_marginTop="76dp"
+                android:maxWidth="420dp"
+                android:background="@drawable/loader_bg"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:gravity="center"
+                android:textColor="#FFD700"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
 
             <Button
                 android:id="@+id/btn_prev"
