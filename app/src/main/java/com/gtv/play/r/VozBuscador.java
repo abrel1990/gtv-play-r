@@ -61,6 +61,17 @@ final class VozBuscador {
         } catch (Throwable t) { return false; }
     }
 
+    /** Para mostrar en pantalla por qué no hay voz en este equipo. */
+    String motivoNoSoportada() {
+        try {
+            if (!act.getPackageManager().hasSystemFeature(PackageManager.FEATURE_MICROPHONE))
+                return "Este equipo no tiene micrófono";
+            if (!SpeechRecognizer.isRecognitionAvailable(act))
+                return "Falta el servicio de voz de Google (app Google / Servicios de voz)";
+        } catch (Throwable ignored) {}
+        return "Este equipo no tiene reconocimiento de voz";
+    }
+
     private void avisar(String estado, String texto) {
         Destino d = destino;
         if (d != null) { d.estado(estado, texto == null ? "" : texto); return; }
@@ -113,7 +124,6 @@ final class VozBuscador {
     /** Libera el reconocedor. Llamar en onStop y onDestroy. Hilo principal. */
     void liberar() {
         escuchando = false;
-        destino = null;
         if (rec != null) {
             try { rec.cancel(); rec.destroy(); } catch (Throwable ignored) {}
             rec = null;
@@ -126,7 +136,7 @@ final class VozBuscador {
         boolean ok = resultados != null && resultados.length > 0 && resultados[0] == PackageManager.PERMISSION_GRANTED;
         boolean pendiente = pendientePermiso;
         pendientePermiso = false;
-        if (ok && pendiente) iniciar();
+        if (ok && pendiente) arrancar();
         else if (!ok) avisar("permiso-denegado", "");
         return true;
     }
@@ -171,7 +181,7 @@ final class VozBuscador {
                     default:
                         est = "error";
                 }
-                avisar(est, "");
+                avisar(est, "error".equals(est) ? "error " + err : "");
             }
         };
     }
