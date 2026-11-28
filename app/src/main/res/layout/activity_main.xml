@@ -48,6 +48,39 @@
                 android:layout_height="match_parent"
                 android:visibility="invisible" />
 
+            <!-- YouTube en vivo SIN emisión: tapa la miniatura del último stream y explica -->
+            <LinearLayout
+                android:id="@+id/sin_emision"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#FF0B0E12"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="32dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/se_img"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="18dp"
+                    android:adjustViewBounds="true"
+                    android:maxHeight="150dp"
+                    android:maxWidth="320dp"
+                    android:scaleType="fitCenter"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/se_txt"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxWidth="560dp"
+                    android:gravity="center"
+                    android:lineSpacingExtra="4dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+            </LinearLayout>
+
             <FrameLayout
                 android:id="@+id/overlay_controls"
                 android:layout_width="match_parent"
@@ -232,6 +265,19 @@
                 android:focusable="true"
                 android:stateListAnimator="@null" />
         </FrameLayout>
+
+        <!-- Logo del canal (imagen o GIF): siempre arriba a la derecha de la pantalla, rotado o no -->
+        <ImageView
+            android:id="@+id/marca_agua"
+            android:layout_width="72dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="12dp"
+            android:adjustViewBounds="true"
+            android:clickable="false"
+            android:focusable="false"
+            android:scaleType="fitCenter"
+            android:visibility="gone" />
     </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
