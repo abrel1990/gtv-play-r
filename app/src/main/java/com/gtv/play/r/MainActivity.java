@@ -72,6 +72,7 @@ import androidx.tvprovider.media.tv.TvContractCompat;
 import androidx.tvprovider.media.tv.WatchNextProgram;
 
 import com.bumptech.glide.Glide;
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView;
@@ -91,6 +92,8 @@ import java.lang.reflect.Proxy;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Locale;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -139,6 +142,9 @@ public class MainActivity extends AppCompatActivity {
     private TextView nombreCanal, numeroCanal, exoLoader, exoLoaderError;
     private Button btnPrev, btnNext, btnClose, btnRotate, btnMic;
     private TextView vozEstado;
+    private View sinEmision;
+    private ImageView seImg, marcaAgua;
+    private TextView seTxt;
     private View btnShield, overlayControls;
     private YouTubePlayerView youtubePlayerView;
     private YouTubePlayer ytPlayer = null;
@@ -431,6 +437,7 @@ public class MainActivity extends AppCompatActivity {
     private void onMpvCargado() {
         if (motorActivo != Motor.MPV) return;
         mpvCargado = true;
+        if (enPubli) publiEmpezo = true;
         handler.removeCallbacks(mpvTimeoutRunnable);
         detenerLoaderAnim();
         ocultarLoaders();
@@ -439,6 +446,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void onMpvFin() {
         if (motorActivo != Motor.MPV || canalActual == null) return;
+        if (enPubli && mpvCargado) { terminarPubli(); return; }   // el video publicitario terminó
         if (modoPelis && mpvCargado) {   // terminó la película/capítulo: pasa al siguiente si es serie
             if (pelisConCaps) avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(1,true);");
             return;
@@ -534,6 +542,7 @@ public class MainActivity extends AppCompatActivity {
         if (playerView != null) playerView.setVisibility(View.GONE);
         if (mpvTextureView != null) mpvTextureView.setVisibility(View.INVISIBLE);
         if (youtubePlayerView != null) youtubePlayerView.setVisibility(View.GONE);
+        if (sinEmision != null) sinEmision.setVisibility(View.GONE);
     }
 
     /** Punto único de entrada para reproducir cualquier canal. */
@@ -556,6 +565,8 @@ public class MainActivity extends AppCompatActivity {
         nombreCanal.setText(c.nombre);
         numeroCanal.setText(modoPelis ? pelisEtiqueta : ((indiceActual + 1) + "/" + canales.size()));
         if (c.logo != null && !c.logo.isEmpty()) Glide.with(this).load(c.logo).into(logoCanal);
+        aplicarMarca();
+        publiIniciarTick();
     }
 
     private void finalizarUI() {
@@ -641,6 +652,7 @@ public class MainActivity extends AppCompatActivity {
     /** Un motor falló: prueba el otro una sola vez; si también falla, muestra error. */
     private void fallaMotor(Motor fallo) {
         if (canalActual == null) return;
+        if (enPubli && fallbackProbado) { terminarPubli(); return; }   // el video publicitario no anda: vuelve el canal
         if (!fallbackProbado) {
             fallbackProbado = true;
             Canal c = canalActual;
@@ -666,6 +678,7 @@ public class MainActivity extends AppCompatActivity {
         mostrarLoaderSintonizando();
 
         String handle = null, channelId = null, videoId = null;
+        ytEsLive = false;
         Matcher mCh = Pattern.compile("channel/(UC[\\w-]{22})").matcher(c.url);
         if (mCh.find()) channelId = mCh.group(1);
         Matcher mVid = Pattern.compile("(?:watch\\?v=|youtu\\.be/|/live/|/embed/|/shorts/)([\\w-]{11})").matcher(c.url);
@@ -676,13 +689,14 @@ public class MainActivity extends AppCompatActivity {
         if (videoId != null) {
             cargarVideoEnYoutubeNativo(videoId, ses);
         } else if (channelId != null || handle != null) {
+            ytEsLive = true;
             final String chId = channelId, h = handle;
             ytExec.execute(() -> {
                 String vid = resolverVideoIdLive(chId, h);
                 runOnUiThread(() -> {
                     if (ses != sesion) return;
                     if (vid != null) cargarVideoEnYoutubeNativo(vid, ses);
-                    else { detenerLoaderAnim(); mostrarLoaderError(); }
+                    else mostrarSinEmision();   // no hay vivo: mensaje claro en vez de "señal con problemas"
                 });
             });
         } else {
@@ -701,6 +715,7 @@ public class MainActivity extends AppCompatActivity {
             try {
                 if (ytPlayer != null) {
                     ytPlayer.loadVideo(videoId, 0f);
+                    if (enPubli) publiEmpezo = true;
                     detenerLoaderAnim();
                     ocultarLoaders();
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
@@ -714,6 +729,12 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Devuelve el id del video EN VIVO del canal, o null si ahora no está transmitiendo.
+     * Verifica que la página diga "isLive": así no se carga la grabación del último stream.
+     * Si no se puede verificar (YouTube cambió la página, falla de red) se conserva el comportamiento
+     * anterior: se usa el id de la redirección.
+     */
     private String resolverVideoIdLive(String channelId, String handle) {
         HttpURLConnection conn = null;
         try {
@@ -728,26 +749,44 @@ public class MainActivity extends AppCompatActivity {
             conn.setRequestProperty("User-Agent", UA);
             if (conn.getResponseCode() == 200) {
                 Matcher m = Pattern.compile("[?&]v=([\\w-]{11})").matcher(conn.getURL().toString());
-                if (m.find()) return m.group(1);
-                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = br.readLine()) != null) sb.append(line);
-                br.close();
-                String html = sb.toString();
+                String idUrl = m.find() ? m.group(1) : null;
+                String html;
+                try { html = leerPaginaYT(conn.getInputStream()); } catch (Exception e) { return idUrl; }
                 int idx = html.indexOf("\"videoDetails\"");
                 if (idx != -1) {
-                    String block = html.substring(idx, Math.min(idx + 5000, html.length()));
+                    String block = html.substring(idx, Math.min(idx + 8000, html.length()));
+                    boolean vivo = Pattern.compile("\"isLive\"\\s*:\\s*true").matcher(block).find()
+                        || Pattern.compile("\"isLiveNow\"\\s*:\\s*true").matcher(html).find();
+                    if (!vivo) return null;                       // video que NO está en vivo (stream terminado / próximo)
+                    if (idUrl != null) return idUrl;
                     Matcher vm = Pattern.compile("\"videoId\":\"([\\w-]{11})\"").matcher(block);
-                    Matcher lm = Pattern.compile("\"isLive\"\\s*:\\s*true").matcher(block);
-                    if (vm.find() && lm.find()) return vm.group(1);
+                    return vm.find() ? vm.group(1) : null;
                 }
+                return idUrl;   // sin datos para verificar: comportamiento de siempre
             }
         } catch (Exception ignored) {
         } finally {
             if (conn != null) conn.disconnect();
         }
         return null;
+    }
+
+    /** Lee la página de YouTube solo hasta pasar el bloque videoDetails (no hace falta bajar todo). */
+    private String leerPaginaYT(InputStream in) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        char[] buf = new char[16384];
+        int n, marca = -1;
+        BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+        try {
+            while ((n = br.read(buf)) > 0) {
+                int desde = Math.max(0, sb.length() - 20);
+                sb.append(buf, 0, n);
+                if (marca < 0) marca = sb.indexOf("\"videoDetails\"", desde);
+                if (marca >= 0 && sb.length() - marca > 9000) break;
+                if (sb.length() > 3000000) break;
+            }
+        } finally { try { br.close(); } catch (Exception ignored) {} }
+        return sb.toString();
     }
 
     // ---------- WEBVIEW (Kick, Twitch, ok.ru, ...) ----------
@@ -768,6 +807,7 @@ public class MainActivity extends AppCompatActivity {
     // ---------- CERRAR / VOLVER A LA LISTA ----------
     private void cerrarReproductor() {
         vozCancelar();
+        publiLimpiar();
         tickerDetener(true);
         apagarTodo();
         modoPelis = false; pelisConCaps = false;
@@ -803,6 +843,7 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private void navegar(int delta) {
+        if (enPubli) return;   // durante la publicidad no se cambia de canal
         vozCancelar();
         if (modoPelis) {   // películas: no se hace zapping de canales; en series pasa de capítulo
             if (pelisConCaps) avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(" + delta + ",false);");
@@ -887,7 +928,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void vozAlternar() {
         if (vozActiva) { vozCancelar(); return; }
-        if (!nativoActivo() || modoPelis) return;
+        if (!nativoActivo() || modoPelis || enPubli) return;
         if (!vozOk()) { vozMensaje("🎤 " + (voz != null ? voz.motivoNoSoportada() : "Voz no disponible"), 5000); return; }
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             // primera vez: se pide el permiso y, si lo aceptan, arranca solo (ver onRequestPermissionsResult)
@@ -1022,6 +1063,187 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =====================================================================
+    //  EXTRAS DEL REPRODUCTOR (vienen del panel del Worker, pestaña Canal Oficial)
+    //   - publicidad que tapa el canal (cada X minutos o a horarios)
+    //   - logo / GIF arriba a la derecha
+    //   - pantalla "sin emisión" para YouTube en vivo
+    // =====================================================================
+    private static final String PREF_EXTRAS = "extras_rep";
+    private static final String FRASE_SIN_EMISION =
+        "Este canal no está transmitiendo en vivo en este momento.\nVolvé a intentar más tarde o consultá los horarios de su programación.";
+    private JSONObject extras = null;
+    private boolean ytEsLive = false;
+    private String marcaUrlCargada = "";
+
+    private void cargarExtras() {
+        try {
+            String j = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_EXTRAS, null);
+            if (j != null) extras = new JSONObject(j);
+        } catch (Exception e) { extras = null; }
+    }
+
+    private void guardarExtras(String json) {
+        try {
+            JSONObject o = new JSONObject(json);
+            extras = o;
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_EXTRAS, json).apply();
+            publiAcumMs = 0;
+            aplicarMarca();
+        } catch (Exception e) { Log.e(TAG, "extras inválidos: " + e.getMessage()); }
+    }
+
+    private JSONObject extObj(String k) { return extras == null ? null : extras.optJSONObject(k); }
+
+    private boolean esOficialActual() {
+        if (extras == null || canalActual == null) return false;
+        String u = extras.optString("oficialUrl", "");
+        return !u.isEmpty() && u.equals(canalActual.url);
+    }
+
+    // ---------- logo / marca de agua ----------
+    private void aplicarMarca() {
+        if (marcaAgua == null) return;
+        JSONObject m = extObj("marca");
+        boolean ver = m != null && m.optBoolean("activa", false) && !m.optString("url", "").isEmpty()
+            && !modoPelis && !enPubli && canalActual != null && motorActivo != Motor.WEB
+            && (!"oficial".equals(m.optString("destino", "todos")) || esOficialActual());
+        if (!ver) { marcaAgua.setVisibility(View.GONE); return; }
+        try {
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) marcaAgua.getLayoutParams();
+            int mg = dp(Math.max(0, Math.min(100, m.optInt("margen", 12))));
+            lp.width = dp(Math.max(16, Math.min(600, m.optInt("ancho", 72))));
+            lp.height = FrameLayout.LayoutParams.WRAP_CONTENT;
+            lp.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+            lp.setMargins(mg, mg, mg, mg);
+            marcaAgua.setLayoutParams(lp);
+            marcaAgua.setAlpha(Math.max(10, Math.min(100, m.optInt("opacidad", 90))) / 100f);
+            String url = m.optString("url", "");
+            if (!url.equals(marcaUrlCargada)) {
+                marcaUrlCargada = url;
+                Glide.with(this).load(url).into(marcaAgua);   // Glide anima los GIF solo
+            }
+            marcaAgua.setVisibility(View.VISIBLE);
+        } catch (Throwable t) {
+            Log.e(TAG, "marca: " + t);
+            marcaAgua.setVisibility(View.GONE);
+        }
+    }
+
+    // ---------- YouTube sin emisión ----------
+    private void mostrarSinEmision() {
+        if (motorActivo != Motor.YT) return;
+        detenerLoaderAnim();
+        ocultarLoaders();
+        try { if (ytPlayer != null) ytPlayer.pause(); } catch (Exception ignored) {}
+        youtubePlayerView.setVisibility(View.INVISIBLE);   // esconde la miniatura del último stream
+        JSONObject se = extObj("sinEmision");
+        String frase = se != null ? se.optString("frase", "").trim() : "";
+        String img = se != null ? se.optString("imagen", "").trim() : "";
+        seTxt.setText(frase.isEmpty() ? FRASE_SIN_EMISION : frase);
+        if (!img.isEmpty()) {
+            try { Glide.with(this).load(img).into(seImg); seImg.setVisibility(View.VISIBLE); }
+            catch (Throwable t) { seImg.setVisibility(View.GONE); }
+        } else {
+            seImg.setVisibility(View.GONE);
+        }
+        sinEmision.setVisibility(View.VISIBLE);
+    }
+
+    // ---------- publicidad que tapa el canal ----------
+    private boolean enPubli = false, publiEmpezo = false, publiTickOn = false;
+    private Canal publiVolver = null;
+    private int publiIdx = 0;
+    private long publiAcumMs = 0;
+    private String publiUltHorario = "";
+
+    private final Runnable publiTick = new Runnable() {
+        @Override public void run() {
+            try { publiRevisar(); } catch (Throwable t) { Log.e(TAG, "publi: " + t); }
+            if (publiTickOn) handler.postDelayed(this, 10000);
+        }
+    };
+    private final Runnable publiCapRunnable = this::terminarPubli;
+    private final Runnable publiArranqueRunnable = () -> { if (enPubli && !publiEmpezo) terminarPubli(); };
+
+    private void publiIniciarTick() {
+        if (publiTickOn) return;
+        publiTickOn = true;
+        handler.postDelayed(publiTick, 10000);
+    }
+
+    private void publiDetenerTick() { publiTickOn = false; handler.removeCallbacks(publiTick); }
+
+    /** Cada 10 s: ¿toca una publicidad? Solo cuenta el tiempo mirando un canal (no películas). */
+    private void publiRevisar() {
+        if (enPubli || modoPelis || canalActual == null || vozActiva) return;
+        if (!(motorActivo == Motor.EXO || motorActivo == Motor.MPV || motorActivo == Motor.YT)) return;
+        JSONObject p = extObj("publi");
+        if (p == null || !p.optBoolean("activa", false)) { publiAcumMs = 0; return; }
+        JSONArray vids = p.optJSONArray("videos");
+        if (vids == null || vids.length() == 0) return;
+        if ("oficial".equals(p.optString("destino", "todos")) && !esOficialActual()) return;
+
+        boolean toca = false;
+        if ("horarios".equals(p.optString("modo", "cada"))) {
+            Calendar cal = Calendar.getInstance();
+            String hhmm = String.format(Locale.US, "%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE));
+            String clave = cal.get(Calendar.YEAR) + "-" + cal.get(Calendar.DAY_OF_YEAR) + " " + hhmm;
+            JSONArray hs = p.optJSONArray("horarios");
+            if (hs != null && !clave.equals(publiUltHorario)) {
+                for (int i = 0; i < hs.length(); i++) {
+                    if (hhmm.equals(hs.optString(i, ""))) { toca = true; publiUltHorario = clave; break; }
+                }
+            }
+        } else {
+            publiAcumMs += 10000;
+            long cada = Math.max(1, Math.min(720, p.optInt("cadaMin", 30))) * 60000L;
+            if (publiAcumMs >= cada) toca = true;
+        }
+        if (!toca) return;
+        String url = vids.optString(publiIdx++ % vids.length(), "");
+        if (url.isEmpty()) return;
+        lanzarPubli(url, Math.max(5, Math.min(900, p.optInt("maxSeg", 120))));
+    }
+
+    private void lanzarPubli(String url, int maxSeg) {
+        if (tipoDe(url) == Tipo.WEB) { Log.e(TAG, "publi: ese tipo de link no se puede usar"); return; }
+        publiVolver = canalActual;
+        enPubli = true;
+        publiEmpezo = false;
+        publiAcumMs = 0;
+        handler.removeCallbacks(zapRun);
+        zapPend = -1;
+        ocultarControlesNativos();
+        reproducirCanal(new Canal(url, "Publicidad", "", "", 1.0f));
+        handler.removeCallbacks(publiCapRunnable);
+        handler.postDelayed(publiCapRunnable, maxSeg * 1000L);
+        handler.removeCallbacks(publiArranqueRunnable);
+        handler.postDelayed(publiArranqueRunnable, 25000);
+    }
+
+    /** Fin del video publicitario (terminó, falló, pasó el tiempo máximo o se salteó con ATRÁS): vuelve el canal. */
+    private void terminarPubli() {
+        if (!enPubli) return;
+        enPubli = false;
+        handler.removeCallbacks(publiCapRunnable);
+        handler.removeCallbacks(publiArranqueRunnable);
+        Canal v = publiVolver;
+        publiVolver = null;
+        publiAcumMs = 0;
+        if (v != null && playerContainer != null && playerContainer.getVisibility() == View.VISIBLE) {
+            reproducirCanal(v);   // se vuelve a sintonizar: con su sonido
+        }
+    }
+
+    private void publiLimpiar() {
+        enPubli = false;
+        publiVolver = null;
+        handler.removeCallbacks(publiCapRunnable);
+        handler.removeCallbacks(publiArranqueRunnable);
+        publiDetenerTick();
+    }
+
+    // =====================================================================
     //  CICLO DE VIDA
     // =====================================================================
     @SuppressLint("SetJavaScriptEnabled")
@@ -1043,6 +1265,10 @@ public class MainActivity extends AppCompatActivity {
         btnClose = findViewById(R.id.btn_close);
         btnRotate = findViewById(R.id.btn_rotate);
         btnMic = findViewById(R.id.btn_mic);
+        sinEmision = findViewById(R.id.sin_emision);
+        seImg = findViewById(R.id.se_img);
+        seTxt = findViewById(R.id.se_txt);
+        marcaAgua = findViewById(R.id.marca_agua);
         vozEstado = findViewById(R.id.voz_estado);
         btnShield = findViewById(R.id.btn_shield);
         exoLoader = findViewById(R.id.exo_loader);
@@ -1084,6 +1310,7 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onPlaybackStateChanged(int state) {
                 if (motorActivo != Motor.EXO) return;
                 if (state == Player.STATE_READY) {
+                    if (enPubli) publiEmpezo = true;
                     reintentos = 0;
                     detenerLoaderAnim();
                     ocultarLoaders();
@@ -1092,6 +1319,7 @@ public class MainActivity extends AppCompatActivity {
                 } else if (state == Player.STATE_BUFFERING) {
                     mostrarLoaderSintonizando();
                 } else if (state == Player.STATE_IDLE || state == Player.STATE_ENDED) {
+                    if (state == Player.STATE_ENDED && enPubli) { handler.post(MainActivity.this::terminarPubli); return; }
                     if (state == Player.STATE_ENDED && modoPelis && pelisConCaps)
                         avisarAlWebView("window.zapPeliculas&&window.zapPeliculas(1,true);");
                     detenerLoaderAnim();
@@ -1129,12 +1357,18 @@ public class MainActivity extends AppCompatActivity {
         getLifecycle().addObserver(youtubePlayerView);
         youtubePlayerView.setVisibility(View.GONE);
         youtubePlayerView.addYouTubePlayerListener(new AbstractYouTubePlayerListener() {
+            @Override public void onStateChange(YouTubePlayer yp, PlayerConstants.PlayerState st) {
+                if (motorActivo != Motor.YT || st != PlayerConstants.PlayerState.ENDED) return;
+                if (enPubli) handler.post(MainActivity.this::terminarPubli);   // terminó el video publicitario
+                else if (ytEsLive) handler.post(MainActivity.this::mostrarSinEmision);   // el vivo terminó
+            }
             @Override public void onReady(YouTubePlayer youTubePlayer) {
                 ytPlayer = youTubePlayer;
                 if (ytVideoPendiente != null && motorActivo == Motor.YT) {
                     String v = ytVideoPendiente;
                     ytVideoPendiente = null;
                     try { youTubePlayer.loadVideo(v, 0f); } catch (Exception ignored) {}
+                    if (enPubli) publiEmpezo = true;
                     detenerLoaderAnim();
                     ocultarLoaders();
                     avisarAlWebView("window.gtv&&window.gtv.onNativoListo&&window.gtv.onNativoListo();");
@@ -1143,6 +1377,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         voz = new VozBuscador(this, js -> avisarAlWebView(js));
+        cargarExtras();
         configurarWebView();
         configurarBotones();
 
@@ -1194,8 +1429,14 @@ public class MainActivity extends AppCompatActivity {
         super.onStop();
         if (exoPlayer != null) { try { exoPlayer.pause(); } catch (Exception ignored) {} }
         if (mpv != null) mpv.pausa(true);
-        if (vozActiva) { vozActiva = false; bajarVolumen(false); pintarMic(); }
+        // si está abierta la pantalla de voz del sistema, la escucha sigue: se corta recién cuando vuelve el resultado
+        if (vozActiva && !(voz != null && voz.externaPendiente())) { vozActiva = false; bajarVolumen(false); pintarMic(); }
         if (voz != null) voz.liberar();
+    }
+
+    @Override protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (voz != null) voz.onResultado(req, res, data);
     }
 
     @Override protected void onDestroy() {
@@ -1231,6 +1472,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override public void onBackPressed() {
+        if (enPubli) { terminarPubli(); return; }   // ATRÁS durante la publicidad: la saltea y vuelve al canal
         if (vozActiva) { vozCancelar(); return; }   // primero corta el micrófono
         if (motorActivo != Motor.NINGUNO) { cerrarReproductor(); return; }
         if (myWebView == null) { finish(); return; }
@@ -1393,6 +1635,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void mostrarControles() {
+        if (enPubli) return;
         if (!nativoActivo()) return;
         if (playerContainer.getVisibility() != View.VISIBLE) playerContainer.setVisibility(View.VISIBLE);
         infoCanal.setVisibility(View.VISIBLE);
@@ -2390,6 +2633,8 @@ public class MainActivity extends AppCompatActivity {
 
         // ---- BUSCADOR POR VOZ ----
         @JavascriptInterface public boolean vozDisponible() { return voz != null && voz.soportada(); }
+        /** El index manda acá lo que viene del Worker: publicidad que tapa el canal, logo y mensaje sin emisión. */
+        @JavascriptInterface public void setExtrasReproductor(final String json) { runOnUiThread(() -> guardarExtras(json)); }
         @JavascriptInterface public void iniciarVoz() { runOnUiThread(() -> { if (voz != null) voz.iniciar(); }); }
         @JavascriptInterface public void detenerVoz() { runOnUiThread(() -> { if (voz != null) voz.detener(); }); }
 
